@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -26,6 +25,18 @@ def _isolated_git_env(home: Path) -> dict[str, str]:
     }
 
 
+def _canonical_patch_bytes(path: Path) -> bytes:
+    """Recover Git's canonical LF patch transport without changing CRLF content.
+
+    Text-mode writes on Windows can rewrite every patch record terminator from LF
+    to CRLF. Replacing CRLF with LF restores canonical Git patch framing. A real
+    CRLF content line is represented as CR-CR-LF after that rewrite, so one CR is
+    intentionally preserved by this single replacement pass.
+    """
+
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def validate_patch(
     repo: GitRepository,
     patch_path: Path,
@@ -41,7 +52,8 @@ def validate_patch(
     if size > MAX_PATCH_BYTES:
         return {"valid": False, "findings": [{"code": "PATCH_TOO_LARGE", "severity": "BLOCK", "path": str(patch_path), "bytes": str(size)}]}
 
-    patch_text = patch_path.read_text(encoding="utf-8", errors="replace")
+    patch_bytes = _canonical_patch_bytes(patch_path)
+    patch_text = patch_bytes.decode("utf-8", errors="replace")
     findings = scan_patch_text(patch_text)
     base_sha = repo.rev_parse(expected_base)
     if findings and any(item.get("severity") == "BLOCK" for item in findings):
@@ -61,9 +73,9 @@ def validate_patch(
         )
         run_command(["git", "-c", "core.hooksPath=/dev/null", "checkout", "--detach", base_sha], cwd=work, env=env, inherit_env=False)
         copied_patch = temp / "change.patch"
-        shutil.copyfile(patch_path, copied_patch)
+        copied_patch.write_bytes(patch_bytes)
         check = run_command(
-            ["git", "-c", "core.hooksPath=/dev/null", "apply", "--check", "--whitespace=error-all", "--", str(copied_patch)],
+            ["git", "-c", "core.hooksPath=/dev/null", "apply", "--check", "--binary", "--whitespace=error-all", "--", str(copied_patch)],
             cwd=work,
             env=env,
             inherit_env=False,
@@ -73,7 +85,7 @@ def validate_patch(
             findings.append({"code": "PATCH_APPLY_CHECK_FAILED", "severity": "BLOCK", "path": None, "message": (check.stderr or check.stdout)[-1000:]})
             return {"valid": False, "base_sha": base_sha, "findings": findings}
         run_command(
-            ["git", "-c", "core.hooksPath=/dev/null", "apply", "--index", "--whitespace=error-all", "--", str(copied_patch)],
+            ["git", "-c", "core.hooksPath=/dev/null", "apply", "--index", "--binary", "--whitespace=error-all", "--", str(copied_patch)],
             cwd=work,
             env=env,
             inherit_env=False,
