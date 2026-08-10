@@ -1,0 +1,142 @@
+name: Repair exact part 3 segment 2 payload v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/repair-part3-segment2-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Reconstruct and patch canonical source segment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          import tempfile
+
+          repository = os.environ['GITHUB_REPOSITORY']
+
+          def get_comment(comment_id):
+              result = subprocess.run(
+                  ['gh', 'api', f'repos/{repository}/issues/comments/{comment_id}'],
+                  check=True, capture_output=True, text=True,
+              )
+              return json.loads(result.stdout)
+
+          source_ids = {
+              0: 5239750724,
+              1: 5239756100,
+              2: 5239761472,
+              3: 5239766610,
+          }
+          expected_subhashes = {
+              0: 'edad01db8143b3a65903d521a5ab8ed504d8a58e434066135b22cd3477189f11',
+              1: '48c364201ac2dc51ecbb18f09215dc96c33ef683c7faf4846787f2e1f1ae320b',
+              2: '9980d4d35455ee05b3a0925d0b7ef4bd11625d43727ecb524d71f0ef434796bf',
+              3: '7efad77f3552e96e13773c5494d306e5f5156507e4d2b2c0e0f71bb9862b82f1',
+          }
+          header_re = re.compile(r'ZTAD_SOURCE_PART3_SEGMENT2_SUBCHUNK ([0-3]) 1000 ([0-9a-f]{64})')
+          chunks = {}
+          for index, comment_id in source_ids.items():
+              item = get_comment(comment_id)
+              header, separator, raw = item['body'].partition('\n')
+              if not separator:
+                  raise SystemExit(f'missing separator in comment {comment_id}')
+              match = header_re.fullmatch(header.strip())
+              if not match or int(match.group(1)) != index or match.group(2) != expected_subhashes[index]:
+                  raise SystemExit(f'invalid source header in comment {comment_id}: {header}')
+              payload = ''.join(raw.split())
+              if len(payload) != 1000:
+                  raise SystemExit(f'invalid source length for subchunk {index}: {len(payload)}')
+              chunks[index] = payload
+
+          correction_id = 5239793757
+          correction_item = get_comment(correction_id)
+          correction_header, separator, correction_raw = correction_item['body'].partition('\n')
+          correction_re = re.compile(r'ZTAD_SOURCE_PART3_SEGMENT2_SUBCHUNK0_BLOCK 4 100 ([0-9a-f]{64})')
+          correction_match = correction_re.fullmatch(correction_header.strip())
+          expected_block_hash = 'b91706894acddbd713171ca476f65af0a5c00ce0bbb454828d8f274c72004c64'
+          if not separator or not correction_match or correction_match.group(1) != expected_block_hash:
+              raise SystemExit('invalid correction comment header')
+          correction = ''.join(correction_raw.split())
+          correction_hash = hashlib.sha256(correction.encode('ascii')).hexdigest()
+          if len(correction) != 100 or correction_hash != expected_block_hash:
+              raise SystemExit(f'invalid correction block: length={len(correction)} hash={correction_hash}')
+
+          original_chunk0_hash = hashlib.sha256(chunks[0].encode('ascii')).hexdigest()
+          if original_chunk0_hash != '37e999ad1917185c0b51b66d4f9aea0eb91d1ab115a257871bfdb5761907462b':
+              raise SystemExit(f'unexpected original subchunk 0 hash: {original_chunk0_hash}')
+          chunks[0] = chunks[0][:400] + correction + chunks[0][500:]
+
+          for index, expected_hash in expected_subhashes.items():
+              digest = hashlib.sha256(chunks[index].encode('ascii')).hexdigest()
+              if len(chunks[index]) != 1000 or digest != expected_hash:
+                  raise SystemExit(f'subchunk {index} integrity failure: length={len(chunks[index])} hash={digest}')
+
+          repair = ''.join(chunks[index] for index in range(4))
+          repair_hash = hashlib.sha256(repair.encode('ascii')).hexdigest()
+          expected_repair_hash = 'd92ed531cf2de984f1b68f9de463192274a6864dd234a3fe8ca38f2c6cb37828'
+          if len(repair) != 4000 or repair_hash != expected_repair_hash:
+              raise SystemExit(f'repair integrity failure: length={len(repair)} hash={repair_hash}')
+
+          target_id = 5239661959
+          target = get_comment(target_id)
+          _, separator, target_raw = target['body'].partition('\n')
+          if not separator:
+              raise SystemExit('target comment has no payload')
+          payload = ''.join(target_raw.split())
+          if len(payload) != 16000:
+              raise SystemExit(f'target length mismatch: {len(payload)}')
+
+          expected_unchanged = {
+              0: '7cf544ad9f8aa0e8a50d0507fb528ef79c779dc4bad02ed83bb15819162de05b',
+              1: '71e88dec3421b3cad8c3c75a2246d5e2dd7c65290c2c3e684858124b4784a6a4',
+              3: '0d520e1813af686c7abc1cb37338a73c557ea27f4c5eb70e93e84da62181468a',
+          }
+          for index, expected_hash in expected_unchanged.items():
+              data = payload[index*4000:(index+1)*4000]
+              digest = hashlib.sha256(data.encode('ascii')).hexdigest()
+              if digest != expected_hash:
+                  raise SystemExit(f'target unchanged chunk {index} mismatch: {digest}')
+
+          repaired = payload[:8000] + repair + payload[12000:]
+          expected_final = '564056cec9ea558b6dcdb20219594dad6e98b3d84537553b703030cbc73c4086'
+          final_hash = hashlib.sha256(repaired.encode('ascii')).hexdigest()
+          if len(repaired) != 16000 or final_hash != expected_final:
+              raise SystemExit(f'final segment integrity failure: length={len(repaired)} hash={final_hash}')
+
+          request = {'body': f'ZTAD_SOURCE_PART3_SEGMENT 2 16000 {expected_final}\n{repaired}'}
+          with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False) as stream:
+              json.dump(request, stream, separators=(',', ':'))
+              request_path = stream.name
+          subprocess.run(
+              ['gh', 'api', '--method', 'PATCH', f'repos/{repository}/issues/comments/{target_id}', '--input', request_path],
+              check=True, capture_output=True, text=True,
+          )
+          Path(request_path).unlink(missing_ok=True)
+
+          verify = get_comment(target_id)
+          _, separator, verify_raw = verify['body'].partition('\n')
+          verify_payload = ''.join(verify_raw.split()) if separator else ''
+          verify_hash = hashlib.sha256(verify_payload.encode('ascii')).hexdigest()
+          if len(verify_payload) != 16000 or verify_hash != expected_final:
+              raise SystemExit(f'provider verification failed: length={len(verify_payload)} hash={verify_hash}')
+          print(json.dumps({'target_comment': target_id, 'length': len(verify_payload), 'sha256': verify_hash}, sort_keys=True))
+          PY
