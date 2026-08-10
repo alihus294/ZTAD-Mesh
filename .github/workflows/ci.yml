@@ -15,7 +15,6 @@ concurrency:
 
 env:
   PYTHONDONTWRITEBYTECODE: "1"
-  SOURCE_DATE_EPOCH: "0"
 
 jobs:
   test:
