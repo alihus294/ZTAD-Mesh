@@ -38,9 +38,9 @@ def _python_packages() -> dict[str, Any]:
             result[name] = {"installed": False, "version": None, "minimum_expected": minimum}
     try:
         cryptography = importlib.metadata.version("cryptography")
-        result["cryptography"] = {"installed": True, "version": cryptography, "required_range": ">=48.0.1,<51"}
+        result["cryptography"] = {"installed": True, "version": cryptography, "required_range": ">=50.0.0,<51"}
     except importlib.metadata.PackageNotFoundError:
-        result["cryptography"] = {"installed": False, "version": None, "required_range": ">=48.0.1,<51"}
+        result["cryptography"] = {"installed": False, "version": None, "required_range": ">=50.0.0,<51"}
     return result
 
 
@@ -80,7 +80,7 @@ def audit_host_acceptance(
         crypto_parts = tuple(int(part) for part in cryptography_version.split(".")[:3])
     except ValueError:
         crypto_parts = (0,)
-    signing_ready = (48, 0, 1) <= crypto_parts < (51, 0, 0)
+    signing_ready = (50, 0, 0) <= crypto_parts < (51, 0, 0)
     hooks_trust = os.getenv("ZTAD_HOOKS_TRUSTED") == "1"
     plugin = _plugin_state() if inspect_codex_plugin_state else {"checked": False, "reason": "disabled_by_caller"}
     repo = None
