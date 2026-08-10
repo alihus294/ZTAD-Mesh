@@ -1,0 +1,29 @@
+name: Test Drive source download
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/test-drive-download.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Download and inspect
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          URL='https://drive.usercontent.google.com/download?id=1iKEllZXVN8Zv5F1oYUOR-8T-GZmWsxdd&export=download&confirm=t'
+          curl -fL --retry 2 --connect-timeout 20 --max-time 60 "$URL" -o "$RUNNER_TEMP/source.bin"
+          SIZE="$(wc -c < "$RUNNER_TEMP/source.bin")"
+          HASH="$(sha256sum "$RUNNER_TEMP/source.bin" | awk '{print $1}')"
+          TYPE="$(file -b "$RUNNER_TEMP/source.bin")"
+          echo "::warning title=Drive download probe::size=$SIZE sha256=$HASH type=$TYPE"
+          test "$SIZE" = '236932'
+          test "$HASH" = '23bb0357a0900a0c4dfa1110da1d5d08c0f8aa5cae95622e55b06a124a3a272c'
