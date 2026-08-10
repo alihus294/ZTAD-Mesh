@@ -1,0 +1,50 @@
+name: Restore corrected verified materializer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/restore-materializer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out with parent commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+          persist-credentials: true
+
+      - name: Restore complete workflow and correct one checksum
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git show HEAD^:.github/workflows/materialize-paginated.yml > "$RUNNER_TEMP/materialize-paginated.yml"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          path = Path(os.environ['RUNNER_TEMP']) / 'materialize-paginated.yml'
+          text = path.read_text(encoding='utf-8')
+          old = '56151e6dfb8d852279f7c143f840de148df25bfeab90a0b366391f0f0d11352d'
+          new = 'a0b262dbe64c638efff87842ecb56ffeb6f559d0afdb0f1b40a0d88a27333749'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one old checksum, found {text.count(old)}')
+          if new in text:
+              raise SystemExit('new checksum already exists unexpectedly')
+          path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
+          PY
+          cp "$RUNNER_TEMP/materialize-paginated.yml" .github/workflows/materialize-paginated.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/materialize-paginated.yml
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'no restoration change' >&2; exit 1; }
+          git commit -m "ci: restore materializer with authoritative segment checksum"
+          git push origin HEAD:main
