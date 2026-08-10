@@ -1,0 +1,1 @@
+Temporary bootstrap staging. The final verified source sync deletes this directory.
