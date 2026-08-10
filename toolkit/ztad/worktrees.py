@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import shutil
+import tempfile
 from pathlib import Path
 
 from .repository import GitRepository
-from .util import run_command, safe_relative_path, sha256_file
+from .util import run_command, run_command_bytes, safe_relative_path, sha256_file
+
+
+def _canonical_patch_bytes(path: Path) -> bytes:
+    """Recover canonical LF patch framing after Windows text-mode transport."""
+
+    return path.read_bytes().replace(b"\r\n", b"\n")
 
 
 class WorktreeManager:
@@ -45,19 +52,23 @@ class WorktreeManager:
 
     def apply_patches(self, worktree: Path, patches: list[Path]) -> dict[str, object]:
         applied: list[dict[str, str]] = []
-        for patch in patches:
-            resolved = patch.resolve()
-            if not resolved.is_file() or resolved.is_symlink():
-                raise ValueError(f"Patch artifact must be a regular file: {patch}")
-            run_command(
-                ["git", "-c", "core.hooksPath=/dev/null", "apply", "--check", "--binary", str(resolved)],
-                cwd=worktree, timeout=120,
-            )
-            run_command(
-                ["git", "-c", "core.hooksPath=/dev/null", "apply", "--index", "--binary", "--whitespace=nowarn", str(resolved)],
-                cwd=worktree, timeout=120,
-            )
-            applied.append({"path": str(resolved), "sha256": sha256_file(resolved)})
+        with tempfile.TemporaryDirectory(prefix="ztad-apply-") as temp_dir:
+            canonical_root = Path(temp_dir)
+            for index, patch in enumerate(patches):
+                resolved = patch.resolve()
+                if not resolved.is_file() or resolved.is_symlink():
+                    raise ValueError(f"Patch artifact must be a regular file: {patch}")
+                canonical = canonical_root / f"{index}.patch"
+                canonical.write_bytes(_canonical_patch_bytes(resolved))
+                run_command(
+                    ["git", "-c", "core.hooksPath=/dev/null", "apply", "--check", "--binary", str(canonical)],
+                    cwd=worktree, timeout=120,
+                )
+                run_command(
+                    ["git", "-c", "core.hooksPath=/dev/null", "apply", "--index", "--binary", "--whitespace=nowarn", str(canonical)],
+                    cwd=worktree, timeout=120,
+                )
+                applied.append({"path": str(resolved), "sha256": sha256_file(resolved)})
         return {"applied": applied, "count": len(applied)}
 
     def patch(self, worktree: Path, base_sha: str, output: Path) -> dict[str, object]:
@@ -78,13 +89,13 @@ class WorktreeManager:
                 cwd=worktree,
                 timeout=120,
             )
-        result = run_command(
+        result = run_command_bytes(
             ["git", "-c", "core.hooksPath=/dev/null", "diff", "--binary", "--no-ext-diff", "--no-textconv", self.repo.rev_parse(base_sha), "--"],
             cwd=worktree,
             timeout=120,
         )
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(result.stdout, encoding="utf-8")
+        output.write_bytes(result.stdout)
         names = run_command(
             ["git", "-c", "core.hooksPath=/dev/null", "diff", "--name-only", "-z", self.repo.rev_parse(base_sha), "--"],
             cwd=worktree,
