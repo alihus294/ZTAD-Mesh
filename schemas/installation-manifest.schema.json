@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ztad/installation-manifest.schema.json",
+  "title": "ZTAD Installation Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "product", "plugin_version", "installed_at", "last_updated_at", "settings", "managed_files", "agents_managed_block_hash", "remote_enforcement_verified"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "product": {"const": "zero-trust-agentic-delivery"},
+    "plugin_version": {"type": "string", "minLength": 1},
+    "installed_at": {"type": "string", "format": "date-time"},
+    "last_updated_at": {"type": "string", "format": "date-time"},
+    "partial_uninstall_at": {"type": "string", "format": "date-time"},
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activate_ci", "install_repo_skills"],
+      "properties": {
+        "activate_ci": {"type": "boolean"},
+        "install_repo_skills": {"type": "boolean"}
+      }
+    },
+    "managed_files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sha256", "source"],
+        "properties": {
+          "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "source": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "agents_managed_block_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "remote_enforcement_verified": {"const": false}
+  }
+}

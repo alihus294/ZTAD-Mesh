@@ -1,0 +1,94 @@
+{
+  "$id": "https://example.invalid/ztad/release-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "build_workflow_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "change_contract_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "feature_flags": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "merged_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "policy_bundle_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "provenance_attestation": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "repository": {
+      "type": "string"
+    },
+    "risk": {
+      "enum": [
+        "R0",
+        "R1",
+        "R2",
+        "R3",
+        "R4"
+      ]
+    },
+    "rollback_artifact_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sbom_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "test_evidence_refs": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "toolchain_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "repository",
+    "change_contract_hash",
+    "merged_sha",
+    "artifact_digest",
+    "build_workflow_sha",
+    "policy_bundle_hash",
+    "toolchain_hash",
+    "sbom_digest",
+    "provenance_attestation",
+    "test_evidence_refs",
+    "risk",
+    "created_at"
+  ],
+  "type": "object"
+}

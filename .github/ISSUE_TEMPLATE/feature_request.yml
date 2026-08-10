@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a bounded capability with explicit evidence and safety requirements.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the concrete operational problem, not only the desired implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Required outcome and acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals and authority boundary
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Safety, data, permission, and rollback considerations
+    validations:
+      required: true

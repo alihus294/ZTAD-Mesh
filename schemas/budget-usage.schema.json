@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "implementation_runs": {"type": "integer", "minimum": 0},
+    "independent_reviews": {"type": "integer", "minimum": 0},
+    "repair_cycles": {"type": "integer", "minimum": 0},
+    "closure_reviews": {"type": "integer", "minimum": 0},
+    "escalation_runs": {"type": "integer", "minimum": 0},
+    "input_tokens": {"type": "integer", "minimum": 0},
+    "output_tokens": {"type": "integer", "minimum": 0},
+    "cost": {"type": "number", "minimum": 0}
+  }
+}

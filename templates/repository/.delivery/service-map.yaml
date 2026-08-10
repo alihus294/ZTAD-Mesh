@@ -1,0 +1,4 @@
+version: 1
+services: {}
+notes:
+  - Populate service ownership, criticality, entry points, dependencies, queues, scheduled jobs, data stores, and runtime signals.

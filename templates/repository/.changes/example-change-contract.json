@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "change_id": "EXAMPLE-1",
+  "title": "Replace this example with one bounded software change",
+  "outcome": {
+    "user_or_system_value": "A specifically defined behavior is delivered without violating declared invariants.",
+    "success_metric": "All acceptance evidence is produced for the exact head SHA."
+  },
+  "requirements": {
+    "acceptance_criteria": [
+      {"id": "AC-01", "statement": "The intended behavior is observable through a deterministic acceptance test."}
+    ],
+    "non_goals": ["Unrelated refactoring"],
+    "invariants": [
+      {"id": "INV-01", "statement": "Existing authorization and data-integrity boundaries remain unchanged."}
+    ],
+    "assumptions": []
+  },
+  "scope": {
+    "expected_components": ["replace-with-component"],
+    "prohibited_components": [".delivery/ztad", ".github/workflows"],
+    "public_contract_change": false,
+    "data_migration_expected": false,
+    "service_criticality": "tier_3",
+    "data_classification": "C0"
+  },
+  "quality_attributes": {
+    "security": "No privilege expansion.",
+    "privacy": "No personal data is introduced.",
+    "performance": "No material regression in the affected path.",
+    "availability": "Rollback remains possible.",
+    "accessibility": "No accessibility regression in affected UI behavior.",
+    "compatibility": "Existing supported contracts remain compatible."
+  },
+  "verification": {
+    "test_oracles": [
+      {"acceptance_test": "replace-with-test-id", "expected_evidence": "Machine-generated pass/fail report bound to the head SHA."}
+    ],
+    "observability": [
+      {"metric": "affected-transaction-success-rate", "threshold": "no regression from approved baseline"}
+    ],
+    "negative_cases": ["Unauthorized or invalid input remains rejected."]
+  },
+  "release": {
+    "feature_flag_required": false,
+    "rollback_strategy": "Redeploy the previous verified artifact digest.",
+    "data_reversal_required": false,
+    "stop_conditions": ["Critical transaction failure", "New error-rate regression"]
+  },
+  "governance": {
+    "product_owner": "replace-with-owner",
+    "engineering_owner": "replace-with-owner",
+    "requested_risk": "R1",
+    "policy_risk": null,
+    "human_decisions": []
+  },
+  "budget": {
+    "max_implementation_runs": 1,
+    "max_repair_cycles": 1,
+    "max_review_runs": 2
+  }
+}

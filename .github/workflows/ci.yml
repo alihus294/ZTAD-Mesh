@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  SOURCE_DATE_EPOCH: "0"
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            toolkit/pyproject.toml
+            toolkit/requirements.lock.txt
+            toolkit/requirements-dev.lock.txt
+
+      - name: Install exact test environment
+        run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+
+      - name: Verify installed dependency consistency
+        run: python -m pip check
+
+      - name: Compile Python sources
+        run: python -m compileall -q toolkit scripts evals tests
+
+      - name: Run unit and integration tests
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest -q
+
+      - name: Run offline functional and adversarial evals
+        run: python -B evals/run_evals.py --output "${{ runner.temp }}/eval-summary.json"
+
+      - name: Validate plugin bundle
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/bundle-validation.json" validate-bundle --root .
+
+      - name: Verify policy wiring
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/policy-wiring.json" policy-wiring --root .
+
+      - name: Set commit-derived reproducible build timestamp
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build first deterministic distribution
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/distribution-a.json" build-distribution --root . --output-dir "${{ runner.temp }}/dist-a"
+
+      - name: Build second deterministic distribution
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/distribution-b.json" build-distribution --root . --output-dir "${{ runner.temp }}/dist-b"
+
+      - name: Compare deterministic distribution trees
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        shell: bash
+        run: diff -qr "${{ runner.temp }}/dist-a" "${{ runner.temp }}/dist-b"
+
+      - name: Validate built Plugin archive
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.2.0.zip" --kind plugin
+
+      - name: Validate built Marketplace archive
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.2.0.zip" --kind marketplace
+
+      - name: Prove repository remained unchanged
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain=v1 --untracked-files=all)" || {
+            git status --short
+            exit 1
+          }

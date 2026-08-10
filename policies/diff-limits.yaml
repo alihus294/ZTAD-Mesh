@@ -1,0 +1,27 @@
+version: 1
+R0:
+  max_files: 3
+  max_logical_loc: 80
+  allow_binary: false
+R1:
+  max_files: 6
+  max_logical_loc: 150
+  allow_binary: false
+R2:
+  max_files: 10
+  max_logical_loc: 300
+  allow_binary: false
+R3:
+  max_files: 20
+  max_logical_loc: 600
+  allow_binary: false
+R4:
+  max_files: 50
+  max_logical_loc: 1500
+  allow_binary: false
+default:
+  max_files: 10
+  max_logical_loc: 300
+  allow_binary: false
+generated_and_lockfiles_excluded_from_logical_loc: true
+scope_growth_reset_percent: 25

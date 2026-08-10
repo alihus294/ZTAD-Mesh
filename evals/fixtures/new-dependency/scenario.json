@@ -1,0 +1,12 @@
+{
+  "name": "new-dependency",
+  "expected_minimum_risk": "R3",
+  "paths": [
+    "requirements.txt"
+  ],
+  "payload": "+example-package==1.0.0",
+  "contract_requested_risk": "R3",
+  "expected_control_block": false,
+  "expected_test_integrity_block": false,
+  "expected_injection_signal": false
+}

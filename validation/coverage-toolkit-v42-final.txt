@@ -1,0 +1,8 @@
+toolkit/ztad/schema_validation.py         24      3      4      1    86%
+toolkit/ztad/scope_guard.py               46      3      8      4    87%
+toolkit/ztad/state_machine.py             83     22     28      7    70%
+toolkit/ztad/test_weakening.py           136     14     64     13    86%
+toolkit/ztad/util.py                     212     37     78     17    80%
+toolkit/ztad/worktrees.py                 70      9     20      5    84%
+------------------------------------------------------------------------
+TOTAL                                   7208   1476   2618    638    75%

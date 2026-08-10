@@ -1,0 +1,14 @@
+version: 1
+latest_alias: prohibited
+silent_fallback: prohibited
+exact_model_id_required: true
+prompt_version_required: true
+tool_schema_version_required: true
+upgrade_process:
+- eval_suite
+- multi_run_variance
+- shadow_mode
+- protected_approval_controller
+- registry_update
+majority_vote_as_proof: prohibited
+cross_provider_review: preferred_not_authoritative

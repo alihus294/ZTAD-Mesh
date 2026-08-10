@@ -1,0 +1,12 @@
+{
+  "name": "normal-feature",
+  "expected_minimum_risk": "R2",
+  "paths": [
+    "src/feature.py"
+  ],
+  "payload": "+def feature(): return True",
+  "contract_requested_risk": "R2",
+  "expected_control_block": false,
+  "expected_test_integrity_block": false,
+  "expected_injection_signal": false
+}

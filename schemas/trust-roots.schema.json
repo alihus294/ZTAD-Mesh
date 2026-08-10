@@ -1,0 +1,89 @@
+{
+  "$id": "https://example.invalid/ztad/trust-roots.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "keys": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "algorithm": {
+            "const": "ed25519"
+          },
+          "allowed_environments": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "allowed_producers": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "allowed_trust_levels": {
+            "items": {
+              "enum": [
+                "E3",
+                "E4",
+                "E5",
+                "E6"
+              ]
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "allowed_types": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "public_key_pem": {
+            "minLength": 40,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "VERIFY_ONLY",
+              "REVOKED"
+            ]
+          }
+        },
+        "required": [
+          "algorithm",
+          "public_key_pem",
+          "status",
+          "allowed_trust_levels",
+          "allowed_producers",
+          "allowed_types",
+          "allowed_environments"
+        ],
+        "type": "object"
+      },
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "status": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "version",
+    "keys"
+  ],
+  "type": "object"
+}

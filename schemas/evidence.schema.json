@@ -1,0 +1,132 @@
+{
+  "$id": "https://example.invalid/ztad/evidence.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "base_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "change_contract_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "command_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "environment": {
+      "type": "string"
+    },
+    "evidence_id": {
+      "pattern": "^ev-[a-z0-9-]{3,120}$",
+      "type": "string"
+    },
+    "exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "expires_at": {
+      "format": "date-time",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "head_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "invalidated_by": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "output_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "policy_bundle_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "producer": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "repository": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "signature_or_attestation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "toolchain_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "trust_level": {
+      "enum": [
+        "E0",
+        "E1",
+        "E2",
+        "E3",
+        "E4",
+        "E5",
+        "E6"
+      ]
+    },
+    "type": {
+      "pattern": "^[A-Z][A-Z0-9_]{2,100}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "evidence_id",
+    "type",
+    "trust_level",
+    "producer",
+    "repository",
+    "change_contract_hash",
+    "base_sha",
+    "head_sha",
+    "policy_bundle_hash",
+    "toolchain_hash",
+    "environment",
+    "created_at",
+    "invalidated_by"
+  ],
+  "title": "ZTAD Evidence Record",
+  "type": "object"
+}

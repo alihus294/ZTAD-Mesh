@@ -1,0 +1,6 @@
+interface:
+  display_name: "Autonomous Zero Trust Delivery"
+  short_description: "Run durable autonomous delivery with strong review"
+  default_prompt: "Use $zero-trust-delivery to run the durable fail-contained workflow. Continue other runnable work when one task is delayed or quarantined."
+policy:
+  allow_implicit_invocation: false

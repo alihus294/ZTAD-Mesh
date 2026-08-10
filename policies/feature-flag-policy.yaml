@@ -1,0 +1,11 @@
+version: 1
+required_fields:
+- owner
+- created_at
+- expires_at
+- cleanup_issue
+- default_state
+- rollback_behavior
+default_state: 'OFF'
+maximum_default_lifetime_days: 30
+expired_flag_blocks_done: true

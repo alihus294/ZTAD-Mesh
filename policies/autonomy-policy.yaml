@@ -1,0 +1,59 @@
+version: 2
+maturity: M0_VALIDATION_REQUIRED
+operating_principle: FAIL_CONTAINED_NEVER_IDLE
+levels:
+  A0: analysis_only
+  A1: isolated_worktree_and_local_checks
+  A2: validated_patch_and_pull_request
+  A3: policy_controlled_merge_and_progressive_release
+  A4: reversible_high_risk_automation
+by_risk:
+  R0:
+    max_autonomy: A3
+    supervisor_plan: optional
+    supervisor_review: optional_when_non_behavioral
+    progressive_release: optional
+  R1:
+    max_autonomy: A3
+    supervisor_review: required
+    progressive_release: optional
+  R2:
+    max_autonomy: A3
+    supervisor_plan: required
+    supervisor_review: required
+    progressive_release: required
+  R3:
+    max_autonomy: A3
+    supervisor_plan: high_reasoning
+    adversarial_review: required
+    closure_review_after_takeover: required
+    progressive_release: mandatory_canary
+    automatic_rollback: required
+  R4:
+    max_autonomy: A4
+    reversible_transformation: required
+    destructive_step: split_and_quarantine
+    supervisor_plan: highest_reasoning
+    closure_review: required
+    backup_restore_evidence: required
+    progressive_release: mandatory_canary
+    automatic_rollback: required
+continuity:
+  task_failure_stops_global_pipeline: false
+  safe_task_quarantine: true
+  continue_next_ready_task: true
+  automatic_replan: true
+  automatic_model_escalation: true
+  supervisor_takeover: true
+  clean_reconstruction: true
+  durable_resume: true
+promotion_requirements:
+  unauthorized_actions: 0
+  accepted_fabricated_evidence: 0
+  schema_compliance_percent: 100
+  critical_mutation_survival: 0
+  concurrency_suite: passed
+  rollback_drill: passed
+  red_team_suite: passed
+  minimum_observation_changes: 30
+claim_boundary: "Autonomy is enabled only to the level independently verified by the host, CI, deployment platform, and runtime evidence."

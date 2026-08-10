@@ -1,0 +1,5 @@
+version: 1
+components: {}
+protected_suites: []
+notes:
+  - Map components and contracts to unit, integration, security, migration, and acceptance suites.

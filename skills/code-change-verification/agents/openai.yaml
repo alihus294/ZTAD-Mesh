@@ -1,0 +1,6 @@
+interface:
+  display_name: "Code Change Verification"
+  short_description: "Run deterministic checks bound to the exact SHA"
+  default_prompt: "Use $code-change-verification for this repository task and obey its authority and containment boundaries."
+policy:
+  allow_implicit_invocation: false

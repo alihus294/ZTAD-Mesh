@@ -1,0 +1,45 @@
+{
+  "$id": "https://example.invalid/ztad/platform-report.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "branch": {
+      "type": "string"
+    },
+    "controls": {
+      "type": "object"
+    },
+    "errors": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "read_only": {
+      "const": true
+    },
+    "repository": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "provider",
+    "repository",
+    "generated_at",
+    "controls",
+    "errors",
+    "read_only"
+  ],
+  "type": "object"
+}

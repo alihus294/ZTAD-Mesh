@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "base_sha": {
+      "type": "string"
+    },
+    "change_contract_hash": {
+      "type": "string"
+    },
+    "claim_boundary": {
+      "type": "string"
+    },
+    "context_id": {
+      "type": "string"
+    },
+    "context_sufficiency": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "excluded": {
+      "items": {
+        "required": [
+          "path",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "head_sha": {
+      "type": "string"
+    },
+    "included": {
+      "items": {
+        "required": [
+          "path",
+          "hash",
+          "reason",
+          "trust_label"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "known_gaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "policy_hash": {
+      "type": "string"
+    },
+    "repository": {
+      "type": "string"
+    },
+    "repository_index_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "requested_action": {
+      "enum": [
+        "CONTINUE",
+        "REQUEST_CONTEXT_EXPANSION"
+      ]
+    },
+    "risk": {
+      "enum": [
+        "R0",
+        "R1",
+        "R2",
+        "R3",
+        "R4"
+      ]
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "context_id",
+    "repository",
+    "base_sha",
+    "head_sha",
+    "risk",
+    "change_contract_hash",
+    "policy_hash",
+    "generated_at",
+    "included",
+    "excluded",
+    "known_gaps"
+  ],
+  "type": "object"
+}

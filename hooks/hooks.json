@@ -1,0 +1,102 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$PLUGIN_ROOT/scripts/ztad_hook.py\" SessionStart",
+            "commandWindows": "python -B \"$env:PLUGIN_ROOT\\scripts\\ztad_hook.py\" SessionStart",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$PLUGIN_ROOT/scripts/ztad_hook.py\" PreToolUse",
+            "commandWindows": "python -B \"$env:PLUGIN_ROOT\\scripts\\ztad_hook.py\" PreToolUse",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$PLUGIN_ROOT/scripts/ztad_hook.py\" PermissionRequest",
+            "commandWindows": "python -B \"$env:PLUGIN_ROOT\\scripts\\ztad_hook.py\" PermissionRequest",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$PLUGIN_ROOT/scripts/ztad_hook.py\" PostToolUse",
+            "commandWindows": "python -B \"$env:PLUGIN_ROOT\\scripts\\ztad_hook.py\" PostToolUse",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$PLUGIN_ROOT/scripts/ztad_hook.py\" SubagentStart",
+            "commandWindows": "python -B \"$env:PLUGIN_ROOT\\scripts\\ztad_hook.py\" SubagentStart",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$PLUGIN_ROOT/scripts/ztad_hook.py\" SubagentStop",
+            "commandWindows": "python -B \"$env:PLUGIN_ROOT\\scripts\\ztad_hook.py\" SubagentStop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$PLUGIN_ROOT/scripts/ztad_hook.py\" Stop",
+            "commandWindows": "python -B \"$env:PLUGIN_ROOT\\scripts\\ztad_hook.py\" Stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$PLUGIN_ROOT/scripts/ztad_hook.py\" SessionEnd",
+            "commandWindows": "python -B \"$env:PLUGIN_ROOT\\scripts\\ztad_hook.py\" SessionEnd",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

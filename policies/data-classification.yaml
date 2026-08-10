@@ -1,0 +1,15 @@
+version: 1
+classes:
+  C0:
+    description: Public or synthetic data
+    model_use: allowed
+  C1:
+    description: Internal non-sensitive data
+    model_use: approved_providers_only
+  C2:
+    description: Confidential business or personal data
+    model_use: redacted_and_approved_provider_only
+  C3:
+    description: Secrets, credentials, production-sensitive data, and restricted regulated data
+    model_use: prohibited
+default_if_unknown: C3

@@ -1,0 +1,11 @@
+version: 1
+required_local:
+  - git
+  - python_3_11_plus
+  - plugin_bundle_valid
+optional_by_mode:
+  LOCAL_VERIFICATION_ONLY: []
+  GOVERNED_LOCAL_DEVELOPMENT: [codex_exec, hooks_trusted]
+  GOVERNED_PULL_REQUEST: [github_cli, authenticated_github, protected_branch_evidence]
+  GOVERNED_DELIVERY: [merge_queue_evidence, deployment_adapter, rollback_adapter, runtime_metrics]
+claim_boundary: A generated configuration file is not proof that its host control is active.

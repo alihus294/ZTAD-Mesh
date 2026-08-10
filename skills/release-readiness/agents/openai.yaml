@@ -1,0 +1,6 @@
+interface:
+  display_name: "Release Readiness"
+  short_description: "Validate merge and release eligibility without deploying"
+  default_prompt: "Use $release-readiness for this repository task and obey its authority and containment boundaries."
+policy:
+  allow_implicit_invocation: false

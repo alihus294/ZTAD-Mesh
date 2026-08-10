@@ -1,0 +1,28 @@
+version: 1
+minimum_risk: R3
+destructive_or_irreversible_risk: R4
+default_pattern:
+- expand
+- compatible_deploy
+- bounded_backfill
+- validate
+- switch
+- observe
+- contract_later
+autonomous_prohibited:
+- DROP TABLE
+- DROP COLUMN
+- TRUNCATE
+- unbounded DELETE
+- unbounded UPDATE
+- DISABLE ROW LEVEL SECURITY
+- broad GRANT
+- destructive CASCADE
+- direct production data correction
+required_evidence:
+- MIGRATION_DRY_RUN
+- LOCK_DURATION_ESTIMATE
+- ROW_COUNT_ESTIMATE
+- BACKUP_VERIFIED
+- RESTORE_TESTED
+- ROLLBACK_OR_FORWARD_FIX_PLAN

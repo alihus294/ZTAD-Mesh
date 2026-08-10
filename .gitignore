@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build and distribution outputs
+/MANIFEST.sha256
+build/
+dist/
+build-output/
+*.egg-info/
+
+# ZTAD runtime state
+.ztad/
+.ztad-runtime/
+.delivery/ztad/state/
+.delivery/ztad/runs/
+.delivery/ztad/worktrees/
+.delivery/ztad/*.db
+.delivery/ztad/*.db-*
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# CI-local and ad-hoc validation outputs. Curated release evidence remains tracked.
+validation/ci-*
+validation/github-preupload-*
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key

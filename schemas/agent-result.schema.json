@@ -1,0 +1,343 @@
+{
+  "$defs": {
+    "finding": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "file": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "file"
+          ]
+        },
+        {
+          "properties": {
+            "symbol": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      ],
+      "properties": {
+        "blast_radius": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "claim": {
+          "minLength": 3,
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "falsification_attempt": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "finding_id": {
+          "pattern": "^REV-[0-9]{3,8}$",
+          "type": "string"
+        },
+        "head_sha": {
+          "pattern": "^[0-9a-f]{40,64}$",
+          "type": "string"
+        },
+        "line_end": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "line_start": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reproduction": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "P0",
+            "P1",
+            "P2",
+            "P3"
+          ]
+        },
+        "symbol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uncertainty": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification_status": {
+          "enum": [
+            "PROPOSED",
+            "CONFIRMED",
+            "FALSIFIED",
+            "INCONCLUSIVE"
+          ]
+        },
+        "violated_rule": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "head_sha",
+        "severity",
+        "violated_rule",
+        "claim",
+        "evidence_refs",
+        "blast_radius",
+        "falsification_attempt",
+        "verification_status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://example.invalid/ztad/agent-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agent_role": {
+      "enum": [
+        "planner",
+        "implementer",
+        "independent_reviewer",
+        "finding_verifier",
+        "repairer",
+        "architecture_advisor",
+        "release_advisor",
+        "retrospective_analyst"
+      ]
+    },
+    "base_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "claims": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "claim_type": {
+            "enum": [
+              "REPOSITORY_FACT",
+              "EXECUTION_FACT",
+              "REQUIREMENT_INTERPRETATION",
+              "RISK_OBSERVATION",
+              "PROPOSAL"
+            ]
+          },
+          "evidence_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_sha": {
+            "type": "string"
+          },
+          "verification_status": {
+            "enum": [
+              "VERIFIED",
+              "UNVERIFIED"
+            ]
+          }
+        },
+        "required": [
+          "claim",
+          "claim_type",
+          "source_sha",
+          "verification_status"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "context_id": {
+      "minLength": 8,
+      "type": "string"
+    },
+    "files_not_read": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "files_read": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/finding"
+      },
+      "maxItems": 5,
+      "type": "array"
+    },
+    "head_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "known_unknowns": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "model_registry_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "patch_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prompt_version": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "requested_action": {
+      "enum": [
+        "VALIDATE_PLAN",
+        "VALIDATE_PATCH",
+        "RUN_LOCAL_CHECKS",
+        "OPEN_PR_VIA_BROKER",
+        "VERIFY_FINDINGS",
+        "REQUEST_CONTEXT_EXPANSION",
+        "RETURN_TO_SPEC_OWNER",
+        "ESCALATE_RISK",
+        "REPAIR_CONFIRMED_FINDINGS",
+        "CONTINUE_POLICY_EVALUATION",
+        "REQUEST_STRONG_SUPERVISOR",
+        "AUTO_REPLAN",
+        "AUTO_GENERATE_EVIDENCE",
+        "QUARANTINE_TASK",
+        "CONTINUE_NEXT_TASK",
+        "RECORD_RETROSPECTIVE_PROPOSAL"
+      ]
+    },
+    "result_type": {
+      "enum": [
+        "PLAN_READY",
+        "IMPLEMENTATION_PROPOSAL",
+        "PROPOSED_FINDINGS",
+        "NO_BLOCKING_FINDINGS_IN_REVIEWED_SCOPE",
+        "INSUFFICIENT_CONTEXT",
+        "INSUFFICIENT_EVIDENCE",
+        "SAFE_ASSUMPTION_PLAN_READY",
+        "WAITING_EXTERNAL_DEPENDENCY",
+        "RISK_ESCALATION_REQUESTED",
+        "TOOL_REQUEST",
+        "REPAIR_PROPOSAL",
+        "AUTO_REPLAN",
+        "SUPERVISOR_TAKEOVER",
+        "QUARANTINE_AND_CONTINUE",
+        "RETROSPECTIVE_PROPOSAL"
+      ]
+    },
+    "risk_escalation": {
+      "enum": [
+        null,
+        "R1",
+        "R2",
+        "R3",
+        "R4"
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "task_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "tested_scope": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "uncertainties": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "untested_scope": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "agent_role",
+    "model_registry_id",
+    "prompt_version",
+    "base_sha",
+    "head_sha",
+    "context_id",
+    "result_type",
+    "claims",
+    "findings",
+    "files_read",
+    "files_not_read",
+    "uncertainties",
+    "tested_scope",
+    "untested_scope",
+    "known_unknowns",
+    "requested_action"
+  ],
+  "title": "ZTAD Agent Result Envelope",
+  "type": "object"
+}

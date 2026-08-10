@@ -1,0 +1,6 @@
+# Merge these entries into the repository's real CODEOWNERS file through a human-approved control-plane change.
+/.delivery/ztad/ @replace-with-control-owner
+/.agents/skills/ @replace-with-control-owner
+/.github/workflows/ @replace-with-control-owner
+/AGENTS.md @replace-with-control-owner
+/.changes/ @replace-with-product-and-engineering-owners

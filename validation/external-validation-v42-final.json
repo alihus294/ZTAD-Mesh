@@ -1,0 +1,80 @@
+{
+  "concurrency": {
+    "ledger_processes": [
+      {
+        "records": 64,
+        "round": 1,
+        "unique_sequences": 64,
+        "valid": true,
+        "writers": 64
+      },
+      {
+        "records": 64,
+        "round": 2,
+        "unique_sequences": 64,
+        "valid": true,
+        "writers": 64
+      },
+      {
+        "records": 64,
+        "round": 3,
+        "unique_sequences": 64,
+        "valid": true,
+        "writers": 64
+      },
+      {
+        "records": 64,
+        "round": 4,
+        "unique_sequences": 64,
+        "valid": true,
+        "writers": 64
+      },
+      {
+        "records": 64,
+        "round": 5,
+        "unique_sequences": 64,
+        "valid": true,
+        "writers": 64
+      }
+    ]
+  },
+  "errors": [],
+  "fuzz": {
+    "command_policy": {
+      "cases": 10000,
+      "expected_validation_exceptions": 0
+    },
+    "model_router": {
+      "cases": 10000,
+      "no_qualified_candidate": 1742,
+      "routed": 8258
+    },
+    "path_normalization": {
+      "accepted": 5534,
+      "cases": 10000,
+      "rejected": 4466
+    },
+    "risk_engine": {
+      "cases": 10000,
+      "distribution": {
+        "R0": 2505,
+        "R1": 0,
+        "R2": 0,
+        "R3": 0,
+        "R4": 7495
+      }
+    },
+    "structured_inputs": {
+      "cases": 3000,
+      "expected_rejections": 2428
+    }
+  },
+  "passed": true,
+  "schema_version": 1,
+  "seed": 420042,
+  "totals": {
+    "error_count": 0,
+    "fuzz_cases": 43000,
+    "ledger_process_writes": 320
+  }
+}

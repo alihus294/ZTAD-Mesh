@@ -1,0 +1,64 @@
+version: 2
+default:
+  implementation_runs: 1
+  independent_reviews: 1
+  repair_cycles: 1
+  closure_reviews: 1
+  escalation_runs: 0
+  max_input_tokens: 120000
+  max_output_tokens: 12000
+  max_cost: 25
+  stop_at_budget_percent: 80
+R0:
+  implementation_runs: 1
+  independent_reviews: 0
+  repair_cycles: 1
+  closure_reviews: 0
+  escalation_runs: 0
+  max_input_tokens: 25000
+  max_output_tokens: 3000
+  max_cost: 3
+  stop_at_budget_percent: 80
+R1:
+  implementation_runs: 1
+  independent_reviews: 1
+  repair_cycles: 1
+  closure_reviews: 1
+  escalation_runs: 0
+  max_input_tokens: 60000
+  max_output_tokens: 7000
+  max_cost: 8
+  stop_at_budget_percent: 80
+R2:
+  implementation_runs: 1
+  independent_reviews: 1
+  repair_cycles: 2
+  closure_reviews: 1
+  escalation_runs: 1
+  max_input_tokens: 120000
+  max_output_tokens: 12000
+  max_cost: 20
+  stop_at_budget_percent: 80
+R3:
+  implementation_runs: 1
+  independent_reviews: 1
+  repair_cycles: 2
+  closure_reviews: 1
+  escalation_runs: 1
+  max_input_tokens: 220000
+  max_output_tokens: 22000
+  max_cost: 50
+  stop_at_budget_percent: 80
+R4:
+  implementation_runs: 1
+  independent_reviews: 1
+  repair_cycles: 1
+  closure_reviews: 1
+  escalation_runs: 1
+  max_input_tokens: 320000
+  max_output_tokens: 32000
+  max_cost: 100
+  stop_at_budget_percent: 80
+
+continuity_action_on_limit: QUARANTINE_TASK_AND_CONTINUE_QUEUE
+global_stop: false

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "configured": false,
+  "checks": [
+    {
+      "id": "replace-with-reviewed-check",
+      "argv": ["python3", "-m", "compileall", "-q", "."],
+      "cwd": ".",
+      "timeout_seconds": 300,
+      "evidence_type": "LOCAL_SYNTAX_CHECK",
+      "fail_fast": true
+    }
+  ]
+}

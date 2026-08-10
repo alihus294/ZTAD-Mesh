@@ -1,0 +1,6 @@
+interface:
+  display_name: "Independent Review"
+  short_description: "Perform evidence-backed adversarial review"
+  default_prompt: "Use $independent-review for this repository task and obey its authority and containment boundaries."
+policy:
+  allow_implicit_invocation: false

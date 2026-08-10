@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "id": "N01",
+      "expected_skill": null,
+      "prompt": "Explain what trunk-based development means."
+    },
+    {
+      "id": "N02",
+      "expected_skill": null,
+      "prompt": "Rewrite this function comment for clarity."
+    },
+    {
+      "id": "N03",
+      "expected_skill": null,
+      "prompt": "What is the difference between a PR and a commit?"
+    },
+    {
+      "id": "N04",
+      "expected_skill": null,
+      "prompt": "Summarize the attached code; make no changes."
+    },
+    {
+      "id": "N05",
+      "expected_skill": null,
+      "prompt": "Give me a generic Python unit-test example."
+    },
+    {
+      "id": "N06",
+      "expected_skill": null,
+      "prompt": "Translate this README paragraph to Arabic."
+    }
+  ]
+}

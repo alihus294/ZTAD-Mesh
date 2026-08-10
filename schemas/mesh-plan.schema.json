@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "risk", "plan_id", "scope_groups", "rationale", "nodes", "claim_boundary"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "risk": {"enum": ["R0", "R1", "R2", "R3", "R4"]},
+    "plan_id": {"type": "string", "minLength": 16},
+    "scope_groups": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 1}},
+    "rationale": {"type": "array", "items": {"type": "string"}},
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["node_id", "task_id", "title", "task_family", "role", "risk", "write_access", "scopes", "prompt_path", "output_schema", "priority", "metadata", "dependencies", "idempotency_key"]
+      }
+    },
+    "claim_boundary": {"type": "string"}
+  }
+}

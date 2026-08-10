@@ -1,0 +1,6 @@
+interface:
+  display_name: "Strong Supervisor Governance"
+  short_description: "Review, re-plan, approve, or take over exact-SHA work"
+  default_prompt: "Use $supervisor-governance for a read-only strong-model decision bound to exact evidence and SHA."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,52 @@
+{
+  "claim_boundary": "Offline source, distribution, and extracted-package checks do not prove hosted Codex discovery, provider credentials, GitHub enforcement, protected CI, merge queue, deployment, canary health, rollback, or production safety on a target host.",
+  "coverage": {
+    "repository_branch_percent": 80,
+    "toolkit_branch_percent": 75
+  },
+  "external_validation": {
+    "concurrency_rounds": 5,
+    "fuzz_cases": 43000,
+    "ledger_process_writes": 320,
+    "unhandled_errors": 0
+  },
+  "extracted_distribution_tests": {
+    "marketplace_nested_plugin": {
+      "failed": 0,
+      "passed": 227
+    },
+    "standalone_plugin": {
+      "failed": 0,
+      "passed": 227
+    }
+  },
+  "generated_at": "2026-08-10T00:00:00Z",
+  "offline_evals": {
+    "failed": 0,
+    "passed": 44
+  },
+  "reproducibility": {
+    "compared_files": [
+      "CHECKSUMS.sha256",
+      "RELEASE_MANIFEST.json",
+      "verify_release.py",
+      "versioned plugin ZIP",
+      "versioned marketplace ZIP",
+      "stable aliases"
+    ],
+    "complete_distribution_tree_byte_identical": true,
+    "same_source_and_source_date_epoch": true
+  },
+  "schema_version": 1,
+  "selected_critical_mutations": {
+    "claim_boundary": "Selected critical mutants only.",
+    "killed": 14,
+    "survived": 0
+  },
+  "source_date_epoch": 1786320000,
+  "source_test_suite": {
+    "failed": 0,
+    "passed": 227
+  },
+  "version": "4.2.0"
+}

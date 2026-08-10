@@ -1,0 +1,106 @@
+{
+  "keys": {
+    "replace-with-supervisor-approval-controller-key-id": {
+      "algorithm": "ed25519",
+      "allowed_environments": [
+        "supervisor-approval-controller"
+      ],
+      "allowed_producers": [
+        "platform:approval-controller"
+      ],
+      "allowed_trust_levels": [
+        "E6"
+      ],
+      "allowed_types": [
+        "STRONG_SUPERVISOR_MERGE_APPROVAL",
+        "STRONG_SUPERVISOR_TECHNICAL_APPROVAL",
+        "STRONG_SUPERVISOR_RELEASE_APPROVAL"
+      ],
+      "public_key_pem": "REPLACE_WITH_SUPERVISOR_APPROVAL_CONTROLLER_PUBLIC_KEY_PEM",
+      "status": "ACTIVE"
+    },
+    "replace-with-protected-build-key-id": {
+      "algorithm": "ed25519",
+      "allowed_environments": [
+        "ci",
+        "staging",
+        "production-release"
+      ],
+      "allowed_producers": [
+        "platform:protected-build",
+        "platform:artifact-verifier",
+        "platform:staging-verifier"
+      ],
+      "allowed_trust_levels": [
+        "E4"
+      ],
+      "allowed_types": [
+        "RELEASE_MANIFEST_VALID",
+        "ARTIFACT_ATTESTATION_VERIFIED",
+        "SBOM_VERIFIED",
+        "BUILD_PROVENANCE_VERIFIED",
+        "STAGING_SMOKE_PASSED",
+        "ROLLBACK_READY",
+        "OBSERVABILITY_READY",
+        "BACKUP_RESTORE_EVIDENCE",
+        "REHEARSAL_EVIDENCE"
+      ],
+      "public_key_pem": "REPLACE_WITH_PROTECTED_BUILD_PUBLIC_KEY_PEM",
+      "status": "ACTIVE"
+    },
+    "replace-with-protected-ci-key-id": {
+      "algorithm": "ed25519",
+      "allowed_environments": [
+        "ci",
+        "github-control-plane"
+      ],
+      "allowed_producers": [
+        "platform:protected-ci",
+        "platform:github-control-auditor"
+      ],
+      "allowed_trust_levels": [
+        "E3"
+      ],
+      "allowed_types": [
+        "CHANGE_CONTRACT_VALID",
+        "POLICY_PREFLIGHT_PASSED",
+        "FAST_CI_PASSED",
+        "EXTENDED_CI_PASSED",
+        "INDEPENDENT_REVIEW_COMPLETED",
+        "PLATFORM_BRANCH_PROTECTION_VERIFIED",
+        "PLATFORM_REQUIRED_CHECKS_VERIFIED",
+        "PLATFORM_STALE_REVIEW_DISMISSAL_VERIFIED",
+        "PLATFORM_MERGE_QUEUE_VERIFIED",
+        "PLATFORM_PRODUCTION_ENVIRONMENT_VERIFIED"
+      ],
+      "public_key_pem": "REPLACE_WITH_PROTECTED_CI_PUBLIC_KEY_PEM",
+      "status": "ACTIVE"
+    },
+    "replace-with-runtime-observer-key-id": {
+      "algorithm": "ed25519",
+      "allowed_environments": [
+        "production"
+      ],
+      "allowed_producers": [
+        "platform:runtime-observer"
+      ],
+      "allowed_trust_levels": [
+        "E5"
+      ],
+      "allowed_types": [
+        "EXPECTED_DIGEST_RUNNING",
+        "HEALTH_CHECKS_PASSED",
+        "SYNTHETIC_TRANSACTION_PASSED",
+        "OBSERVATION_WINDOW_PASSED"
+      ],
+      "public_key_pem": "REPLACE_WITH_RUNTIME_OBSERVER_PUBLIC_KEY_PEM",
+      "status": "ACTIVE"
+    }
+  },
+  "notes": [
+    "Use distinct private keys and operators for E3, E4, E5, and E6 trust domains. The E6 controller signs only after deterministic validation of a strong-model decision; the model never receives the private key.",
+    "Private keys must remain outside repositories and must never be exposed to agents.",
+    "Replace example producers and evidence types with organization-specific least-privilege scopes."
+  ],
+  "version": 1
+}

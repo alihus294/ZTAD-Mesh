@@ -1,0 +1,12 @@
+{
+  "name": "control-plane",
+  "expected_minimum_risk": "R3",
+  "paths": [
+    ".github/workflows/ci.yml"
+  ],
+  "payload": "+name: changed",
+  "contract_requested_risk": "R3",
+  "expected_control_block": true,
+  "expected_test_integrity_block": false,
+  "expected_injection_signal": false
+}

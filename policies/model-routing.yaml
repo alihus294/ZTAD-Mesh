@@ -1,0 +1,27 @@
+version: 3
+mode: LEGACY_COMPATIBILITY_ONLY
+allow_same_model_different_sessions: false
+roles:
+  worker:
+    model: gpt-5.6-luna
+    reasoning_effort: medium
+    sandbox: workspace-write
+    max_attempts: 2
+    fallback_models:
+      - gpt-5.6-terra
+  supervisor:
+    model: gpt-5.6-sol
+    reasoning_effort: high
+    sandbox: read-only
+    max_attempts: 2
+    fallback_models: []
+  closure:
+    model: gpt-5.6-sol
+    reasoning_effort: high
+    sandbox: read-only
+    max_attempts: 2
+    fallback_models: []
+separation:
+  implementation_session_may_approve_same_sha: false
+  supervisor_takeover_requires_fresh_closure_session: true
+  majority_vote_is_evidence: false

@@ -1,0 +1,61 @@
+schema_version: 1
+change_id: FEAT-100
+title: Replace this title with a specific outcome
+outcome:
+  user_or_system_value: Describe the measurable value delivered
+  success_metric: Optional measurable signal
+requirements:
+  acceptance_criteria:
+    - id: AC-01
+      statement: State an observable and testable behavior
+  non_goals:
+    - State what is deliberately excluded
+  invariants:
+    - id: INV-01
+      statement: State a rule that must remain true
+  assumptions:
+    - id: ASM-01
+      statement: Replace with an evidence-backed assumption or remove it
+      status: unverified
+      evidence_ref: null
+scope:
+  expected_components:
+    - component-name
+  prohibited_components:
+    - .github/workflows
+  public_contract_change: false
+  data_migration_expected: false
+  service_criticality: tier_2
+  data_classification: C1
+quality_attributes:
+  security: Preserve authorization and least privilege
+  privacy: Do not expose personal or confidential data
+  performance: Define a measurable limit when material
+  availability: Preserve the current service objective
+  accessibility: Preserve applicable accessibility behavior
+  compatibility: Preserve supported clients and contracts
+verification:
+  test_oracles:
+    - acceptance_test: Describe the independent acceptance test
+      expected_evidence: Describe the expected machine-generated evidence
+  observability:
+    - metric: error_rate
+      threshold: No regression from the approved baseline
+  negative_cases:
+    - Define a failing or boundary case
+release:
+  feature_flag_required: false
+  rollback_strategy: Revert to the previously verified artifact
+  data_reversal_required: false
+  stop_conditions:
+    - Critical transaction failure
+governance:
+  product_owner: NOT_CONFIGURED
+  engineering_owner: NOT_CONFIGURED
+  requested_risk: R0
+  policy_risk: null
+  human_decisions: []
+budget:
+  max_implementation_runs: 1
+  max_repair_cycles: 2
+  max_review_runs: 2

@@ -1,0 +1,75 @@
+version: 2
+routing:
+  catalog_values_are_priors: true
+  host_probe_and_benchmark_required: true
+  catalog_prior_weight: 3.0
+  preferred_provider_bonus: 0.02
+  global_parallel_cap: 16
+  minimum_quality_by_risk:
+    R0: 0.70
+    R1: 0.75
+    R2: 0.82
+    R3: 0.90
+    R4: 0.94
+  frontier_role_quality_floor: 0.92
+models:
+  - registry_id: codex-luna
+    provider: codex
+    model: gpt-5.6-luna
+    tier: economy
+    enabled: true
+    reasoning_efforts: [low, medium, high]
+    sandboxes: [read-only, workspace-write]
+    reliability: 0.93
+    cost_index: 0.25
+    latency_index: 0.35
+    max_parallel: 8
+    task_quality:
+      default: 0.76
+      repository_navigation: 0.88
+      context_scout: 0.84
+      documentation: 0.90
+      mechanical_implementation: 0.84
+      repair: 0.79
+  - registry_id: codex-terra
+    provider: codex
+    model: gpt-5.6-terra
+    tier: balanced
+    enabled: true
+    reasoning_efforts: [low, medium, high, xhigh]
+    sandboxes: [read-only, workspace-write]
+    reliability: 0.95
+    cost_index: 0.55
+    latency_index: 0.55
+    max_parallel: 6
+    task_quality:
+      default: 0.86
+      repository_navigation: 0.91
+      context_scout: 0.90
+      implementation: 0.89
+      mechanical_implementation: 0.91
+      repair: 0.90
+      test_design: 0.88
+  - registry_id: codex-sol
+    provider: codex
+    model: gpt-5.6-sol
+    tier: frontier
+    enabled: true
+    reasoning_efforts: [medium, high, xhigh, max]
+    sandboxes: [read-only, workspace-write]
+    reliability: 0.97
+    cost_index: 1.00
+    latency_index: 0.90
+    max_parallel: 4
+    task_quality:
+      default: 0.95
+      architecture: 0.98
+      plan_adjudication: 0.98
+      security: 0.97
+      authorization: 0.97
+      database: 0.96
+      financial_logic: 0.97
+      review: 0.98
+      release: 0.97
+      implementation: 0.95
+      repair: 0.96

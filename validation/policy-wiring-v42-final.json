@@ -1,0 +1,381 @@
+{
+  "claim_boundary": "A declared consumer proves code availability, not host activation. Non-runtime policies are explicitly classified instead of being mislabeled as enforced.",
+  "declared": 26,
+  "errors": [],
+  "found": 26,
+  "missing": [],
+  "mode_counts": {
+    "DETERMINISTIC_AND_HOST_RUNTIME": 1,
+    "DETERMINISTIC_RUNTIME": 13,
+    "HOST_ENFORCEMENT_REQUIRED": 1,
+    "HOST_VERIFICATION_REQUIRED": 1,
+    "LEGACY_COMPATIBILITY": 1,
+    "REFERENCE_AND_CONTROLLER_POLICY": 2,
+    "REFERENCE_AND_HOST_POLICY": 3,
+    "REFERENCE_AND_PLATFORM_POLICY": 3,
+    "REFERENCE_TEMPLATE": 1
+  },
+  "policies": [
+    {
+      "claim": "Autonomy intent is realized only for capabilities verified by host acceptance.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.orchestrator",
+        "ztad.mesh_runtime"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_AND_HOST_POLICY",
+      "name": "autonomy-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/autonomy-policy.yaml",
+      "sha256": "sha256:e291b6c32cb84f44e64c9e13bc406f0b71f9a5f7f8cad1a6b0069dd7d2969bb6"
+    },
+    {
+      "claim": "Routing benchmarks are locally validated and are never delivery evidence.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.model_benchmark",
+        "ztad.mesh_store",
+        "ztad.cli"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "benchmark-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/benchmark-policy.yaml",
+      "sha256": "sha256:ac41e46d42b1ffb3d19458f758412ba1be7db8db093c3cda4d24b6ff35dd2023"
+    },
+    {
+      "claim": "Model-call and cost budgets are evaluated locally.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.budget",
+        "ztad.cli"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "budget-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/budget-policy.yaml",
+      "sha256": "sha256:ebf96238f3da3e37f58bc4852df2830005dd80ae952080e6f1b7df287749daf3"
+    },
+    {
+      "claim": "Argv and active-hook command boundaries are evaluated locally.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.commands",
+        "ztad.hooks",
+        "ztad.checks"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "command-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/command-policy.yaml",
+      "sha256": "sha256:fceb8a20f0b6193c4dc9c0e31c8d77e7536fb1d2c291f03965b13b10d0f12dbd"
+    },
+    {
+      "claim": "Context size and selection limits are local inputs; static context is not runtime completeness proof.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.context",
+        "ztad.repository_index"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "context-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/context-policy.yaml",
+      "sha256": "sha256:3ebdfd41579ff09eb55c0314d009973e38acfbd88bf31e069c03787bf0a4753a"
+    },
+    {
+      "claim": "Durable state, leases and task-local containment are locally implemented.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.orchestrator",
+        "ztad.mesh_store",
+        "ztad.scheduler"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "continuity-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/continuity-policy.yaml",
+      "sha256": "sha256:997f1ba5b667240d08ed8863d6ab388f8bf0a372154254eda38db2a2eb7623d9"
+    },
+    {
+      "claim": "Classification rules guide context exclusion; external data controls require host enforcement.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.context"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_AND_HOST_POLICY",
+      "name": "data-classification.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/data-classification.yaml",
+      "sha256": "sha256:79e9216c1c7f4b1a8179f3c1c684c2a8778486228fb80a6c0ca4db3479d941b2"
+    },
+    {
+      "claim": "Database guidance requires database-specific adapters and evidence.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.risk",
+        "ztad.release"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_AND_PLATFORM_POLICY",
+      "name": "database-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/database-policy.yaml",
+      "sha256": "sha256:b25263c803af33b19cc46923b0c2112954adb9cfe54f34226cb6379e0f94f891"
+    },
+    {
+      "claim": "Dependency guidance requires package-manager and supply-chain evidence.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.risk",
+        "ztad.test_weakening"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_AND_PLATFORM_POLICY",
+      "name": "dependency-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/dependency-policy.yaml",
+      "sha256": "sha256:d2ab2ae23aa1a8cc02b0ef447fb8d78ece687a45e531822b9d08e691136a13ea"
+    },
+    {
+      "claim": "Diff-size limits are locally enforced.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.diff_limits"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "diff-limits.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/diff-limits.yaml",
+      "sha256": "sha256:a9616978d1930238718971114acc60a93fded933f0d7c0dadb294735139c461a"
+    },
+    {
+      "claim": "Authoritative evidence requires protected signing/attestation controllers.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.evidence",
+        "ztad.state_machine",
+        "ztad.approval_controller"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_AND_CONTROLLER_POLICY",
+      "name": "evidence-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/evidence-policy.yaml",
+      "sha256": "sha256:5225a266ae3dc9e2199a37668765e48d8e5b4392d675a7028684812e2fddbd99"
+    },
+    {
+      "claim": "Feature-flag behavior requires a platform adapter.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.release"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_AND_PLATFORM_POLICY",
+      "name": "feature-flag-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/feature-flag-policy.yaml",
+      "sha256": "sha256:06f7f258a09c25c1476327e525db6d4a3d5c9953e5e7e14e3a991758667cef28"
+    },
+    {
+      "claim": "Local probes cannot prove remote controls or hook trust without host evidence.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.host_acceptance"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "HOST_VERIFICATION_REQUIRED",
+      "name": "host-acceptance-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/host-acceptance-policy.yaml",
+      "sha256": "sha256:32009a5dc92aafe4881b270e1686f9be771bd4cf8a99893b919c9c2497f469bc"
+    },
+    {
+      "claim": "DAG, scope locks, attempt fingerprints and parallel limits are locally enforced.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.mesh_store",
+        "ztad.mesh_runtime",
+        "ztad.loop_guard"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "mesh-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/mesh-policy.yaml",
+      "sha256": "sha256:cb3d8b84c676d2aac704ac8625b6d0933db00f8e18458c85432ecb4f0dda8eef"
+    },
+    {
+      "claim": "Candidates are routed only after quality/tier/sandbox filtering.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.model_router"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "model-catalog.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/model-catalog.yaml",
+      "sha256": "sha256:8b06a9f807b4303aea99b21c8546c2169877496e54caba14d352251973e43df3"
+    },
+    {
+      "claim": "Model pinning and eval gates require actual provider inventory and benchmarks.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.model_router",
+        "ztad.providers"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_AND_HOST_POLICY",
+      "name": "model-governance-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/model-governance-policy.yaml",
+      "sha256": "sha256:1af7b3e1fe8ea9ad18b0138970a1f066b40ec4a761ce4d7dce6b369486a89b74"
+    },
+    {
+      "claim": "Example only; it is never treated as an active registry.",
+      "consumer_modules_available": true,
+      "consumers": [],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_TEMPLATE",
+      "name": "model-registry.example.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/model-registry.example.yaml",
+      "sha256": "sha256:eaef512debafad5720901c460140bcb37bb30d116f97aa43256deddab62b2697"
+    },
+    {
+      "claim": "Legacy three-role routing remains for compatibility; Mesh uses model-catalog.yaml.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.models"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "LEGACY_COMPATIBILITY",
+      "name": "model-routing.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/model-routing.yaml",
+      "sha256": "sha256:ab4995d81b7f7c409661f1884cdab057345744570d489ddbea23d3af50b855db"
+    },
+    {
+      "claim": "Hooks provide a guardrail; the host sandbox/network configuration is the enforcement boundary.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.hooks"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "HOST_ENFORCEMENT_REQUIRED",
+      "name": "network-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/network-policy.yaml",
+      "sha256": "sha256:0438e1a4124cce49fab5c9a38baedf2ffd10ec96202146832ca714f5cc28be2a"
+    },
+    {
+      "claim": "Protected paths and patch modes are checked locally.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.control_plane",
+        "ztad.patch_broker",
+        "ztad.hooks"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "path-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/path-policy.yaml",
+      "sha256": "sha256:d2c1d86fefec3fffa264ca1bc37a372f29d732706781f7f906fb5a5f57b17a7a"
+    },
+    {
+      "claim": "Provider process boundaries are local; executable capability and authentication require target-host acceptance.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.providers",
+        "ztad.host_acceptance",
+        "ztad.mesh_runtime"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_AND_HOST_RUNTIME",
+      "name": "provider-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/provider-policy.yaml",
+      "sha256": "sha256:f7ca7135317afd56c20d6371581aaf1f82f47621d3c604536077f71de254f445"
+    },
+    {
+      "claim": "Readiness and progressive decisions are local; platform execution needs a verified adapter.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.release",
+        "ztad.progressive_delivery"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "release-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/release-policy.yaml",
+      "sha256": "sha256:d1e7f060766503e8375457bc3cff9e11c5fdd731d1df3c5dfc92e5cdf9a66fe4"
+    },
+    {
+      "claim": "Risk floors are computed locally and cannot be downgraded by model text.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.risk"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "risk-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/risk-policy.yaml",
+      "sha256": "sha256:7e880f9bef276f7668ab73bd52d3286a35ae025b26515afcd50c82d8674c6fcb"
+    },
+    {
+      "claim": "Transitions require validated evidence when the production gate is configured.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.state_machine",
+        "ztad.scheduler",
+        "ztad.orchestrator"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "state-machine.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/state-machine.yaml",
+      "sha256": "sha256:394ddbc1644cba373af33d1c74100e83a22159580708c9fbd96d109f5180a67d"
+    },
+    {
+      "claim": "Configured test-integrity findings are locally evaluated.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.test_weakening"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "DETERMINISTIC_RUNTIME",
+      "name": "test-integrity-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/test-integrity-policy.yaml",
+      "sha256": "sha256:6d8e8d18cf179bfe3818d8ea092bae86711712c71796cc13a04596d3a39aacf2"
+    },
+    {
+      "claim": "Waivers require an external authorized controller and are not auto-issued.",
+      "consumer_modules_available": true,
+      "consumers": [
+        "ztad.state_machine"
+      ],
+      "errors": [],
+      "loaded": true,
+      "mode": "REFERENCE_AND_CONTROLLER_POLICY",
+      "name": "waiver-policy.yaml",
+      "path": "/mnt/data/ztad_v4_source/policies/waiver-policy.yaml",
+      "sha256": "sha256:d65817c0e7baa60832530b206003fa23bf7a495c5eaf966e83b1cf8310d4de58"
+    }
+  ],
+  "policy_bundle_hash": "sha256:b1dfac29cf6f7806b5de3acf3c3181138e0a4cd6ba4f2e06b215bf0e9bdc2cc5",
+  "valid": true
+}

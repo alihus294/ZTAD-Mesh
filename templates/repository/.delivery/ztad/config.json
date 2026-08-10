@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "configured": false,
+  "environment_allowlist": [],
+  "checks": [
+    {
+      "id": "replace-with-reviewed-check",
+      "argv": ["python3", "-m", "compileall", "-q", "."],
+      "cwd": ".",
+      "timeout_seconds": 300,
+      "evidence_type": "LOCAL_SYNTAX_CHECK",
+      "fail_fast": true
+    }
+  ],
+  "notes": [
+    "Set configured=true only after a human reviews every argv array.",
+    "Do not add secrets to environment_allowlist.",
+    "Local E2 evidence is not merge- or release-authoritative."
+  ]
+}

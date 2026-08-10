@@ -1,0 +1,31 @@
+version: 1
+execution:
+  shell_interpolation: prohibited
+  argv_template_only: true
+  executable_must_be_host_accepted: true
+  output_schema_validation: required
+  result_metadata_binding: required
+  output_hash_binding: required
+  session_identity_capture: required_when_exposed
+  safe_environment_allowlist: required
+  timeout_required: true
+  provider_exception_containment: required
+  fallback_may_not_lower_quality_floor: true
+  unrestricted_network: prohibited_by_default
+codex:
+  non_interactive_command: codex exec
+  jsonl_events: required
+  output_schema: required
+  output_last_message: required
+  ephemeral: true
+  ignore_user_config: true
+  ignore_rules: true
+  explicit_sandbox: true
+third_party:
+  adapter_contract_review: required
+  host_probe: required
+  structured_output_local_validation: required
+  undocumented_flags: prohibited
+claim_boundary: >-
+  Provider availability and CLI conformance must be verified on the target host.
+  A successful process exit is not evidence that the requested task is correct.

@@ -1,0 +1,131 @@
+{
+  "$id": "https://example.invalid/ztad/finding.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "properties": {
+        "file": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "file"
+      ]
+    },
+    {
+      "properties": {
+        "symbol": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    }
+  ],
+  "properties": {
+    "blast_radius": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "claim": {
+      "minLength": 3,
+      "type": "string"
+    },
+    "evidence_refs": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "falsification_attempt": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "file": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "finding_id": {
+      "pattern": "^REV-[0-9]{3,8}$",
+      "type": "string"
+    },
+    "head_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "line_end": {
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "line_start": {
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "reproduction": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ]
+    },
+    "symbol": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "uncertainty": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "verification_status": {
+      "enum": [
+        "PROPOSED",
+        "CONFIRMED",
+        "FALSIFIED",
+        "INCONCLUSIVE"
+      ]
+    },
+    "violated_rule": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "finding_id",
+    "head_sha",
+    "severity",
+    "violated_rule",
+    "claim",
+    "evidence_refs",
+    "blast_radius",
+    "falsification_attempt",
+    "verification_status"
+  ],
+  "title": "ZTAD Finding",
+  "type": "object"
+}

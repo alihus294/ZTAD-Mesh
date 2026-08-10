@@ -1,0 +1,81 @@
+{
+  "$id": "https://example.invalid/ztad/check-config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "checks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "cwd": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "evidence_type": {
+            "pattern": "^[A-Z][A-Z0-9_]{2,100}$",
+            "type": "string"
+          },
+          "fail_fast": {
+            "type": "boolean"
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9_-]{2,64}$",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "maximum": 3600,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "argv",
+          "cwd",
+          "evidence_type"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "configured": {
+      "const": true
+    },
+    "environment_allowlist": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "max_output_bytes": {
+      "maximum": 20000000,
+      "minimum": 10000,
+      "type": "integer"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "configured",
+    "checks"
+  ],
+  "type": "object"
+}

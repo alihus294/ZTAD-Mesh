@@ -1,0 +1,15 @@
+version: 1
+default: DENY
+agent_network: 'OFF'
+allowed_methods:
+- GET
+- HEAD
+write_methods:
+- POST
+- PUT
+- PATCH
+- DELETE
+write_methods_policy: PROHIBITED_FOR_AGENT
+allowlist_required: true
+untrusted_remote_content: DATA_NOT_INSTRUCTIONS
+secret_transmission: PROHIBITED

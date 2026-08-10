@@ -1,0 +1,10 @@
+version: 1
+new_production_dependency_minimum_risk: R3
+lockfile_required: true
+license_review_required: true
+vulnerability_scan_required: true
+dependency_confusion_protection: true
+install_scripts_default: DENY_OR_EXPLICIT_REVIEW
+git_dependencies_default: DENY
+unpinned_sources: DENY
+generated_code_provenance_required: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "ZTAD Multi-Model Mesh"
+  short_description: "Route and coordinate bounded parallel model work"
+  default_prompt: "Use $multi-model-mesh to benchmark available models, build a bounded delivery DAG, isolate writers, and run evidence-gated multi-model execution."
+policy:
+  allow_implicit_invocation: false

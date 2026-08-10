@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "task_id": "FEAT-100",
+  "agent_role": "independent_reviewer",
+  "model_registry_id": "review-independent",
+  "prompt_version": "review-v1",
+  "base_sha": "0000000000000000000000000000000000000000",
+  "head_sha": "1111111111111111111111111111111111111111",
+  "context_id": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "result_type": "NO_BLOCKING_FINDINGS_IN_REVIEWED_SCOPE",
+  "claims": [],
+  "findings": [],
+  "files_read": [
+    "src/example.py"
+  ],
+  "files_not_read": [],
+  "known_unknowns": [],
+  "patch_path": null,
+  "requested_action": "CONTINUE_POLICY_EVALUATION",
+  "uncertainties": [],
+  "tested_scope": [
+    "src/example.py"
+  ],
+  "untested_scope": []
+}

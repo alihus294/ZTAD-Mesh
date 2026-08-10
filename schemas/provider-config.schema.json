@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["providers"],
+  "properties": {
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "executable", "argv_template"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "executable": {"type": "string", "minLength": 1},
+          "argv_template": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "allowed_environment_names": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "version_argv": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

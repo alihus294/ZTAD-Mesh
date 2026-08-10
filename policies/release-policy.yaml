@@ -1,0 +1,94 @@
+version: 2
+build_once_promote_by_digest: true
+rebuild_in_production: prohibited
+required_release_manifest: true
+required_attestation_verification: true
+required_sbom: true
+gates:
+  MERGE:
+    minimum_trust: E3
+    required_evidence:
+    - CHANGE_CONTRACT_VALID
+    - POLICY_PREFLIGHT_PASSED
+    - FAST_CI_PASSED
+    required_platform_controls:
+    - branch_protection
+    - required_checks
+    - stale_review_dismissal
+    by_risk:
+      R0: {}
+      R1:
+        required_evidence:
+        - INDEPENDENT_REVIEW_COMPLETED
+      R2:
+        required_evidence:
+        - INDEPENDENT_REVIEW_COMPLETED
+        - EXTENDED_CI_PASSED
+        required_platform_controls:
+        - merge_queue
+        required_approvals:
+        - STRONG_SUPERVISOR_MERGE_APPROVAL
+      R3:
+        required_evidence:
+        - INDEPENDENT_REVIEW_COMPLETED
+        - EXTENDED_CI_PASSED
+        required_platform_controls:
+        - merge_queue
+        required_approvals:
+        - STRONG_SUPERVISOR_TECHNICAL_APPROVAL
+      R4:
+        required_evidence:
+        - INDEPENDENT_REVIEW_COMPLETED
+        - EXTENDED_CI_PASSED
+        required_platform_controls:
+        - merge_queue
+        required_approvals:
+        - STRONG_SUPERVISOR_TECHNICAL_APPROVAL
+  STAGING:
+    minimum_trust: E4
+    required_evidence:
+    - RELEASE_MANIFEST_VALID
+    - ARTIFACT_ATTESTATION_VERIFIED
+    - SBOM_VERIFIED
+    - BUILD_PROVENANCE_VERIFIED
+    by_risk: {}
+  RELEASE:
+    minimum_trust: E4
+    required_evidence:
+    - STAGING_SMOKE_PASSED
+    - ROLLBACK_READY
+    - OBSERVABILITY_READY
+    required_platform_controls:
+    - production_environment
+    by_risk:
+      R2:
+        required_approvals:
+        - STRONG_SUPERVISOR_RELEASE_APPROVAL
+      R3:
+        required_approvals:
+        - STRONG_SUPERVISOR_RELEASE_APPROVAL
+      R4:
+        required_evidence:
+        - BACKUP_RESTORE_EVIDENCE
+        - REHEARSAL_EVIDENCE
+        required_approvals:
+        - STRONG_SUPERVISOR_RELEASE_APPROVAL
+  PRODUCTION:
+    minimum_trust: E5
+    required_evidence:
+    - EXPECTED_DIGEST_RUNNING
+    - HEALTH_CHECKS_PASSED
+    - SYNTHETIC_TRANSACTION_PASSED
+    - OBSERVATION_WINDOW_PASSED
+    by_risk: {}
+rollout:
+  R0: direct_or_flagged
+  R1: staging_then_direct
+  R2: progressive
+  R3: canary_or_rings
+  R4: limited_canary_after_rehearsal
+runtime_verification:
+  require_expected_digest: true
+  require_health_checks: true
+  require_synthetic_transaction: true
+  require_observation_window: true

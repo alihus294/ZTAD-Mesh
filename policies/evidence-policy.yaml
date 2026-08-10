@@ -1,0 +1,34 @@
+version: 1
+trust_levels:
+  E0: untrusted_agent_claim
+  E1: repository_fact
+  E2: local_tool_result
+  E3: protected_ci_or_platform_control_result
+  E4: signed_build_or_release_evidence
+  E5: signed_runtime_observation
+  E6: signed_protected_approval_controller_decision
+minimum_for_merge: E3
+minimum_for_release: E4
+minimum_for_production_verified: E5
+authoritative_levels: [E3, E4, E5, E6]
+authoritative_signature:
+  algorithm: ed25519
+  trust_root_registry_required: true
+  private_keys_in_repository: prohibited
+  private_keys_visible_to_agents: prohibited
+  key_scope_constraints_required: true
+invalidators:
+  - contract_hash_change
+  - head_sha_change
+  - relevant_base_sha_change
+  - policy_bundle_change
+  - toolchain_change
+  - test_configuration_change
+  - model_or_prompt_change_for_ai_review
+  - artifact_digest_change
+  - environment_configuration_change
+  - approval_expiry
+  - risk_increase
+  - protected_path_change
+agents_may_create_authoritative_evidence: false
+unsigned_authoritative_json_is_valid: false

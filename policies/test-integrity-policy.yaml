@@ -1,0 +1,55 @@
+version: 2
+runtime_consumer: ztad.test_weakening
+case_insensitive_paths: true
+enabled_finding_codes:
+  - SKIP_ADDED
+  - FOCUS_ADDED
+  - XFAIL_ADDED
+  - TEST_RETRY_ADDED
+  - ALLOW_NO_TESTS_ADDED
+  - EXCEPTION_SWALLOWED
+  - CI_CONTINUE_ON_ERROR
+  - CI_STEP_DISABLED
+  - SHELL_FAILURE_MASKED
+  - TEST_DISCOVERY_CHANGED
+  - TEST_SCRIPT_MASKED
+  - ASSERTION_REMOVED
+  - COVERAGE_CONTROL_REMOVED
+  - BROAD_SNAPSHOT_UPDATE
+  - TEST_FILE_DELETED
+  - TEST_MOVED_OUT_OF_DISCOVERY
+  - TEST_CASE_COUNT_DECREASED
+severity_by_code:
+  TEST_RETRY_ADDED: ESCALATE
+  BROAD_SNAPSHOT_UPDATE: ESCALATE
+blocked_changes:
+  - test_skip_or_skipif_added
+  - focused_or_todo_test_added
+  - xfail_added
+  - assertion_removed
+  - test_case_count_decreased
+  - test_file_deleted
+  - test_moved_out_of_discovery
+  - required_check_made_nonblocking
+  - ci_step_unconditionally_disabled
+  - coverage_threshold_removed_or_lowered
+  - failure_masked
+  - exception_swallowed
+  - test_discovery_or_exclusion_changed
+  - package_test_script_masked
+escalated_changes:
+  - broad_snapshot_update
+  - test_retry_added
+  - integration_test_replaced_with_mock
+  - expected_result_changed_with_bug_fix
+flaky_policy:
+  one_diagnostic_rerun_only: true
+  fail_then_pass_status: FLAKY
+  required_check_remains_blocked: true
+protected_test_locations:
+  - tests/protected/**
+  - security/tests/**
+  - .delivery/acceptance/**
+semantic_proof:
+  high_risk_requires_protected_black_box_tests: true
+  worker_authored_tests_are_not_sufficient_alone: true

@@ -1,0 +1,27 @@
+version: 2
+operating_mode: CONTINUOUS_AUTONOMOUS_DELIVERY
+continuity:
+  never_idle_while_runnable_work_exists: true
+  preserve_durable_state: true
+  continue_next_ready_task: true
+  quarantine_is_task_local: true
+  retry_quarantined_tasks: true
+  default_quarantine_retry_seconds: 1800
+  lease_seconds: 300
+  lease_recovery_seconds: 5
+recovery_ladder:
+  worker_attempt_1: AUTO_REPAIR
+  worker_attempt_2: AUTO_REPLAN
+  worker_attempt_3: SUPERVISOR_TAKEOVER
+  worker_attempt_4: CLEAN_RECONSTRUCTION
+  worker_later: QUARANTINED
+  supervisor_attempt_1: AUTO_REPLAN
+  supervisor_attempt_2: CLEAN_RECONSTRUCTION
+  supervisor_later: QUARANTINED
+external_blockers:
+  state: WAITING_EXTERNAL_DEPENDENCY
+  global_stop: false
+transient_failures:
+  state: WAITING_RETRY
+  bounded_exponential_backoff: true
+  maximum_seconds: 3600

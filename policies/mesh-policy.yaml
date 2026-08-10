@@ -1,0 +1,42 @@
+version: 1
+mode: MAXIMUM_USEFUL_PARALLELISM
+parallelism:
+  global_cap: 16
+  read_only_cap: 12
+  write_cap: 6
+  same_scope_writers: 1
+  require_independent_units: true
+roles:
+  frontier_only:
+    - supervisor
+    - closure
+    - architecture_advisor
+    - plan_adjudicator
+    - security_reviewer
+    - data_reviewer
+    - release_advisor
+    - supervisor_takeover
+  write_roles: [worker, repairer, supervisor_takeover]
+separation:
+  implementing_session_may_approve_same_sha: false
+  takeover_requires_fresh_closure: true
+  prefer_cross_provider_review: true
+  majority_vote_is_not_evidence: true
+progress:
+  reject_identical_attempt_signature: true
+  require_at_least_one:
+    - fewer_failing_checks
+    - fewer_blocking_findings
+    - reduced_uncertainty
+    - new_evidence
+    - new_strategy
+    - expanded_or_changed_context
+    - different_execution_resource
+recovery:
+  maximum_attempts_before_quarantine: 5
+  continue_other_ready_nodes: true
+  retry_quarantined_after_environment_change: true
+production:
+  platform_actions_require_adapter: true
+  platform_actions_require_evidence_gate: true
+  no_generic_model_has_merge_or_deploy_authority: true

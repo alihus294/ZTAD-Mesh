@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ztad/change-contract.schema.json",
+  "title": "ZTAD Change Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "change_id", "title", "outcome", "requirements", "scope", "quality_attributes", "verification", "release", "governance", "budget"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "change_id": {"type": "string", "pattern": "^[A-Z][A-Z0-9_-]{1,31}-[0-9]{1,10}$"},
+    "title": {"type": "string", "minLength": 3, "maxLength": 160},
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["user_or_system_value"],
+      "properties": {
+        "user_or_system_value": {"type": "string", "minLength": 3},
+        "success_metric": {"type": ["string", "null"]}
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acceptance_criteria", "non_goals", "invariants", "assumptions"],
+      "properties": {
+        "acceptance_criteria": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/idStatement"}},
+        "non_goals": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "invariants": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/idStatement"}},
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "statement", "status"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^ASM-[0-9]{2,4}$"},
+              "statement": {"type": "string", "minLength": 1},
+              "status": {"enum": ["verified", "unverified"]},
+              "evidence_ref": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_components", "prohibited_components", "public_contract_change", "data_migration_expected", "service_criticality", "data_classification"],
+      "properties": {
+        "expected_components": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "prohibited_components": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "public_contract_change": {"type": "boolean"},
+        "data_migration_expected": {"type": "boolean"},
+        "service_criticality": {"enum": ["tier_0", "tier_1", "tier_2", "tier_3"]},
+        "data_classification": {"enum": ["C0", "C1", "C2", "C3"]}
+      }
+    },
+    "quality_attributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security", "privacy", "performance", "availability", "accessibility", "compatibility"],
+      "properties": {
+        "security": {"type": "string"},
+        "privacy": {"type": "string"},
+        "performance": {"type": "string"},
+        "availability": {"type": "string"},
+        "accessibility": {"type": "string"},
+        "compatibility": {"type": "string"}
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["test_oracles", "observability", "negative_cases"],
+      "properties": {
+        "test_oracles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["acceptance_test", "expected_evidence"],
+            "properties": {
+              "acceptance_test": {"type": "string"},
+              "expected_evidence": {"type": "string"}
+            }
+          }
+        },
+        "observability": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["metric"],
+            "properties": {
+              "metric": {"type": "string"},
+              "threshold": {"type": ["string", "number", "null"]}
+            }
+          }
+        },
+        "negative_cases": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature_flag_required", "rollback_strategy", "data_reversal_required"],
+      "properties": {
+        "feature_flag_required": {"type": "boolean"},
+        "rollback_strategy": {"type": "string", "minLength": 3},
+        "data_reversal_required": {"type": "boolean"},
+        "stop_conditions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_owner", "engineering_owner", "requested_risk", "policy_risk", "human_decisions"],
+      "properties": {
+        "product_owner": {"type": "string", "minLength": 1},
+        "engineering_owner": {"type": "string", "minLength": 1},
+        "requested_risk": {"enum": ["R0", "R1", "R2", "R3", "R4"]},
+        "policy_risk": {"type": ["string", "null"], "enum": [null, "R0", "R1", "R2", "R3", "R4"]},
+        "human_decisions": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_implementation_runs", "max_repair_cycles", "max_review_runs"],
+      "properties": {
+        "max_implementation_runs": {"type": "integer", "minimum": 0, "maximum": 3},
+        "max_repair_cycles": {"type": "integer", "minimum": 0, "maximum": 2},
+        "max_review_runs": {"type": "integer", "minimum": 0, "maximum": 3}
+      }
+    }
+  },
+  "$defs": {
+    "idStatement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^(?:AC|INV)-[0-9]{2,4}$"},
+        "statement": {"type": "string", "minLength": 3}
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+version: 2
+case_insensitive_paths: true
+protected_paths:
+- .github/workflows/**
+- .github/CODEOWNERS
+- .delivery/**
+- .agents/**
+- .codex-plugin/**
+- AGENTS.md
+- '**/AGENTS.md'
+- '**/AGENTS.override.md'
+- security/**
+- deploy/**
+- infra/**
+- scripts/release/**
+- scripts/deploy/**
+- pytest.ini
+- jest.config.*
+- vitest.config.*
+- playwright.config.*
+- coverage.*
+- '**/pytest.ini'
+- '**/jest.config.*'
+- '**/vitest.config.*'
+- '**/playwright.config.*'
+- '**/coverage.*'
+- CODEOWNERS
+prohibited_patch_paths:
+- .git/**
+- .gitconfig
+- .gitmodules
+- '**/.git/**'
+- '**/hooks/**'
+block_symlinks: true
+block_submodules: true
+block_binary_patches_by_default: true
+block_mixed_application_and_control_plane: true

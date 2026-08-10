@@ -1,0 +1,13 @@
+{
+  "name": "mixed-control-application",
+  "expected_minimum_risk": "R4",
+  "paths": [
+    ".github/workflows/ci.yml",
+    "src/app.py"
+  ],
+  "payload": "+mixed",
+  "contract_requested_risk": "R4",
+  "expected_control_block": true,
+  "expected_test_integrity_block": false,
+  "expected_injection_signal": false
+}

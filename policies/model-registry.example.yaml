@@ -1,0 +1,38 @@
+version: 1
+silent_fallback: prohibited
+allow_latest_alias: false
+models:
+  implementation-primary:
+    provider: configure-approved-provider
+    exact_model_id: configure-exact-version
+    role: implementer
+    allowed_risks:
+    - R0
+    - R1
+    - R2
+    - R3
+    prompt_version: implementation-v1
+    eval_suite_version: v1
+    status: NOT_CONFIGURED
+  review-independent:
+    provider: configure-independent-provider-or-model-family
+    exact_model_id: configure-exact-version
+    role: independent_reviewer
+    allowed_risks:
+    - R1
+    - R2
+    - R3
+    - R4
+    prompt_version: review-v1
+    eval_suite_version: v1
+    status: NOT_CONFIGURED
+  architecture-advisor:
+    provider: configure-approved-provider
+    exact_model_id: configure-exact-version
+    role: architecture_advisor
+    allowed_risks:
+    - R3
+    - R4
+    prompt_version: architecture-v1
+    eval_suite_version: v1
+    status: NOT_CONFIGURED

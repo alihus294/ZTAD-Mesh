@@ -1,0 +1,80 @@
+version: 2
+case_insensitive_paths: true
+unknown_value_policy: highest_plausible
+agent_can_escalate: true
+agent_can_downgrade: false
+control_plane_prefixes:
+- .github/
+- .delivery/
+- .agents/
+- .codex-plugin/
+- AGENTS.md
+dependency_manifest_names:
+- package.json
+- package-lock.json
+- pnpm-lock.yaml
+- yarn.lock
+- bun.lock
+- bun.lockb
+- pyproject.toml
+- requirements.txt
+- requirements.lock
+- poetry.lock
+- uv.lock
+- pom.xml
+- build.gradle
+- build.gradle.kts
+- go.mod
+- go.sum
+- Cargo.toml
+- Cargo.lock
+hard_minimums:
+  R3:
+    paths:
+    - auth/**
+    - authentication/**
+    - authorization/**
+    - permissions/**
+    - supabase/migrations/**
+    - supabase/policies/**
+    - rls/**
+    - billing/**
+    - pricing/**
+    - tax/**
+    - zatca/**
+    - payments/**
+    - secrets/**
+    - infra/**
+    - deploy/**
+    - migrations/**
+    - .github/workflows/**
+    - .github/CODEOWNERS
+    - .delivery/**
+    - .agents/**
+    - .codex-plugin/**
+    - AGENTS.md
+    - '**/AGENTS.md'
+    - pytest.ini
+    - '**/pytest.ini'
+    - jest.config.*
+    - '**/jest.config.*'
+    - vitest.config.*
+    - '**/vitest.config.*'
+    - playwright.config.*
+    - '**/playwright.config.*'
+    - security/**
+    - backup/**
+    - restore/**
+  R4:
+    paths:
+    - production-data-fixes/**
+    - break-glass/**
+operation_patterns:
+  drop_table: \bDROP\s+TABLE\b
+  drop_column: \bDROP\s+COLUMN\b
+  truncate: \bTRUNCATE\b
+  unbounded_delete: \bDELETE\s+FROM\s+[\w.]+\s*;
+  unbounded_update: \bUPDATE\s+[\w.]+\s+SET\b(?![\s\S]*?\bWHERE\b)
+  disable_rls: \bDISABLE\s+ROW\s+LEVEL\s+SECURITY\b
+  broad_grant: \bGRANT\s+ALL\b
+  destructive_cascade: \bCASCADE\b

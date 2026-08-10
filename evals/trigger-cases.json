@@ -1,0 +1,101 @@
+{
+  "positive": [
+    {
+      "id": "P01",
+      "expected_skill": "zero-trust-delivery",
+      "prompt": "Use $zero-trust-delivery. Use the zero-trust delivery workflow to implement and verify this repository change."
+    },
+    {
+      "id": "P02",
+      "expected_skill": "delivery-bootstrap",
+      "prompt": "Use $delivery-bootstrap. Audit this repository and dry-run installation of the governed delivery controls."
+    },
+    {
+      "id": "P03",
+      "expected_skill": "change-intake-risk",
+      "prompt": "Use $change-intake-risk. Validate this Change Contract and classify the actual diff risk without downgrading."
+    },
+    {
+      "id": "P04",
+      "expected_skill": "implementation-strategy",
+      "prompt": "Use $implementation-strategy. Create a bounded implementation strategy for this validated contract; do not edit code."
+    },
+    {
+      "id": "P05",
+      "expected_skill": "code-change-verification",
+      "prompt": "Use $code-change-verification. Run deterministic verification for this exact base and head SHA and produce evidence."
+    },
+    {
+      "id": "P06",
+      "expected_skill": "independent-review",
+      "prompt": "Use $independent-review. Independently review this exact SHA and return only evidence-backed findings."
+    },
+    {
+      "id": "P07",
+      "expected_skill": "finding-verification-repair",
+      "prompt": "Use $finding-verification-repair. Falsify these review findings and repair only confirmed defects within the cycle budget."
+    },
+    {
+      "id": "P08",
+      "expected_skill": "release-readiness",
+      "prompt": "Use $release-readiness. Assess merge and release readiness from these exact evidence records without deploying."
+    },
+    {
+      "id": "P09",
+      "expected_skill": "delivery-retrospective",
+      "prompt": "Use $delivery-retrospective. Run a delivery retrospective from evidence and token metrics and propose one experiment."
+    },
+    {
+      "id": "P10",
+      "expected_skill": "autonomous-continuity",
+      "prompt": "Use $autonomous-continuity. Resume the durable scheduler, recover expired leases, and continue all runnable tasks without converting blockers into success."
+    },
+    {
+      "id": "P11",
+      "expected_skill": "supervisor-governance",
+      "prompt": "Use $supervisor-governance. Review this exact candidate SHA as an independent frontier supervisor and issue only a structured evidence-bound proposal."
+    },
+    {
+      "id": "P12",
+      "expected_skill": "recovery-and-takeover",
+      "prompt": "Use $recovery-and-takeover. Apply the bounded recovery ladder after repeated worker failure and require fresh closure review after takeover."
+    },
+    {
+      "id": "P13",
+      "expected_skill": "multi-model-mesh",
+      "prompt": "Use $multi-model-mesh. Benchmark qualified providers, build a bounded parallel DAG, isolate writers, and run the evidence-gated multi-model mesh."
+    }
+  ],
+  "negative": [
+    {
+      "id": "N01",
+      "expected_skill": null,
+      "prompt": "Explain what trunk-based development means."
+    },
+    {
+      "id": "N02",
+      "expected_skill": null,
+      "prompt": "Rewrite this function comment for clarity."
+    },
+    {
+      "id": "N03",
+      "expected_skill": null,
+      "prompt": "What is the difference between a PR and a commit?"
+    },
+    {
+      "id": "N04",
+      "expected_skill": null,
+      "prompt": "Summarize the attached code; make no changes."
+    },
+    {
+      "id": "N05",
+      "expected_skill": null,
+      "prompt": "Give me a generic Python unit-test example."
+    },
+    {
+      "id": "N06",
+      "expected_skill": null,
+      "prompt": "Translate this README paragraph to Arabic."
+    }
+  ]
+}

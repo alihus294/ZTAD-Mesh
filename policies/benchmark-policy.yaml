@@ -1,0 +1,26 @@
+version: 1
+purpose: routing_calibration_only
+execution:
+  auto_benchmark_unmeasured_task_families: true
+  cache_key_fields:
+    - catalog_hash
+    - benchmark_suite_hash
+    - provider_executable_fingerprint
+  stale_results_must_not_route: true
+  benchmark_timeout_seconds: 600
+  maximum_cases_per_family: 5
+  minimum_trials_for_promotion: 2
+  shadow_before_default: true
+scoring:
+  schema_compliance_required: true
+  subject_binding_required_for_agent_envelope: true
+  quality_floor_from_risk_policy: true
+  availability_failure_score: 0.0
+  malformed_output_score: 0.0
+evidence:
+  benchmark_is_delivery_evidence: false
+  benchmark_may_authorize_merge: false
+  benchmark_may_authorize_release: false
+claim_boundary: >-
+  Benchmarks select an execution resource. They do not prove correctness of a
+  repository change and never satisfy CI, merge, release, or production gates.

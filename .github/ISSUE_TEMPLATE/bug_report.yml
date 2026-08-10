@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible ZTAD defect without including credentials or production data.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, secrets, private source, or production data.
+  - type: input
+    id: version
+    attributes:
+      label: ZTAD version
+      placeholder: 4.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction and evidence
+      description: Include exact commands, exit codes, and sanitized output.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed secrets, credentials, private source, and production data.
+          required: true
+        - label: I reproduced this against an exact commit or release version.
+          required: true

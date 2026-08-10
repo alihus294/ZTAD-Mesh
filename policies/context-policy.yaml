@@ -1,0 +1,43 @@
+version: 1
+full_repository_dump: prohibited
+secret_paths_always_excluded: true
+hash_cache: true
+max_files_by_risk:
+  R0: 5
+  R1: 10
+  R2: 20
+  R3: 60
+  R4: 120
+required_context:
+  R0:
+  - diff
+  - changed_files
+  - relevant_tests
+  R1:
+  - diff
+  - changed_files
+  - interfaces
+  - relevant_tests
+  R2:
+  - R1
+  - callers
+  - contracts
+  - invariants
+  - dependency_graph
+  R3:
+  - R2
+  - affected_subsystem
+  - security_data_controls
+  - rollback
+  R4:
+  - R3
+  - custom_controller_approved_context
+truncation_policy: split_or_escalate
+
+dependency_result_context:
+  maximum_items: 32
+  maximum_serialized_bytes: 262144
+  per_string_char_limit: 2000
+  maximum_depth: 5
+  on_truncation: request_targeted_context_expansion
+  authoritative_evidence: false

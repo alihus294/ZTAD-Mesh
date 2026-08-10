@@ -1,0 +1,38 @@
+# Changelog
+
+## 4.2.0 — 2026-08-10
+
+- Rebuilt the real source as a bounded multi-model delivery mesh; prior unreleased 4.0/4.1 claims are not treated as distributed releases.
+- Added deterministic repository indexing before model execution and bounded context-sufficiency analysis.
+- Added adaptive task/risk/failure-aware routing with catalog priors, host probes, task-family benchmark hashes, measured reliability, and qualified provider fallback.
+- Added maximum useful parallelism with dependency-aware DAGs, scope locks, dedicated Git worktrees, and serialized overlapping writes.
+- Added bounded hash-addressed result-artifact transfer between scouts, planners, implementers, checks, and reviewers.
+- Added provider artifact isolation outside worktrees, stale/replayed output rejection, and temporary benchmark-artifact cleanup.
+- Added deterministic patch integration, one candidate commit, machine-check gating, and actual-diff risk reclassification before review.
+- Bound approvals to stored model runs, independent sessions, exact candidate SHA/diff, contract, and registered evidence.
+- Added no-progress fingerprints, clean reconstruction, task-local quarantine, delayed retry, and explicit non-replayable reactivation.
+- Added `multi-model-mesh` as the thirteenth explicit-only skill.
+- Added structural tests that reject duplicate module functions, class methods, and literal dictionary keys.
+- Isolated every selected mutation in a temporary repository copy so interruption cannot leave production source mutated; added a source-preservation regression test.
+- Corrected GitHub PR handling, hook stop behavior, benchmark freshness, provider fallback, catalog validation, and truthful host-capability reporting.
+- Rewrote the operating, architecture, security, capability, validation, and limitation documentation to match implemented behavior.
+- Added a clean public-source profile with pinned GitHub Actions CI, cross-platform test jobs, Dependabot configuration, CODEOWNERS, and generated-artifact exclusions.
+- Added `SOURCE_DATE_EPOCH`-aware release metadata and CI byte-comparison of complete distribution trees built from the same commit.
+- Removed the legacy installer version fallback; installation now fails closed when VERSION is missing, symlinked, or malformed.
+- Pinned the public-source CI test environment, moved generated CI evidence outside the source tree, and pinned GitHub Actions to reviewed full commit SHAs.
+- Added deterministic complete-release metadata through `SOURCE_DATE_EPOCH` and regression coverage for full release-tree reproducibility.
+- Increased the verified local test inventory to 227 after adding release-reproducibility regression tests.
+- Pinned the governed-signing runtime to cryptography 49.0.0 and added native Linux/Windows CI verification for the exact dependency lock.
+- Added repository issue forms, editor configuration, expanded CODEOWNERS, stronger pull-request evidence fields, and deterministic archive validation in CI.
+
+## 2.0.0 — 2026-08-09
+
+- Introduced durable continuity, evidence-gated approval, hooks, single-host SQLite coordination, and fail-contained recovery.
+
+## 1.0.1 — 2026-07-31
+
+- Hardened structured inputs, packaging, extraction, checksums, and reproducibility.
+
+## 1.0.0 — 2026-07-31
+
+- Initial security-first skill suite and deterministic toolkit.

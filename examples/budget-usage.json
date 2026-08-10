@@ -1,0 +1,10 @@
+{
+  "implementation_runs": 1,
+  "independent_reviews": 1,
+  "repair_cycles": 0,
+  "closure_reviews": 0,
+  "escalation_runs": 0,
+  "input_tokens": 30000,
+  "output_tokens": 3000,
+  "cost": 4.5
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ztad/capability-report.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "repository", "git", "languages", "package_managers", "test_frameworks", "ci", "deployment_markers", "local_tools", "platform_enforcement", "maximum_permitted_mode", "limitations"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "repository": {"type": "string"},
+    "git": {"type": "object"},
+    "languages": {"type": "array", "items": {"type": "string"}},
+    "package_managers": {"type": "array", "items": {"type": "string"}},
+    "test_frameworks": {"type": "array", "items": {"type": "string"}},
+    "ci": {"type": "array", "items": {"type": "string"}},
+    "deployment_markers": {"type": "array", "items": {"type": "string"}},
+    "local_tools": {"type": "object"},
+    "platform_enforcement": {"type": "object"},
+    "maximum_permitted_mode": {"enum": ["AUDIT_ONLY", "LOCAL_VERIFICATION_ONLY", "LOCAL_AND_CONFIG_VERIFICATION", "CONTROLLED_RELEASE"]},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  }
+}

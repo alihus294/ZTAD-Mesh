@@ -1,0 +1,17 @@
+version: 1
+expiry_required: true
+subject_binding_required: true
+compensating_controls_required: true
+protected_approval_controller_required: true
+non_waivable:
+- secret_exposure
+- agent_production_credentials
+- agent_merge_authority
+- SHA_and_digest_binding
+- control_plane_protection
+- destructive_uncertainty_containment
+break_glass:
+  separate_identity: true
+  time_limited: true
+  audit_log: true
+  post_event_review: true

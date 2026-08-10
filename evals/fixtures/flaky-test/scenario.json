@@ -1,0 +1,12 @@
+{
+  "name": "flaky-test",
+  "expected_minimum_risk": "R2",
+  "paths": [
+    "tests/test_feature.py"
+  ],
+  "payload": "+retries = 3",
+  "contract_requested_risk": "R2",
+  "expected_control_block": false,
+  "expected_test_integrity_block": false,
+  "expected_injection_signal": false
+}

@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "flags": [],
+  "required_fields": ["owner", "created_at", "expires_at", "cleanup_change_id"]
+}

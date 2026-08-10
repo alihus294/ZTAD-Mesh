@@ -1,0 +1,6 @@
+interface:
+  display_name: "Recovery and Takeover"
+  short_description: "Repair, re-plan, take over, rollback, and continue"
+  default_prompt: "Use $recovery-and-takeover to contain the failure and continue the durable delivery scheduler."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,42 @@
+{
+  "claim_boundary": "Local validation used the recorded packages. Governed authority requires exact-lock CI and target-host acceptance.",
+  "exact_lock_file": "toolkit/requirements-dev.lock.txt",
+  "exact_lock_install_attempt": {
+    "reason": "The package index available to the build environment returned no candidates for PyYAML==6.0.3; no shared environment was modified.",
+    "succeeded": false
+  },
+  "packages": {
+    "PyYAML": {
+      "import": "ok",
+      "version": "6.0.3"
+    },
+    "coverage": {
+      "import": "ok",
+      "version": "7.13.3"
+    },
+    "cryptography": {
+      "import": "ok",
+      "version": "46.0.4"
+    },
+    "hypothesis": {
+      "import": "PackageNotFoundError: No package metadata was found for hypothesis",
+      "version": null
+    },
+    "jsonschema": {
+      "import": "ok",
+      "version": "4.26.0"
+    },
+    "pytest": {
+      "import": "ok",
+      "version": "9.0.2"
+    },
+    "pytest-cov": {
+      "import": "ok",
+      "version": "7.0.0"
+    }
+  },
+  "platform": "Linux-6.18.35-x86_64-with-glibc2.41",
+  "python_executable": "/opt/pyvenv/bin/python",
+  "python_version": "3.13.5",
+  "schema_version": 1
+}

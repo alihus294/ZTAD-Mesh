@@ -1,0 +1,50 @@
+version: 1
+denied_command_ids:
+- git-push
+- git-config
+- git-remote
+- docker-login
+- npm-publish
+- gh-auth
+- kubectl
+- helm
+- terraform
+- psql
+- mysql
+- sqlcmd
+allowed_argv:
+- git status*
+- git diff*
+- git show*
+- git log*
+- git rev-parse*
+- git merge-base*
+- python -m pytest*
+- python3 -m pytest*
+- pytest*
+- python -m compileall*
+- python3 -m compileall*
+- python -m unittest*
+- python3 -m unittest*
+- npm test*
+- npm run lint*
+- npm run typecheck*
+- npm run build*
+- pnpm test*
+- pnpm lint*
+- pnpm typecheck*
+- pnpm build*
+- yarn test*
+- yarn lint*
+- yarn typecheck*
+- yarn build*
+- go test*
+- cargo test*
+- cargo clippy*
+- mvn test*
+- ./gradlew test*
+- dotnet test*
+notes:
+- Commands are argv arrays with shell disabled.
+- Repository-specific trusted commands should narrow this list.
+- No command may access production or publish artifacts.

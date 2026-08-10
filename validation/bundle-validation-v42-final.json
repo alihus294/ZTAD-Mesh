@@ -1,0 +1,27 @@
+{
+  "errors": [],
+  "file_count": 264,
+  "negative_trigger_cases": 6,
+  "policy_count": 26,
+  "positive_trigger_cases": 13,
+  "schema_count": 17,
+  "skill_count": 13,
+  "skills": [
+    "autonomous-continuity",
+    "change-intake-risk",
+    "code-change-verification",
+    "delivery-bootstrap",
+    "delivery-retrospective",
+    "finding-verification-repair",
+    "implementation-strategy",
+    "independent-review",
+    "multi-model-mesh",
+    "recovery-and-takeover",
+    "release-readiness",
+    "supervisor-governance",
+    "zero-trust-delivery"
+  ],
+  "traceability_requirements": 96,
+  "valid": true,
+  "warnings": []
+}

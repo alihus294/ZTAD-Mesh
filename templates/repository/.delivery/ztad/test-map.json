@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "protected_suites": [],
+  "component_to_checks": {},
+  "hidden_black_box_suite": "CONFIGURED_NOT_VERIFIED"
+}

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "keys": {},
+  "status": "NOT_CONFIGURED",
+  "notes": [
+    "Add public Ed25519 keys only through a dedicated human-approved control-plane change.",
+    "Keep private keys outside the repository in protected CI or runtime secret storage."
+  ]
+}
