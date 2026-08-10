@@ -1,0 +1,125 @@
+name: Final ZTAD Mesh 4.2.0 publication audit v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/final-publication-audit-v2.yml
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  EXPECTED_TREE: 1f168ae648eccb935ccd54c6f0d6f644d24dd095
+
+jobs:
+  identify:
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - id: source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SOURCE_SHA='${{ github.event.before }}'
+          test -n "$SOURCE_SHA"
+          test "$SOURCE_SHA" != '0000000000000000000000000000000000000000'
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: identify
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.identify.outputs.source_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify exact source tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          test "$(cat VERSION)" = "4.2.0"
+          test ! -e .bootstrap
+          test -f .github/workflows/ci.yml
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            toolkit/requirements.lock.txt
+            toolkit/requirements-dev.lock.txt
+      - run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+      - run: python -m pip check
+      - run: python -m compileall -q toolkit scripts evals tests
+      - name: Unit and integration tests
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest -q
+      - run: python -B evals/run_evals.py --output "${{ runner.temp }}/eval-summary.json"
+      - run: python -B scripts/ztad.py --output "${{ runner.temp }}/bundle-validation.json" validate-bundle --root .
+      - run: python -B scripts/ztad.py --output "${{ runner.temp }}/policy-wiring.json" policy-wiring --root .
+
+  distribution:
+    needs: identify
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.identify.outputs.source_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - shell: bash
+        run: test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: toolkit/requirements-dev.lock.txt
+      - run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+      - shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+      - run: python -B scripts/ztad.py --output "${{ runner.temp }}/dist-a.json" build-distribution --root . --output-dir "${{ runner.temp }}/dist-a"
+      - run: python -B scripts/ztad.py --output "${{ runner.temp }}/dist-b.json" build-distribution --root . --output-dir "${{ runner.temp }}/dist-b"
+      - shell: bash
+        run: diff -qr "${{ runner.temp }}/dist-a" "${{ runner.temp }}/dist-b"
+      - run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.2.0.zip" --kind plugin
+      - run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.2.0.zip" --kind marketplace
+
+  finalize:
+    needs: [identify, validate, distribution]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Restore exact source tree through Git data API
+        id: publish
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PARENT='${{ github.sha }}'
+          RESPONSE="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/commits" \
+            --raw-field 'message=chore: finalize exact ZTAD Mesh 4.2.0 source tree' \
+            --raw-field "tree=${EXPECTED_TREE}" \
+            --raw-field "parents[]=${PARENT}")"
+          SHA="$(python -c 'import json,sys; print(json.load(sys.stdin)["sha"])' <<<"$RESPONSE")"
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/main" --raw-field "sha=${SHA}" -F force=false >/dev/null
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${SHA}" --jq .tree.sha)" = "$EXPECTED_TREE"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Record final success
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/2/comments" \
+            -f body="ZTAD_FINAL_PUBLICATION_PASS_V2 source=${{ needs.identify.outputs.source_sha }} final=${{ steps.publish.outputs.sha }} tree=${EXPECTED_TREE} matrix=ubuntu+windows/python3.11+3.13 distribution=reproducible"
