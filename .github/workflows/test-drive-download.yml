@@ -1,4 +1,4 @@
-name: Test Drive source download
+name: Inspect existing Git blob transport
 
 on:
   push:
@@ -11,19 +11,29 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  inspect:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Download and inspect
+      - name: Measure candidate blob
         shell: bash
         run: |
           set -Eeuo pipefail
-          URL='https://drive.usercontent.google.com/download?id=1iKEllZXVN8Zv5F1oYUOR-8T-GZmWsxdd&export=download&confirm=t'
-          curl -fL --retry 2 --connect-timeout 20 --max-time 60 "$URL" -o "$RUNNER_TEMP/source.bin"
-          SIZE="$(wc -c < "$RUNNER_TEMP/source.bin")"
-          HASH="$(sha256sum "$RUNNER_TEMP/source.bin" | awk '{print $1}')"
-          TYPE="$(file -b "$RUNNER_TEMP/source.bin")"
-          echo "::warning title=Drive download probe::size=$SIZE sha256=$HASH type=$TYPE"
-          test "$SIZE" = '236932'
-          test "$HASH" = '23bb0357a0900a0c4dfa1110da1d5d08c0f8aa5cae95622e55b06a124a3a272c'
+          gh api "repos/${GITHUB_REPOSITORY}/git/blobs/40dfef0bf69b24ae6543594cd9a02cff686190f4" --jq .content \
+            | tr -d '\r\n' > "$RUNNER_TEMP/blob-content.txt"
+          LENGTH="$(wc -c < "$RUNNER_TEMP/blob-content.txt")"
+          HASH="$(sha256sum "$RUNNER_TEMP/blob-content.txt" | awk '{print $1}')"
+          echo "::warning title=Existing Git blob transport::length=$LENGTH sha256=$HASH"
+          python - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, os
+          encoded = (Path(os.environ['RUNNER_TEMP']) / 'blob-content.txt').read_text()
+          try:
+              raw = base64.b64decode(encoded, validate=True)
+          except Exception as exc:
+              print(f'::warning title=Existing blob decode::invalid base64: {exc}')
+          else:
+              print(f'::warning title=Existing blob decode::bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}')
+          PY
