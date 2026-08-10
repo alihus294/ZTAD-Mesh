@@ -1,0 +1,49 @@
+name: Diagnose ZTAD source transport v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-transport-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Fetch comments
+        shell: bash
+        run: gh api "repos/${GITHUB_REPOSITORY}/issues/2/comments?per_page=100" > "$RUNNER_TEMP/comments.json"
+
+      - name: Emit validated transport inventory
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+
+          comments = json.loads((Path(os.environ["RUNNER_TEMP"]) / "comments.json").read_text())
+          found = 0
+          for item in comments:
+              if (item.get("user") or {}).get("login") != "alihus294":
+                  continue
+              body = item.get("body")
+              if not isinstance(body, str):
+                  continue
+              header, separator, raw = body.partition("\n")
+              if not separator or not header.startswith("ZTAD_SOURCE_"):
+                  continue
+              payload = "".join(raw.split())
+              digest = hashlib.sha256(payload.encode("ascii")).hexdigest()
+              safe_header = header.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::warning title=ZTAD transport item::{safe_header} | actual_length={len(payload)} | actual_sha256={digest}")
+              found += 1
+          print(f"::notice title=ZTAD transport count::{found} owner-authored transport comments inspected")
+          PY
