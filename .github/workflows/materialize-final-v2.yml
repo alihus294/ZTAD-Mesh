@@ -1,4 +1,4 @@
-name: Materialize verified ZTAD Mesh 4.2.0 source (final v2)
+name: Materialize verified ZTAD Mesh 4.2.0 source (final v3)
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   issues: read
 
 concurrency:
-  group: ztad-materialize-final-v2-4-2-0
+  group: ztad-materialize-final-v3-4-2-0
   cancel-in-progress: false
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/2/comments?per_page=100" > "$RUNNER_TEMP/comments.json"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/2/comments?per_page=100" > "$RUNNER_TEMP/comments.json"
 
       - name: Verify and safely extract source
         shell: bash
@@ -48,9 +48,16 @@ jobs:
           set -Eeuo pipefail
           python - <<'PY'
           from pathlib import Path, PurePosixPath
-          import base64, hashlib, io, json, os, re, tarfile, unicodedata
+          import base64
+          import hashlib
+          import io
+          import json
+          import os
+          import re
+          import tarfile
+          import unicodedata
 
-          segment_specs = {
+          part0_segment_specs = {
               0: (8000, "9748296b3cdfd30afbc88e534a68c1c496fb70e376c783fe1ddb4e713b1a49f3"),
               1: (8000, "2c179cc0a8ef56c8e9785b73294d92127ebd5c6321564b7b1241295047c98735"),
               2: (8000, "5f4dab8c35cd74ec6721098fa62d8bbf3bbb8d7dd33a8fe02256f5d014d9868d"),
@@ -59,25 +66,51 @@ jobs:
               5: (8000, "935a7012b0faa4d9a9ea98a2222365e96833b8906c1f913d4b13ff618e0027df"),
               6: (4000, "a0b262dbe64ceaca26fd17f10a34a884a8fd586bc15c1837d319bb446359e8fd"),
           }
-          part_specs = {
+          direct_part_specs = {
               1: (52000, "cb05798729cf6f0dbbcdcd5e8d4de5ee9c36ece394b99adcea3075c4366300ea"),
               2: (52000, "e84b7f91815dc58c54637af3c926081af77d86e200ccc510899aa58d73828fe9"),
               3: (52000, "e2b07c2d55a4151714b10335a4c4fd96308c9a1f0590fc686c8ea65b406e162d"),
               4: (52000, "6ad4f2c680e10ca75185a05376d805a5994ae6936882f8400af6d6810ccc09b8"),
-              5: (52000, "b5fc690297177937a3aa81931390fbdfebbe39e9fabea3e3f8facbf68e801626"),
               6: (3912, "ece567743ac650259d983c72c44666a1eccd8e8461ccf283a251801a59fa199a"),
           }
+          part5_segment_specs = {
+              0: (16000, "3a237c823fe35b48d6668b875385bf172b0374a6772ed6f10b799b02a48de125"),
+              1: (16000, "469b22f6c511e58c1a277abe809db32e8c7e9ad363b85a1e59e3ebdaee6e2401"),
+              2: (16000, "1bd1fdbe8282cd14bc630ea4ea71a63959a79953c08588d7b370975a68bf5fe8"),
+              3: (4000, "229e06e8b0eafeb1ed3b693c05ba98e5873181eeb2c8c3fd947a0ba05414ba6d"),
+          }
           expected_part0_hash = "dbe4040858965328ded64b964477a3fe7f721f8370f35ca1e3951a684fbe9570"
-          segment_re = re.compile(r"ZTAD_SOURCE_PART0_SEGMENT ([0-6]) ([0-9]+) ([0-9a-f]{64})")
-          part_re = re.compile(r"ZTAD_SOURCE_PART ([1-6]) ([0-9]+) ([0-9a-f]{64})")
+          expected_part5_hash = "b5fc690297177937a3aa81931390fbdfebbe39e9fabea3e3f8facbf68e801626"
 
-          comments = json.loads((Path(os.environ["RUNNER_TEMP"]) / "comments.json").read_text(encoding="utf-8"))
+          part0_re = re.compile(r"ZTAD_SOURCE_PART0_SEGMENT ([0-6]) ([0-9]+) ([0-9a-f]{64})")
+          direct_re = re.compile(r"ZTAD_SOURCE_PART ([1-6]) ([0-9]+) ([0-9a-f]{64})")
+          part5_re = re.compile(r"ZTAD_SOURCE_PART5_SEGMENT ([0-3]) ([0-9]+) ([0-9a-f]{64})")
+
+          comments = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "comments.json").read_text(encoding="utf-8")
+          )
           if not isinstance(comments, list):
-              raise SystemExit("unexpected comments response")
+              raise SystemExit("unexpected GitHub comments response")
 
-          segments, parts = {}, {}
+          part0_segments = {}
+          direct_parts = {}
+          part5_segments = {}
+          direct_part5 = None
+
+          def validate_payload(payload, declared_length, declared_hash, expected):
+              expected_length, expected_hash = expected
+              actual_hash = hashlib.sha256(payload.encode("ascii")).hexdigest()
+              return (
+                  declared_length == expected_length
+                  and declared_hash == expected_hash
+                  and len(payload) == expected_length
+                  and actual_hash == expected_hash
+              )
+
           for item in comments:
-              if not isinstance(item, dict) or (item.get("user") or {}).get("login") != "alihus294":
+              if not isinstance(item, dict):
+                  continue
+              if (item.get("user") or {}).get("login") != "alihus294":
                   continue
               body = item.get("body")
               if not isinstance(body, str):
@@ -89,100 +122,163 @@ jobs:
               if not payload:
                   continue
 
-              match = segment_re.fullmatch(header.strip())
+              match = part0_re.fullmatch(header.strip())
               if match:
                   index = int(match.group(1))
-                  declared_length = int(match.group(2))
-                  declared_hash = match.group(3)
-                  expected_length, expected_hash = segment_specs[index]
-                  actual_hash = hashlib.sha256(payload.encode("ascii")).hexdigest()
-                  if (declared_length, declared_hash, len(payload), actual_hash) == (
-                      expected_length, expected_hash, expected_length, expected_hash
+                  if validate_payload(
+                      payload,
+                      int(match.group(2)),
+                      match.group(3),
+                      part0_segment_specs[index],
                   ):
-                      if index in segments and segments[index] != payload:
-                          raise SystemExit(f"conflicting valid segment {index}")
-                      segments[index] = payload
+                      if index in part0_segments and part0_segments[index] != payload:
+                          raise SystemExit(f"conflicting valid part-0 segment {index}")
+                      part0_segments[index] = payload
                   continue
 
-              match = part_re.fullmatch(header.strip())
+              match = part5_re.fullmatch(header.strip())
               if match:
                   index = int(match.group(1))
-                  declared_length = int(match.group(2))
-                  declared_hash = match.group(3)
-                  expected_length, expected_hash = part_specs[index]
-                  actual_hash = hashlib.sha256(payload.encode("ascii")).hexdigest()
-                  if (declared_length, declared_hash, len(payload), actual_hash) == (
-                      expected_length, expected_hash, expected_length, expected_hash
+                  if validate_payload(
+                      payload,
+                      int(match.group(2)),
+                      match.group(3),
+                      part5_segment_specs[index],
                   ):
-                      if index in parts and parts[index] != payload:
-                          raise SystemExit(f"conflicting valid part {index}")
-                      parts[index] = payload
+                      if index in part5_segments and part5_segments[index] != payload:
+                          raise SystemExit(f"conflicting valid part-5 segment {index}")
+                      part5_segments[index] = payload
+                  continue
 
-          missing_segments = sorted(set(segment_specs) - set(segments))
-          missing_parts = sorted(set(part_specs) - set(parts))
-          if missing_segments:
-              raise SystemExit(f"missing valid segments: {missing_segments}")
-          if missing_parts:
-              raise SystemExit(f"missing valid parts: {missing_parts}")
+              match = direct_re.fullmatch(header.strip())
+              if not match:
+                  continue
+              index = int(match.group(1))
+              declared_length = int(match.group(2))
+              declared_hash = match.group(3)
+              if index == 5:
+                  expected = (52000, expected_part5_hash)
+                  if validate_payload(payload, declared_length, declared_hash, expected):
+                      if direct_part5 is not None and direct_part5 != payload:
+                          raise SystemExit("conflicting valid direct part 5")
+                      direct_part5 = payload
+              elif index in direct_part_specs and validate_payload(
+                  payload,
+                  declared_length,
+                  declared_hash,
+                  direct_part_specs[index],
+              ):
+                  if index in direct_parts and direct_parts[index] != payload:
+                      raise SystemExit(f"conflicting valid direct part {index}")
+                  direct_parts[index] = payload
 
-          part0 = "".join(segments[index] for index in range(7))
-          if len(part0) != 52000 or hashlib.sha256(part0.encode("ascii")).hexdigest() != expected_part0_hash:
-              raise SystemExit("part 0 integrity failure")
+          missing_part0 = sorted(set(part0_segment_specs) - set(part0_segments))
+          missing_direct = sorted(set(direct_part_specs) - set(direct_parts))
+          if missing_part0:
+              raise SystemExit(f"missing valid part-0 segments: {missing_part0}")
+          if missing_direct:
+              raise SystemExit(f"missing valid direct source parts: {missing_direct}")
 
-          encoded = part0 + "".join(parts[index] for index in range(1, 7))
+          part0 = "".join(part0_segments[index] for index in range(7))
+          if len(part0) != 52000:
+              raise SystemExit(f"part 0 length mismatch: {len(part0)}")
+          if hashlib.sha256(part0.encode("ascii")).hexdigest() != expected_part0_hash:
+              raise SystemExit("part 0 SHA-256 mismatch")
+
+          if direct_part5 is None:
+              missing_part5 = sorted(set(part5_segment_specs) - set(part5_segments))
+              if missing_part5:
+                  raise SystemExit(f"missing valid part-5 segments: {missing_part5}")
+              part5 = "".join(part5_segments[index] for index in range(4))
+          else:
+              part5 = direct_part5
+          if len(part5) != 52000:
+              raise SystemExit(f"part 5 length mismatch: {len(part5)}")
+          if hashlib.sha256(part5.encode("ascii")).hexdigest() != expected_part5_hash:
+              raise SystemExit("part 5 SHA-256 mismatch")
+
+          encoded = (
+              part0
+              + direct_parts[1]
+              + direct_parts[2]
+              + direct_parts[3]
+              + direct_parts[4]
+              + part5
+              + direct_parts[6]
+          )
           if len(encoded) != int(os.environ["EXPECTED_B64_LENGTH"]):
               raise SystemExit(f"Base64 length mismatch: {len(encoded)}")
-          if hashlib.sha256(encoded.encode("ascii")).hexdigest() != os.environ["EXPECTED_B64_SHA256"]:
-              raise SystemExit("Base64 SHA-256 mismatch")
+          encoded_hash = hashlib.sha256(encoded.encode("ascii")).hexdigest()
+          if encoded_hash != os.environ["EXPECTED_B64_SHA256"]:
+              raise SystemExit(f"Base64 SHA-256 mismatch: {encoded_hash}")
 
-          archive = base64.b64decode(encoded, validate=True)
+          try:
+              archive = base64.b64decode(encoded, validate=True)
+          except Exception as exc:
+              raise SystemExit(f"invalid Base64 source transport: {exc}") from exc
           if len(archive) != int(os.environ["EXPECTED_ARCHIVE_BYTES"]):
               raise SystemExit(f"archive size mismatch: {len(archive)}")
-          if hashlib.sha256(archive).hexdigest() != os.environ["EXPECTED_ARCHIVE_SHA256"]:
-              raise SystemExit("archive SHA-256 mismatch")
+          archive_hash = hashlib.sha256(archive).hexdigest()
+          if archive_hash != os.environ["EXPECTED_ARCHIVE_SHA256"]:
+              raise SystemExit(f"archive SHA-256 mismatch: {archive_hash}")
 
           destination = Path(os.environ["RUNNER_TEMP"]) / "source"
           destination.mkdir(parents=True, exist_ok=False)
           root = destination.resolve()
-          exact, folded, validated, total = set(), set(), [], 0
+          exact_paths = set()
+          folded_paths = set()
+          validated_members = []
+          total_size = 0
+
           with tarfile.open(fileobj=io.BytesIO(archive), mode="r:xz") as bundle:
               members = bundle.getmembers()
               if len(members) != int(os.environ["EXPECTED_FILE_COUNT"]):
-                  raise SystemExit(f"member count mismatch: {len(members)}")
+                  raise SystemExit(f"archive member count mismatch: {len(members)}")
+
               for member in members:
                   name = member.name[2:] if member.name.startswith("./") else member.name
                   name = unicodedata.normalize("NFC", name)
                   path = PurePosixPath(name)
-                  if not name or path.is_absolute() or "." in path.parts or ".." in path.parts or "\\" in name or ":" in path.parts[0]:
-                      raise SystemExit(f"unsafe path: {member.name}")
+                  if (
+                      not name
+                      or path.is_absolute()
+                      or "." in path.parts
+                      or ".." in path.parts
+                      or "\\" in name
+                      or ":" in path.parts[0]
+                  ):
+                      raise SystemExit(f"unsafe archive path: {member.name}")
                   if not member.isfile() or member.issym() or member.islnk():
-                      raise SystemExit(f"unsupported member: {member.name}")
-                  key, case_key = path.as_posix(), path.as_posix().casefold()
-                  if key in exact or case_key in folded:
-                      raise SystemExit(f"duplicate/colliding path: {member.name}")
-                  exact.add(key)
-                  folded.add(case_key)
+                      raise SystemExit(f"unsupported archive member: {member.name}")
+                  exact_key = path.as_posix()
+                  folded_key = exact_key.casefold()
+                  if exact_key in exact_paths or folded_key in folded_paths:
+                      raise SystemExit(f"duplicate or case-colliding archive path: {member.name}")
+                  exact_paths.add(exact_key)
+                  folded_paths.add(folded_key)
                   target = (destination / Path(*path.parts)).resolve()
                   if os.path.commonpath([str(root), str(target)]) != str(root):
-                      raise SystemExit(f"path escape: {member.name}")
-                  total += member.size
-                  if member.size > 16_000_000 or total > 2_000_000:
-                      raise SystemExit("archive size bound exceeded")
-                  validated.append((member, target))
-              if total != int(os.environ["EXPECTED_UNCOMPRESSED_BYTES"]):
-                  raise SystemExit(f"uncompressed size mismatch: {total}")
-              for member, target in validated:
+                      raise SystemExit(f"archive path escapes destination: {member.name}")
+                  total_size += member.size
+                  if member.size > 16_000_000 or total_size > 2_000_000:
+                      raise SystemExit("archive exceeds bounded extraction limits")
+                  validated_members.append((member, target))
+
+              if total_size != int(os.environ["EXPECTED_UNCOMPRESSED_BYTES"]):
+                  raise SystemExit(f"uncompressed byte count mismatch: {total_size}")
+
+              for member, target in validated_members:
                   target.parent.mkdir(parents=True, exist_ok=True)
                   stream = bundle.extractfile(member)
                   if stream is None:
-                      raise SystemExit(f"cannot read member: {member.name}")
+                      raise SystemExit(f"cannot read archive member: {member.name}")
                   data = stream.read()
                   if len(data) != member.size:
-                      raise SystemExit(f"short read: {member.name}")
+                      raise SystemExit(f"short archive read: {member.name}")
                   target.write_bytes(data)
                   target.chmod(member.mode & 0o777)
 
-          required = [
+          required = (
               "VERSION",
               ".codex-plugin/plugin.json",
               ".github/workflows/ci.yml",
@@ -193,10 +289,10 @@ jobs:
               "policies/model-routing.yaml",
               "schemas/change-contract.schema.json",
               "tests",
-          ]
+          )
           for relative in required:
               if not (destination / relative).exists():
-                  raise SystemExit(f"missing source path: {relative}")
+                  raise SystemExit(f"required source path is missing: {relative}")
           if (destination / "VERSION").read_text(encoding="utf-8").strip() != "4.2.0":
               raise SystemExit("VERSION mismatch")
           PY
@@ -217,7 +313,7 @@ jobs:
             exit 1
           }
           git diff --cached --quiet && {
-            echo "no materialization changes" >&2
+            echo "materialization produced no changes" >&2
             exit 1
           }
           git commit -m "release: publish ZTAD Mesh 4.2.0 verified source"
