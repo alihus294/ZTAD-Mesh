@@ -1,4 +1,4 @@
-name: Diagnose source transport comments
+name: Diagnose embedded source transport
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Inspect owner-authored transport comments
+      - name: Locate exact source parts in all transport comments
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -27,17 +27,34 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import hashlib, json, os
+
+          specs = {
+              1: (52000, "cb05798729cf6f0dbbcdcd5e8d4de5ee9c36ece394b99adcea3075c4366300ea", "m7FUZR8SblqWfO8XW/QKLqVXwi6Skzu3Lmo5b+kct+PaUh9aM09kuU9ZVILh+dv9eWYMbKNrs+MRxpfl"),
+              2: (52000, "e84b7f91815dc58c54637af3c926081af77d86e200ccc510899aa58d73828fe9", "Cd+e9BU+aHAZXHGeIusSUHIFN4KAm/3sPSQ/Vvmm7Wdm3QLRB+5e7g23E/Cn+Z2OwGQ8gql7y9ZKpkls"),
+              3: (52000, "e2b07c2d55a4151714b10335a4c4fd96308c9a1f0590fc686c8ea65b406e162d", "HcBOQg1j1aOL/PV1tVKLR/KIt1z7cjVcyi1m9j9CApGH6N2bP3l9hZu2fxDD/vl/QvYpZHMUrQVQve+i"),
+              4: (52000, "6ad4f2c680e10ca75185a05376d805a5994ae6936882f8400af6d6810ccc09b8", "9cYlnJeVab48RuZTXgULQ24ni9/W4SFR+4/XgYM0lpR9A0EzG7Wvxz7dhKvFXCeokc26uPZKgQEbvF6y"),
+              5: (52000, "b5fc690297177937a3aa81931390fbdfebbe39e9fabea3e3f8facbf68e801626", "Dk3qCh1pjepiLLkMhbFm/XOygxS0IkVASrwzNr2hnqShj3iW6Suv+QOuwmuce37YdqpfCo4LuaLo2i52"),
+          }
           root = Path(os.environ["RUNNER_TEMP"])
+          exact = set()
           for issue in (1, 2):
               comments = json.loads((root / f"issue{issue}.json").read_text())
               for comment in comments:
                   if (comment.get("user") or {}).get("login") != "alihus294":
                       continue
                   body = comment.get("body") or ""
-                  header, separator, payload = body.partition("\n")
-                  if not separator or not header.startswith("ZTAD_SOURCE_"):
+                  header, separator, raw_payload = body.partition("\n")
+                  if not separator:
                       continue
-                  payload = payload.rstrip("\r\n")
-                  digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-                  print(f"issue={issue} id={comment.get('id')} length={len(payload)} sha256={digest} header={header}")
+                  payload = "".join(raw_payload.split())
+                  for index, (length, expected_hash, marker) in specs.items():
+                      offset = payload.find(marker)
+                      while offset >= 0:
+                          candidate = payload[offset:offset + length]
+                          digest = hashlib.sha256(candidate.encode("ascii")).hexdigest() if len(candidate) == length else "SHORT"
+                          print(f"issue={issue} comment={comment.get('id')} part={index} offset={offset} length={len(candidate)} sha256={digest}")
+                          if digest == expected_hash:
+                              exact.add(index)
+                          offset = payload.find(marker, offset + 1)
+          print(f"EXACT_PARTS={sorted(exact)}")
           PY
