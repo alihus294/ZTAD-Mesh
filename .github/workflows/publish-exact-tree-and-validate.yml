@@ -1,0 +1,141 @@
+name: Publish exact ZTAD Mesh 4.2.0 tree and validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-exact-tree-and-validate.yml
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  EXPECTED_TREE: 1f168ae648eccb935ccd54c6f0d6f644d24dd095
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.publish.outputs.sha }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Create an exact-tree commit through the Git data API
+        id: publish
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PARENT='${{ github.sha }}'
+          RESPONSE="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/commits" \
+            --raw-field 'message=release: publish exact ZTAD Mesh 4.2.0 source tree' \
+            --raw-field "tree=${EXPECTED_TREE}" \
+            --raw-field "parents[]=${PARENT}")"
+          SHA="$(python -c 'import json,sys; print(json.load(sys.stdin)["sha"])' <<<"$RESPONSE")"
+          test -n "$SHA"
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/main" --raw-field "sha=${SHA}" -F force=false >/dev/null
+          ACTUAL_TREE="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${SHA}" --jq .tree.sha)"
+          test "$ACTUAL_TREE" = "$EXPECTED_TREE"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Published exact source commit $SHA"
+
+  validate:
+    needs: publish
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+        python-version: ["3.11", "3.13"]
+    steps:
+      - name: Check out exact published commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.publish.outputs.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify exact source identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          test "$(cat VERSION)" = "4.2.0"
+          test ! -e .bootstrap
+          test -f .github/workflows/ci.yml
+          test -f .codex-plugin/plugin.json
+          test -f toolkit/ztad/mesh_runtime.py
+          test -f skills/zero-trust-delivery/SKILL.md
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            toolkit/requirements.lock.txt
+            toolkit/requirements-dev.lock.txt
+      - name: Install exact test environment
+        run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+      - name: Verify dependency consistency
+        run: python -m pip check
+      - name: Compile source
+        run: python -m compileall -q toolkit scripts evals tests
+      - name: Run unit and integration tests
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest -q
+      - name: Run offline functional and adversarial evals
+        run: python -B evals/run_evals.py --output "${{ runner.temp }}/eval-summary.json"
+      - name: Validate plugin bundle
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/bundle-validation.json" validate-bundle --root .
+      - name: Verify policy wiring
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/policy-wiring.json" policy-wiring --root .
+
+  distribution:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.publish.outputs.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify exact source identity
+        shell: bash
+        run: test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: toolkit/requirements-dev.lock.txt
+      - run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+      - name: Set deterministic timestamp
+        shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+      - name: Build deterministic distribution A
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/dist-a.json" build-distribution --root . --output-dir "${{ runner.temp }}/dist-a"
+      - name: Build deterministic distribution B
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/dist-b.json" build-distribution --root . --output-dir "${{ runner.temp }}/dist-b"
+      - name: Compare complete distribution trees
+        shell: bash
+        run: diff -qr "${{ runner.temp }}/dist-a" "${{ runner.temp }}/dist-b"
+      - name: Validate Plugin archive
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.2.0.zip" --kind plugin
+      - name: Validate Marketplace archive
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.2.0.zip" --kind marketplace
+
+  complete:
+    needs: [publish, validate, distribution]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Record exact-tree validation success
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/2/comments" \
+            -f body="ZTAD_EXACT_TREE_VALIDATION_PASS source=${{ needs.publish.outputs.sha }} tree=${EXPECTED_TREE} matrix=linux+windows/python3.11+3.13 tests=pass evals=pass distribution=reproducible"
