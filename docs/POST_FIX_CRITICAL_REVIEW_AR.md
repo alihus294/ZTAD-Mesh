@@ -20,6 +20,10 @@
 - نقل مسؤولية الاستمرار من Stop hook إلى Durable scheduler/service.
 - إضافة فحص AST يمنع تكرار Functions/Methods وDuplicate literal keys.
 - تصحيح PR creation flow وتخفيض Host acceptance عندما لا يوجد إثبات منصة.
+- نشر شجرة المصدر الفعلية بعد مطابقة الأرشيف وعدد الملفات والبصمات وGit tree.
+- إصلاح نقل Git patches على Windows ليبقى Binary-safe ولا تتلف LF framing بسبب CRLF text mode.
+- حصر `SOURCE_DATE_EPOCH` في خطوات بناء التوزيعة بدل تسريبه إلى تثبيت الحزم على Windows.
+- تشغيل المصفوفة الكاملة على Ubuntu وWindows مع Python 3.11 و3.13 بالـExact dependency locks.
 - إعادة كتابة الوثائق لتفصل بين Local implementation وTarget-host enforcement.
 
 ## ما زال غير مثالي — ولا يجب إخفاؤه
@@ -34,7 +38,7 @@
 8. **Production rollout:** Progressive delivery controller يحتاج Adapter ومقاييس فعلية واختبار Rollback على منصة الهدف.
 9. **Cost explosion ممكن:** Maximum useful parallelism يقلل الهدر، لكنه لا يلغي ارتفاع التكلفة في R3/R4؛ Budget policy يجب ضبطها للمشروع.
 10. **False confidence من كثرة المراجعين:** سبعة Review dimensions لا تعني صحة؛ Decision لا يصبح نافذًا إلا مع الأدلة والController.
-11. **Windows acceptance ما زال مطلوبًا:** الاختبارات Cross-platform لا تعوض تشغيل Native PowerShell/Codex/Git على جهاز المستخدم.
+11. **قبول جهاز المستخدم ما زال مطلوبًا:** نجاح Native Windows CI لا يثبت إعداد PowerShell/Codex/Git/Credentials/Hooks الفعلي على جهاز الهدف.
 12. **Hooks ليست Security boundary وحيدة:** يمكن أن تتغير قدرة Host أو تُرفض Hooks؛ CI وSandbox وRepository rules تبقى الضبط الأعلى.
 
 ## الحكم بعد الإصلاح
@@ -63,13 +67,14 @@ OFFLINE_DISTRIBUTION_ACCEPTED_WITH_TARGET_HOST_ACCEPTANCE_REQUIRED
 
 ## نتيجة الاختبارات النهائية بعد الإصلاح
 
-- 223/223 اختبارًا محليًا ناجحًا.
-- 44/44 تقييمًا وظيفيًا وعدائيًا Offline.
+- 227/227 اختبارًا ناجحًا على Ubuntu وWindows مع Python 3.11 و3.13.
+- 44/44 تقييمًا وظيفيًا وعدائيًا Offline ضمن مصفوفة CI.
 - 43,000 حالة Fuzz دون خطأ غير متحكم به.
 - 320 كتابة متزامنة للسجل عبر خمس جولات 64 Writer.
 - 14/14 طفرة حرجة مختارة تم قتلها؛ النسبة تخص هذه المجموعة فقط.
 - تغطية Branch-aware: 80% إجمالًا و75% للنواة البرمجية.
+- بناء توزيعتين كاملتين ومقارنتهما Byte-for-byte، ثم التحقق من أرشيفي Plugin وMarketplace.
 
 ## القيد الأكثر أهمية
 
-بيئة البناء شغلت `cryptography 46.0.4`، بينما الإصدار يشترط `>=48.0.1,<51`. تعذر تنزيل البيئة المستهدفة بسبب فشل DNS. لذلك لا يجوز تفعيل التوقيع الحاكم قبل إعادة اختبارات التوقيع على جهاز الهدف بالإصدار المطلوب. هذا قيد إصدار حقيقي، لا ملاحظة تجميلية.
+الـCI العام يثبت أن الـExact locks الحالية — ومنها `cryptography 50.0.0` — تعمل على مصفوفة Ubuntu/Windows وPython 3.11/3.13. لكنه لا يثبت أن جهاز الهدف يطابق هذه البيئة أو أن GitHub rulesets وMerge queue وOIDC وCanary/Rollback مفعلة. لذلك لا تُرفع صلاحيات Merge أو Production قبل إكمال `docs/HOST_ACCEPTANCE.md` وإصدار أدلة منصة مرتبطة بالـExact SHA.
