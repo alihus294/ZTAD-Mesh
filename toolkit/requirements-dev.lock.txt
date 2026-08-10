@@ -1,5 +1,5 @@
 -r requirements.lock.txt
 pytest==9.1.1
-coverage==7.15.2
+coverage==7.15.4
 pytest-cov==7.1.0
-hypothesis==6.160.0
+hypothesis==6.165.2
