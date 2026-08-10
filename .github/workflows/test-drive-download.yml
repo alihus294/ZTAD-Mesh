@@ -1,4 +1,4 @@
-name: Inspect existing Git blob transport
+name: Inspect existing Git blob archive chunks
 
 on:
   push:
@@ -17,23 +17,60 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Measure candidate blob
+      - name: Measure and concatenate candidate blobs
         shell: bash
         run: |
           set -Eeuo pipefail
-          gh api "repos/${GITHUB_REPOSITORY}/git/blobs/40dfef0bf69b24ae6543594cd9a02cff686190f4" --jq .content \
-            | tr -d '\r\n' > "$RUNNER_TEMP/blob-content.txt"
-          LENGTH="$(wc -c < "$RUNNER_TEMP/blob-content.txt")"
-          HASH="$(sha256sum "$RUNNER_TEMP/blob-content.txt" | awk '{print $1}')"
-          echo "::warning title=Existing Git blob transport::length=$LENGTH sha256=$HASH"
           python - <<'PY'
           from pathlib import Path
-          import base64, hashlib, os
-          encoded = (Path(os.environ['RUNNER_TEMP']) / 'blob-content.txt').read_text()
-          try:
-              raw = base64.b64decode(encoded, validate=True)
-          except Exception as exc:
-              print(f'::warning title=Existing blob decode::invalid base64: {exc}')
-          else:
-              print(f'::warning title=Existing blob decode::bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}')
+          import base64, hashlib, json, os, urllib.request
+
+          candidates = [
+              "40dfef0bf69b24ae6543594cd9a02cff686190f4",
+              "d2a64675f81d57071954f58b60d8d40feba518b3",
+              "30d74d258442c7c65512eafab474568dd706c430",
+              "b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0",
+              "333d6d1944ca3bbe52f4327d4d59e204482fff3e",
+              "94ac027024b94b42fdaf0274f228de10a45e379c",
+              "26ed4a37af607e4c7b2cf3bec727973618add568",
+              "30ea1d1f06056aee677a5ea0b7048bd38de8b70b",
+              "825036de6ef5c19af9ca36072786b195f07e040d",
+              "adb49fe40c483855414222615f86fa3ea78f2fe7",
+              "39a7a373ba6e9f0498e5cfdf2cd33176d6b4f708",
+              "391bb4929c512c9a16d5ec62ca17a96621101ec4",
+              "7c4d9a9d92d09f3929df9194393fa8c5fd9cd5e2",
+              "325e72d43965dbbd2ea577549554473ae11e7661",
+              "ca22a4db53b454d4480d38b87f891077722d1ba4",
+              "9319937f238e18db13618cf6c7a8bbe89ce1302d",
+              "9a8e96c4c362d10e6962e37f05a5427bba0e9320",
+              "11fc12ea26680864a3a1ddd1913e438492e29105",
+              "644ca168f7ef42d8ef00cd6b34acb7a41c4e574f",
+          ]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GH_TOKEN"]
+          chunks = []
+          for index, sha in enumerate(candidates):
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/git/blobs/{sha}",
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "ztad-blob-inspector",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  payload = json.load(response)
+              raw = base64.b64decode(payload["content"], validate=False)
+              chunks.append(raw)
+              print(
+                  f"::warning title=Git blob chunk {index:02d}::sha={sha} bytes={len(raw)} "
+                  f"sha256={hashlib.sha256(raw).hexdigest()}"
+              )
+          combined = b"".join(chunks)
+          print(
+              f"::warning title=Combined Git blob chunks::bytes={len(combined)} "
+              f"sha256={hashlib.sha256(combined).hexdigest()}"
+          )
+          (Path(os.environ["RUNNER_TEMP"]) / "combined.bin").write_bytes(combined)
           PY
