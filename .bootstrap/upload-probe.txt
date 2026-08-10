@@ -1,1 +1,0 @@
-This is a harmless connector capability probe and may be deleted by the final source sync.
