@@ -1,0 +1,63 @@
+name: Diagnose transported source parts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-large-parts.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Measure every candidate part stored by GitHub
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          import hashlib, json, os, re, subprocess
+
+          repository = os.environ['GITHUB_REPOSITORY']
+          pattern = re.compile(r'ZTAD_SOURCE_PART ([1-6]) ([0-9]+) ([0-9a-f]{64})')
+          comments = []
+          for page_number in range(1, 21):
+              result = subprocess.run(
+                  ['gh', 'api', f'repos/{repository}/issues/2/comments?per_page=100&page={page_number}'],
+                  check=True, capture_output=True, text=True,
+              )
+              page = json.loads(result.stdout)
+              comments.extend(page)
+              if len(page) < 100:
+                  break
+          found = 0
+          for item in comments:
+              if (item.get('user') or {}).get('login') != 'alihus294':
+                  continue
+              body = item.get('body')
+              if not isinstance(body, str):
+                  continue
+              header, separator, raw = body.partition('\n')
+              match = pattern.fullmatch(header.strip())
+              if not separator or not match:
+                  continue
+              payload = ''.join(raw.split())
+              print(json.dumps({
+                  'id': item.get('id'),
+                  'index': int(match.group(1)),
+                  'declared_length': int(match.group(2)),
+                  'declared_sha256': match.group(3),
+                  'normalized_length': len(payload),
+                  'normalized_sha256': hashlib.sha256(payload.encode('ascii')).hexdigest(),
+                  'created_at': item.get('created_at'),
+              }, sort_keys=True))
+              found += 1
+          print(f'candidate_count={found}')
+          PY
