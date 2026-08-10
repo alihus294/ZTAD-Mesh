@@ -1,0 +1,49 @@
+name: Diagnose reusable source blobs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-orphan-blobs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Identify orphan Git blobs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          import base64, hashlib, json, os, subprocess
+          blobs = [
+            '1a43c6385c3c83f9e15e62ec4e99ffbf2a2f8641',
+            'c6d64de69fa477375c27dd26746bf6ae9a8270ce',
+            '9411d44638e63ca43ec814047a339bc3e17cebdf',
+            '3487e3b8e9b1b613fddbd76ba956463e8d650560',
+            '6c9d1e94451c814f3822b0687fa9a03e29b6d792',
+            '30d74d258442c7c65512eafab474568dd706c430',
+            'b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0',
+            '644ca168f7ef42d8ef00cd6b34acb7a41c4e574f',
+          ]
+          repository = os.environ['GITHUB_REPOSITORY']
+          for sha in blobs:
+              result = subprocess.run(['gh','api',f'repos/{repository}/git/blobs/{sha}'], check=True, capture_output=True, text=True)
+              item = json.loads(result.stdout)
+              data = base64.b64decode(''.join(item['content'].split()), validate=True)
+              text = data.decode('ascii')
+              print(json.dumps({
+                'git_sha': sha,
+                'length': len(text),
+                'sha256': hashlib.sha256(text.encode('ascii')).hexdigest(),
+                'prefix': text[:64],
+                'suffix': text[-64:],
+              }, sort_keys=True))
+          PY
