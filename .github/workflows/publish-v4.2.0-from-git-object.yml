@@ -1,0 +1,246 @@
+name: Publish exact ZTAD Mesh 4.2.0 source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-v4.2.0-from-git-object.yml
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: ztad-v420-exact-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      EXPECTED_ARCHIVE_SHA256: 23bb0357a0900a0c4dfa1110da1d5d08c0f8aa5cae95622e55b06a124a3a272c
+      EXPECTED_MEMBER_COUNT: "253"
+      EXPECTED_UNCOMPRESSED_BYTES: "1255479"
+      EXPECTED_TREE_SHA: 1f168de330ade9c0b33827f747bec25e3707b6ec
+      PYTHONDONTWRITEBYTECODE: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout trigger revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Recover the trusted archive from repository Git objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+          import base64, hashlib, json, os, urllib.error, urllib.request
+          from pathlib import Path
+
+          candidates = [
+              "40dfef0bf69b24ae6543594cd9a02cff686190f4",
+              "d2a64675f81d57071954f58b60d8d40feba518b3",
+              "30d74d258442c7c65512eafab474568dd706c430",
+              "b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0",
+              "333d6d1944ca3bbe52f4327d4d59e204482fff3e",
+              "94ac027024b94b42fdaf0274f228de10a45e379c",
+              "26ed4a37af607e4c7b2cf3bec727973618add568",
+              "30ea1d1f06056aee677a5ea0b7048bd38de8b70b",
+              "825036de6ef5c19af9ca36072786b195f07e040d",
+              "adb49fe40c483855414222615f86fa3ea78f2fe7",
+              "39a7a373ba6e9f0498e5cfdf2cd33176d6b4f708",
+              "391bb4929c512c9a16d5ec62ca17a96621101ec4",
+              "7c4d9a9d92d09f3929df9194393fa8c5fd9cd5e2",
+              "325e72d43965dbbd2ea577549554473ae11e7661",
+              "ca22a4db53b454d4480d38b87f891077722d1ba4",
+              "9319937f238e18db13618cf6c7a8bbe89ce1302d",
+              "9a8e96c4c362d10e6962e37f05a5427bba0e9320",
+              "11fc12ea26680864a3a1ddd1913e438492e29105",
+              "644ca168f7ef42d8ef00cd6b34acb7a41c4e574f",
+          ]
+          repository = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GH_TOKEN"]
+          expected = os.environ["EXPECTED_ARCHIVE_SHA256"]
+          destination = Path(os.environ["RUNNER_TEMP"]) / "ztad-mesh-4.2.0.tar.xz"
+          selected = None
+          evidence = []
+          for sha in candidates:
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repository}/git/blobs/{sha}",
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "ztad-v420-publisher",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      payload = json.load(response)
+              except urllib.error.HTTPError as exc:
+                  evidence.append({"blob": sha, "http": exc.code})
+                  continue
+              try:
+                  data = base64.b64decode(payload.get("content", ""), validate=False)
+              except Exception as exc:
+                  evidence.append({"blob": sha, "decode_error": type(exc).__name__})
+                  continue
+              digest = hashlib.sha256(data).hexdigest()
+              evidence.append({"blob": sha, "bytes": len(data), "sha256": digest})
+              if digest == expected:
+                  destination.write_bytes(data)
+                  selected = sha
+                  break
+          print(json.dumps({"selected_blob": selected, "candidates": evidence}, indent=2))
+          if selected is None:
+              raise SystemExit("trusted archive was not found among repository Git objects")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+              handle.write(f"SOURCE_ARCHIVE={destination}\n")
+              handle.write(f"SELECTED_SOURCE_BLOB={selected}\n")
+          PY
+          echo "${EXPECTED_ARCHIVE_SHA256}  ${SOURCE_ARCHIVE}" | sha256sum --check --strict
+
+      - name: Validate archive structure and extract without traversal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+          import os, stat, tarfile
+          from pathlib import Path, PurePosixPath
+
+          archive = Path(os.environ["SOURCE_ARCHIVE"])
+          destination = Path(os.environ["RUNNER_TEMP"]) / "validated-source"
+          destination.mkdir(parents=True, exist_ok=False)
+          expected_count = int(os.environ["EXPECTED_MEMBER_COUNT"])
+          expected_total = int(os.environ["EXPECTED_UNCOMPRESSED_BYTES"])
+          total = 0
+          casefolded = set()
+          with tarfile.open(archive, "r:xz") as bundle:
+              members = bundle.getmembers()
+              if len(members) != expected_count:
+                  raise SystemExit(f"unexpected member count: {len(members)}")
+              for member in members:
+                  raw = member.name[2:] if member.name.startswith("./") else member.name
+                  path = PurePosixPath(raw)
+                  if not raw or path.is_absolute() or "." in path.parts or ".." in path.parts:
+                      raise SystemExit(f"unsafe archive path: {member.name}")
+                  folded = path.as_posix().casefold()
+                  if folded in casefolded:
+                      raise SystemExit(f"case-insensitive path collision: {raw}")
+                  casefolded.add(folded)
+                  if not member.isfile() or member.issym() or member.islnk() or member.isdev() or member.isfifo():
+                      raise SystemExit(f"unsupported archive member: {member.name}")
+                  total += member.size
+                  if total > expected_total:
+                      raise SystemExit("uncompressed archive exceeds trusted bound")
+                  target = (destination / Path(*path.parts)).resolve()
+                  if os.path.commonpath([str(destination.resolve()), str(target)]) != str(destination.resolve()):
+                      raise SystemExit(f"archive escape: {member.name}")
+                  source = bundle.extractfile(member)
+                  if source is None:
+                      raise SystemExit(f"cannot read member: {member.name}")
+                  data = source.read()
+                  if len(data) != member.size:
+                      raise SystemExit(f"short read: {member.name}")
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(data)
+                  target.chmod(0o755 if member.mode & stat.S_IXUSR else 0o644)
+          if total != expected_total:
+              raise SystemExit(f"unexpected uncompressed byte count: {total}")
+          required = [
+              "VERSION", "README.md", ".codex-plugin/plugin.json", "scripts/ztad.py",
+              "toolkit/ztad/mesh_runtime.py", "tests", "skills", "policies", "schemas", "hooks"
+          ]
+          missing = [entry for entry in required if not (destination / entry).exists()]
+          if missing:
+              raise SystemExit(f"missing required source paths: {missing}")
+          if (destination / "VERSION").read_text(encoding="utf-8").strip() != "4.2.0":
+              raise SystemExit("VERSION is not 4.2.0")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+              handle.write(f"EXTRACTED_SOURCE={destination}\n")
+          print(f"validated {len(members)} files and {total} uncompressed bytes")
+          PY
+
+      - name: Install exact validation dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-input \
+            'PyYAML==6.0.3' 'jsonschema==4.26.0' 'cryptography>=48.0.1,<51'
+
+      - name: Execute complete validation suite on extracted source
+        shell: bash
+        working-directory: ${{ env.EXTRACTED_SOURCE }}
+        run: |
+          set -euo pipefail
+          python -B -m unittest discover -s tests -p 'test*.py' -v
+          python -B scripts/ztad.py validate-bundle --root .
+          python -B scripts/ztad.py policy-wiring --root .
+          find . -type d -name __pycache__ -prune -exec rm -rf -- {} +
+          find . -type f \( -name '*.pyc' -o -name '.coverage*' \) -delete
+
+      - name: Replace all bootstrap content and prove exact Git tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+          cp -a "${EXTRACTED_SOURCE}/." .
+          test ! -e .bootstrap
+          git add -A
+          git diff --cached --check
+          tree="$(git write-tree)"
+          echo "Expected tree: ${EXPECTED_TREE_SHA}"
+          echo "Actual tree:   ${tree}"
+          test "${tree}" = "${EXPECTED_TREE_SHA}"
+          echo "FINAL_TREE_SHA=${tree}" >> "$GITHUB_ENV"
+
+      - name: Commit exact source tree to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git diff --cached --quiet && { echo "publication unexpectedly produced no diff"; exit 1; }
+          git commit -m "release: publish ZTAD Mesh 4.2.0 validated source"
+          git push origin HEAD:main
+          echo "FINAL_SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Create or validate v4.2.0 tag and GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          final_sha="$(git rev-parse HEAD)"
+          if git ls-remote --exit-code --tags origin refs/tags/v4.2.0 >/dev/null 2>&1; then
+            git fetch --force origin refs/tags/v4.2.0:refs/tags/v4.2.0
+            tagged_commit="$(git rev-parse 'v4.2.0^{commit}')"
+            tagged_tree="$(git rev-parse 'v4.2.0^{tree}')"
+            test "${tagged_tree}" = "${EXPECTED_TREE_SHA}"
+            echo "Existing v4.2.0 tag points to validated tree via ${tagged_commit}"
+          else
+            git tag -a v4.2.0 -m "ZTAD Mesh 4.2.0" "${final_sha}"
+            git push origin refs/tags/v4.2.0
+          fi
+          if ! gh release view v4.2.0 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create v4.2.0 \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "ZTAD Mesh 4.2.0" \
+              --verify-tag \
+              --notes "Validated ZTAD Mesh 4.2.0 source. Trusted archive SHA-256: ${EXPECTED_ARCHIVE_SHA256}. Exact Git tree: ${EXPECTED_TREE_SHA}. Publication executed the complete unit/integration suite, bundle validation, and policy-wiring validation before writing main. Target-host acceptance remains mandatory before governed merge or production authority."
+          fi
+
+      - name: Close transport issue and remove temporary branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh issue view 1 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh issue close 1 --repo "${GITHUB_REPOSITORY}" \
+              --reason completed \
+              --comment "ZTAD Mesh 4.2.0 source was published and verified. Archive SHA-256: ${EXPECTED_ARCHIVE_SHA256}; Git tree: ${EXPECTED_TREE_SHA}; release: v4.2.0."
+          fi
+          git push origin --delete bootstrap/v4.2.0-local-source >/dev/null 2>&1 || true
+          git push origin --delete verify/v4.2.0-publication >/dev/null 2>&1 || true
