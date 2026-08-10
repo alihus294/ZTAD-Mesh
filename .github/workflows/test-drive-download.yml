@@ -17,14 +17,12 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Measure and concatenate candidate blobs
+      - name: Concatenate candidate blobs
         shell: bash
         run: |
           set -Eeuo pipefail
           python - <<'PY'
-          from pathlib import Path
           import base64, hashlib, json, os, urllib.request
-
           candidates = [
               "40dfef0bf69b24ae6543594cd9a02cff686190f4",
               "d2a64675f81d57071954f58b60d8d40feba518b3",
@@ -49,7 +47,8 @@ jobs:
           repo = os.environ["GITHUB_REPOSITORY"]
           token = os.environ["GH_TOKEN"]
           chunks = []
-          for index, sha in enumerate(candidates):
+          sizes = []
+          for sha in candidates:
               req = urllib.request.Request(
                   f"https://api.github.com/repos/{repo}/git/blobs/{sha}",
                   headers={
@@ -63,14 +62,10 @@ jobs:
                   payload = json.load(response)
               raw = base64.b64decode(payload["content"], validate=False)
               chunks.append(raw)
-              print(
-                  f"::warning title=Git blob chunk {index:02d}::sha={sha} bytes={len(raw)} "
-                  f"sha256={hashlib.sha256(raw).hexdigest()}"
-              )
+              sizes.append(len(raw))
           combined = b"".join(chunks)
           print(
-              f"::warning title=Combined Git blob chunks::bytes={len(combined)} "
+              f"::warning title=Combined Git blob chunks::sizes={sizes} bytes={len(combined)} "
               f"sha256={hashlib.sha256(combined).hexdigest()}"
           )
-          (Path(os.environ["RUNNER_TEMP"]) / "combined.bin").write_bytes(combined)
           PY
