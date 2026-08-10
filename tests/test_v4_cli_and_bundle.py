@@ -62,7 +62,7 @@ def test_bundle_contains_new_mesh_components():
 
 def test_cryptography_lock_uses_reviewed_supported_release():
     requirements = (ROOT / "toolkit/requirements.lock.txt").read_text(encoding="utf-8")
-    assert requirements.splitlines().count("cryptography==49.0.0") == 1
-    assert "cryptography==46.0.4" not in requirements
+    assert requirements.splitlines().count("cryptography==50.0.0") == 1
+    assert "cryptography==49.0.0" not in requirements
     pyproject = (ROOT / "toolkit/pyproject.toml").read_text(encoding="utf-8")
-    assert "cryptography>=48.0.1,<51" in pyproject
+    assert "cryptography>=50.0.0,<51" in pyproject
