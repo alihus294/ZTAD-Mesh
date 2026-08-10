@@ -5,7 +5,7 @@ The package is not production-authoritative merely because it installs. Run thes
 ## Mandatory local gates
 
 1. Verify release and distribution checksums.
-2. Verify Python 3.11+ and locked dependency ranges. Governed signing requires `cryptography >=48.0.1,<51`.
+2. Verify Python 3.11+ and locked dependency ranges. Governed signing requires `cryptography >=50.0.0,<51`.
 3. Validate the installed bundle and all 13 explicit-only skills.
 4. Trust and exercise the installed Codex hooks; verify their exact hash.
 5. Probe every configured provider without exposing credentials.
