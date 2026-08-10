@@ -1,0 +1,110 @@
+name: Finalize and independently verify ZTAD Mesh 4.2.0 publication
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/finalize-v4.2.0-publication.yml
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: ztad-v420-publication-finalizer
+  cancel-in-progress: false
+
+jobs:
+  verify-finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      EXPECTED_SOURCE_TREE: 1f168de330ade9c0b33827f747bec25e3707b6ec
+      PYTHONDONTWRITEBYTECODE: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout publication candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Prove the parent is the exact validated source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          parent_tree="$(git rev-parse 'HEAD^1^{tree}')"
+          echo "Expected source tree: ${EXPECTED_SOURCE_TREE}"
+          echo "Published parent tree: ${parent_tree}"
+          test "${parent_tree}" = "${EXPECTED_SOURCE_TREE}"
+          test "$(cat VERSION)" = "4.2.0"
+          test -f .codex-plugin/plugin.json
+          test -f scripts/ztad.py
+          test -f toolkit/ztad/mesh_runtime.py
+          test ! -e .bootstrap
+
+      - name: Install validation dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-input \
+            'PyYAML==6.0.3' 'jsonschema==4.26.0' 'cryptography>=48.0.1,<51'
+
+      - name: Execute complete source validation from GitHub checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B -m unittest discover -s tests -p 'test*.py' -v
+          python -B scripts/ztad.py validate-bundle --root .
+          python -B scripts/ztad.py policy-wiring --root .
+          find . -type d -name __pycache__ -prune -exec rm -rf -- {} +
+          find . -type f \( -name '*.pyc' -o -name '.coverage*' \) -delete
+          test -z "$(git status --porcelain --untracked-files=all | grep -v '^?? .github/workflows/finalize-v4.2.0-publication.yml$' || true)"
+
+      - name: Remove finalizer and restore exact source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/finalize-v4.2.0-publication.yml
+          git add -A
+          git diff --cached --check
+          final_tree="$(git write-tree)"
+          echo "Expected final tree: ${EXPECTED_SOURCE_TREE}"
+          echo "Actual final tree:   ${final_tree}"
+          test "${final_tree}" = "${EXPECTED_SOURCE_TREE}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: finalize verified ZTAD Mesh 4.2.0 publication"
+          git push origin HEAD:main
+
+      - name: Create immutable version tag and GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          final_sha="$(git rev-parse HEAD)"
+          remote_tag="$(git ls-remote --tags origin refs/tags/v4.2.0 | awk '{print $1}')"
+          if [ -n "${remote_tag}" ] && [ "${remote_tag}" != "${final_sha}" ]; then
+            echo "v4.2.0 already points to a different commit: ${remote_tag}" >&2
+            exit 1
+          fi
+          if [ -z "${remote_tag}" ]; then
+            git tag -a v4.2.0 -m "ZTAD Mesh 4.2.0"
+            git push origin refs/tags/v4.2.0
+          fi
+          if ! gh release view v4.2.0 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create v4.2.0 \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "ZTAD Mesh 4.2.0" \
+              --verify-tag \
+              --notes "Validated ZTAD Mesh 4.2.0 source release. The tagged Git tree is ${EXPECTED_SOURCE_TREE}. Publication was verified from a clean GitHub Actions checkout with the complete unit/integration suite, bundle validation, and policy-wiring validation. Target-host acceptance remains required before granting governed merge or production authority."
+          fi
+
+      - name: Close temporary transport issue and remove temporary branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh issue close 1 --repo "${GITHUB_REPOSITORY}" \
+            --reason completed \
+            --comment "Source publication completed and independently verified. Final tree: ${EXPECTED_SOURCE_TREE}; release: v4.2.0."
+          git push origin --delete bootstrap/v4.2.0-local-source >/dev/null 2>&1 || true
+          git push origin --delete verify/v4.2.0-publication >/dev/null 2>&1 || true
