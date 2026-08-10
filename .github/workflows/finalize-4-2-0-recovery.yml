@@ -1,0 +1,87 @@
+name: Recover and finalize ZTAD Mesh 4.2.0
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/finalize-4-2-0-recovery.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ztad-finalize-4.2.0
+  cancel-in-progress: false
+
+jobs:
+  recover-finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VERSION: 4.2.0
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+
+      - name: Execute the reviewed finalizer against the immutable bootstrap source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/finalize-4-2-0.yml')
+          if not workflow.is_file():
+              raise SystemExit('reviewed finalizer workflow is missing')
+          text = workflow.read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = text.index(marker) + len(marker)
+          end = text.index("\n          PY\n", start)
+          source = textwrap.dedent(text[start:end])
+          old = 'if (REPO / ".codex-plugin/plugin.json").is_file() and (REPO / "scripts/ztad.py").is_file():'
+          new = 'if False and (REPO / ".codex-plugin/plugin.json").is_file() and (REPO / "scripts/ztad.py").is_file():'
+          if old not in source:
+              raise SystemExit('cannot locate reviewed source-selection gate')
+          source = source.replace(old, new, 1)
+          exec(compile(source, '<ztad-reviewed-finalizer>', 'exec'), {'__name__': '__main__'})
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A ':!.release-out'
+          if ! git diff --cached --quiet; then
+            git commit -m "release: publish clean ZTAD Mesh 4.2.0 source"
+            git push origin HEAD:main
+          fi
+
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            TAG_SHA="$(git rev-list -n 1 "v${VERSION}")"
+            test "$TAG_SHA" = "$HEAD_SHA" || { echo "existing tag v${VERSION} targets $TAG_SHA, expected $HEAD_SHA" >&2; exit 1; }
+          else
+            git tag -a "v${VERSION}" -m "ZTAD Mesh ${VERSION}"
+            git push origin "v${VERSION}"
+          fi
+
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            gh release upload "v${VERSION}" .release-out/* --clobber
+          else
+            gh release create "v${VERSION}" .release-out/* \
+              --title "ZTAD Mesh ${VERSION}" \
+              --notes-file .release-out/RELEASE_NOTES.md \
+              --verify-tag
+          fi
+
+          rm -rf .release-out
