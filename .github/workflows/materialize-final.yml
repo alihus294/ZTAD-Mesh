@@ -1,0 +1,195 @@
+name: Materialize final verified ZTAD Mesh source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/materialize-final.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: ztad-materialize-final
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_B64_LENGTH: "315912"
+      EXPECTED_B64_SHA256: c0df972370ca99d728b23b982572d7479f2788e3231c681f7ae24a6d9f9542d4
+      EXPECTED_ARCHIVE_BYTES: "236932"
+      EXPECTED_ARCHIVE_SHA256: 23bb0357a0900a0c4dfa1110da1d5d08c0f8aa5cae95622e55b06a124a3a272c
+      EXPECTED_FILE_COUNT: "253"
+      EXPECTED_UNCOMPRESSED_BYTES: "1255479"
+      EXPECTED_GIT_TREE: 1f168ae648eccb935ccd54c6f0d6f644d24dd095
+
+    steps:
+      - name: Check out bootstrap revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Fetch source transport
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/2/comments?per_page=100" > "$RUNNER_TEMP/comments.json"
+
+      - name: Verify and extract source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path, PurePosixPath
+          import base64, hashlib, io, json, os, re, tarfile, unicodedata
+
+          segment_specs = {
+              0: (8000, "9748296b3cdfd30afbc88e534a68c1c496fb70e376c783fe1ddb4e713b1a49f3"),
+              1: (8000, "2c179cc0a8ef56c8e9785b73294d92127ebd5c6321564b7b1241295047c98735"),
+              2: (8000, "5f4dab8c35cd74ec6721098fa62d8bbf3bbb8d7dd33a8fe02256f5d014d9868d"),
+              3: (8000, "d148076270bb1d2e3c5aba7e4eff741160c14c010567d33f397e214f09f6f221"),
+              4: (8000, "71e4dc574c04e2b94557aba302da0bf4a60637872e2909c9229f585fec9b848d"),
+              5: (8000, "935a7012b0faa4d9a9ea98a2222365e96833b8906c1f913d4b13ff618e0027df"),
+              6: (4000, "56151e6dfb8d852279f7c143f840de148df25bfeab90a0b366391f0f0d11352d"),
+          }
+          part_specs = {
+              1: (52000, "cb05798729cf6f0dbbcdcd5e8d4de5ee9c36ece394b99adcea3075c4366300ea"),
+              2: (52000, "e84b7f91815dc58c54637af3c926081af77d86e200ccc510899aa58d73828fe9"),
+              3: (52000, "e2b07c2d55a4151714b10335a4c4fd96308c9a1f0590fc686c8ea65b406e162d"),
+              4: (52000, "6ad4f2c680e10ca75185a05376d805a5994ae6936882f8400af6d6810ccc09b8"),
+              5: (52000, "b5fc690297177937a3aa81931390fbdfebbe39e9fabea3e3f8facbf68e801626"),
+              6: (3912, "ece567743ac650259d983c72c44666a1eccd8e8461ccf283a251801a59fa199a"),
+          }
+          part0_hash = "dbe4040858965328ded64b964477a3fe7f721f8370f35ca1e3951a684fbe9570"
+          segment_re = re.compile(r"ZTAD_SOURCE_PART0_SEGMENT ([0-6]) ([0-9]+) ([0-9a-f]{64})")
+          part_re = re.compile(r"ZTAD_SOURCE_PART ([1-6]) ([0-9]+) ([0-9a-f]{64})")
+
+          comments = json.loads((Path(os.environ["RUNNER_TEMP"]) / "comments.json").read_text(encoding="utf-8"))
+          if not isinstance(comments, list):
+              raise SystemExit("unexpected comments response")
+
+          segments, parts = {}, {}
+          for item in comments:
+              if not isinstance(item, dict) or (item.get("user") or {}).get("login") != "alihus294":
+                  continue
+              body = item.get("body")
+              if not isinstance(body, str):
+                  continue
+              header, separator, raw_payload = body.partition("\n")
+              if not separator:
+                  continue
+              payload = "".join(raw_payload.split())
+              if not payload:
+                  continue
+
+              match = segment_re.fullmatch(header.strip())
+              if match:
+                  index, declared_length, declared_hash = int(match.group(1)), int(match.group(2)), match.group(3)
+                  expected_length, expected_hash = segment_specs[index]
+                  actual_hash = hashlib.sha256(payload.encode("ascii")).hexdigest()
+                  if (declared_length, declared_hash, len(payload), actual_hash) == (expected_length, expected_hash, expected_length, expected_hash):
+                      if index in segments and segments[index] != payload:
+                          raise SystemExit(f"conflicting valid segment {index}")
+                      segments[index] = payload
+                  continue
+
+              match = part_re.fullmatch(header.strip())
+              if match:
+                  index, declared_length, declared_hash = int(match.group(1)), int(match.group(2)), match.group(3)
+                  expected_length, expected_hash = part_specs[index]
+                  actual_hash = hashlib.sha256(payload.encode("ascii")).hexdigest()
+                  if (declared_length, declared_hash, len(payload), actual_hash) == (expected_length, expected_hash, expected_length, expected_hash):
+                      if index in parts and parts[index] != payload:
+                          raise SystemExit(f"conflicting valid part {index}")
+                      parts[index] = payload
+
+          if set(segments) != set(segment_specs):
+              raise SystemExit(f"missing valid segments: {sorted(set(segment_specs) - set(segments))}")
+          if set(parts) != set(part_specs):
+              raise SystemExit(f"missing valid parts: {sorted(set(part_specs) - set(parts))}")
+
+          part0 = "".join(segments[index] for index in range(7))
+          if len(part0) != 52000 or hashlib.sha256(part0.encode("ascii")).hexdigest() != part0_hash:
+              raise SystemExit("part 0 integrity failure")
+          encoded = part0 + "".join(parts[index] for index in range(1, 7))
+          if len(encoded) != int(os.environ["EXPECTED_B64_LENGTH"]):
+              raise SystemExit(f"Base64 length mismatch: {len(encoded)}")
+          if hashlib.sha256(encoded.encode("ascii")).hexdigest() != os.environ["EXPECTED_B64_SHA256"]:
+              raise SystemExit("Base64 SHA-256 mismatch")
+
+          archive = base64.b64decode(encoded, validate=True)
+          if len(archive) != int(os.environ["EXPECTED_ARCHIVE_BYTES"]):
+              raise SystemExit(f"archive size mismatch: {len(archive)}")
+          if hashlib.sha256(archive).hexdigest() != os.environ["EXPECTED_ARCHIVE_SHA256"]:
+              raise SystemExit("archive SHA-256 mismatch")
+
+          destination = Path(os.environ["RUNNER_TEMP"]) / "source"
+          destination.mkdir(parents=True, exist_ok=False)
+          root = destination.resolve()
+          exact, folded, validated, total = set(), set(), [], 0
+          with tarfile.open(fileobj=io.BytesIO(archive), mode="r:xz") as bundle:
+              members = bundle.getmembers()
+              if len(members) != int(os.environ["EXPECTED_FILE_COUNT"]):
+                  raise SystemExit(f"member count mismatch: {len(members)}")
+              for member in members:
+                  name = member.name[2:] if member.name.startswith("./") else member.name
+                  name = unicodedata.normalize("NFC", name)
+                  path = PurePosixPath(name)
+                  if not name or path.is_absolute() or "." in path.parts or ".." in path.parts or "\\" in name or ":" in path.parts[0]:
+                      raise SystemExit(f"unsafe path: {member.name}")
+                  if not member.isfile() or member.issym() or member.islnk():
+                      raise SystemExit(f"unsupported member: {member.name}")
+                  key, case_key = path.as_posix(), path.as_posix().casefold()
+                  if key in exact or case_key in folded:
+                      raise SystemExit(f"duplicate/colliding path: {member.name}")
+                  exact.add(key); folded.add(case_key)
+                  target = (destination / Path(*path.parts)).resolve()
+                  if os.path.commonpath([str(root), str(target)]) != str(root):
+                      raise SystemExit(f"path escape: {member.name}")
+                  total += member.size
+                  if member.size > 16_000_000 or total > 2_000_000:
+                      raise SystemExit("archive size bound exceeded")
+                  validated.append((member, target))
+              if total != int(os.environ["EXPECTED_UNCOMPRESSED_BYTES"]):
+                  raise SystemExit(f"uncompressed size mismatch: {total}")
+              for member, target in validated:
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  stream = bundle.extractfile(member)
+                  if stream is None:
+                      raise SystemExit(f"cannot read member: {member.name}")
+                  data = stream.read()
+                  if len(data) != member.size:
+                      raise SystemExit(f"short read: {member.name}")
+                  target.write_bytes(data)
+                  target.chmod(member.mode & 0o777)
+
+          required = ["VERSION", ".codex-plugin/plugin.json", ".github/workflows/ci.yml", "hooks/hooks.json", "scripts/ztad.py", "toolkit/ztad/mesh_runtime.py", "skills/zero-trust-delivery/SKILL.md", "policies/model-routing.yaml", "schemas/change-contract.schema.json", "tests"]
+          for relative in required:
+              if not (destination / relative).exists():
+                  raise SystemExit(f"missing source path: {relative}")
+          if (destination / "VERSION").read_text(encoding="utf-8").strip() != "4.2.0":
+              raise SystemExit("VERSION mismatch")
+          PY
+
+      - name: Publish exact verified source tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+          cp -a "$RUNNER_TEMP/source/." .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          ACTUAL_TREE="$(git write-tree)"
+          test "$ACTUAL_TREE" = "$EXPECTED_GIT_TREE" || { echo "Git tree mismatch: $ACTUAL_TREE" >&2; exit 1; }
+          git diff --cached --quiet && { echo "no materialization changes" >&2; exit 1; }
+          git commit -m "release: publish ZTAD Mesh 4.2.0 verified source"
+          git push origin HEAD:main
