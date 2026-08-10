@@ -1,0 +1,43 @@
+name: Diagnose source transport comments
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-source-comments.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Inspect owner-authored transport comments
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/1/comments?per_page=100" > "$RUNNER_TEMP/issue1.json"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/2/comments?per_page=100" > "$RUNNER_TEMP/issue2.json"
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          root = Path(os.environ["RUNNER_TEMP"])
+          for issue in (1, 2):
+              comments = json.loads((root / f"issue{issue}.json").read_text())
+              for comment in comments:
+                  if (comment.get("user") or {}).get("login") != "alihus294":
+                      continue
+                  body = comment.get("body") or ""
+                  header, separator, payload = body.partition("\n")
+                  if not separator or not header.startswith("ZTAD_SOURCE_"):
+                      continue
+                  payload = payload.rstrip("\r\n")
+                  digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+                  print(f"issue={issue} id={comment.get('id')} length={len(payload)} sha256={digest} header={header}")
+          PY
