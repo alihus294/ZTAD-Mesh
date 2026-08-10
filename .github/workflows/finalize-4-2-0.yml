@@ -1,0 +1,419 @@
+name: Finalize ZTAD Mesh 4.2.0
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/finalize-4-2-0.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ztad-finalize-4.2.0
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VERSION: 4.2.0
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+
+      - name: Materialize, validate, normalize, test, and publish clean source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import base64
+          import hashlib
+          import io
+          import json
+          import lzma
+          import os
+          import shutil
+          import stat
+          import subprocess
+          import tarfile
+          import tempfile
+          import textwrap
+          import zipfile
+          from pathlib import Path, PurePosixPath
+
+          REPO = Path.cwd().resolve()
+          VERSION = os.environ["VERSION"]
+          STAGE = Path(tempfile.mkdtemp(prefix="ztad-stage-"))
+          SOURCE = STAGE / "source"
+          DIST = STAGE / "dist"
+          DIST.mkdir(parents=True)
+
+          def run(*args: str, cwd: Path | None = None, capture: bool = False) -> str:
+              proc = subprocess.run(
+                  list(args), cwd=str(cwd or REPO), text=True,
+                  stdout=subprocess.PIPE if capture else None,
+                  stderr=subprocess.STDOUT if capture else None,
+                  check=False,
+              )
+              if proc.returncode:
+                  raise SystemExit(f"command failed ({proc.returncode}): {' '.join(args)}\n{proc.stdout or ''}")
+              return proc.stdout or ""
+
+          def sha256(path: Path) -> str:
+              h = hashlib.sha256()
+              with path.open("rb") as fh:
+                  for block in iter(lambda: fh.read(1024 * 1024), b""):
+                      h.update(block)
+              return h.hexdigest()
+
+          def safe_rel(name: str) -> PurePosixPath:
+              if "\\" in name or name.startswith(("/", "~")):
+                  raise SystemExit(f"unsafe archive member: {name!r}")
+              p = PurePosixPath(name)
+              if not p.parts or any(part in {"", ".", ".."} for part in p.parts):
+                  raise SystemExit(f"unsafe archive member: {name!r}")
+              return p
+
+          def safe_extract_tar_xz(data: bytes, destination: Path) -> Path:
+              if len(data) > 64 * 1024 * 1024:
+                  raise SystemExit("compressed bootstrap exceeds 64 MiB")
+              raw = lzma.decompress(data, format=lzma.FORMAT_XZ, memlimit=256 * 1024 * 1024)
+              if len(raw) > 256 * 1024 * 1024:
+                  raise SystemExit("expanded bootstrap exceeds 256 MiB")
+              destination.mkdir(parents=True, exist_ok=True)
+              roots: set[str] = set()
+              with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as tf:
+                  members = tf.getmembers()
+                  if len(members) > 10000:
+                      raise SystemExit("too many archive members")
+                  total = 0
+                  for member in members:
+                      rel = safe_rel(member.name)
+                      roots.add(rel.parts[0])
+                      total += max(0, member.size)
+                      if total > 256 * 1024 * 1024:
+                          raise SystemExit("archive exceeds expanded-size limit")
+                      if member.issym() or member.islnk() or member.isdev() or member.isfifo():
+                          raise SystemExit(f"unsupported archive member type: {member.name}")
+                      target = (destination / Path(*rel.parts)).resolve()
+                      if destination.resolve() not in target.parents and target != destination.resolve():
+                          raise SystemExit(f"archive path escape: {member.name}")
+                  if len(roots) != 1:
+                      raise SystemExit(f"expected one archive root, found {sorted(roots)}")
+                  for member in members:
+                      rel = safe_rel(member.name)
+                      target = destination / Path(*rel.parts)
+                      if member.isdir():
+                          target.mkdir(parents=True, exist_ok=True)
+                      elif member.isfile():
+                          target.parent.mkdir(parents=True, exist_ok=True)
+                          src = tf.extractfile(member)
+                          if src is None:
+                              raise SystemExit(f"cannot extract {member.name}")
+                          with target.open("xb") as out:
+                              shutil.copyfileobj(src, out)
+                          target.chmod(0o755 if member.mode & stat.S_IXUSR else 0o644)
+              return destination / next(iter(roots))
+
+          def find_plugin_root(root: Path) -> Path:
+              candidates = sorted(p.parent.parent for p in root.rglob(".codex-plugin/plugin.json"))
+              candidates = [p for p in candidates if (p / "scripts/ztad.py").is_file() and (p / "skills").is_dir()]
+              if len(candidates) != 1:
+                  raise SystemExit(f"expected one plugin root, found {[str(p) for p in candidates]}")
+              return candidates[0]
+
+          def ignored(rel: Path) -> bool:
+              parts = set(rel.parts)
+              return bool(parts & {".git", ".bootstrap", ".pytest_cache", "__pycache__", ".mypy_cache", ".ruff_cache", ".venv", "venv", "dist", "build"}) or rel.name.startswith(".coverage") or rel.suffix in {".pyc", ".pyo"}
+
+          # Prefer already-materialized source. Fall back to the validated bootstrap chunks.
+          if (REPO / ".codex-plugin/plugin.json").is_file() and (REPO / "scripts/ztad.py").is_file():
+              shutil.copytree(REPO, SOURCE, ignore=lambda d, names: [n for n in names if ignored((Path(d).relative_to(REPO) / n))])
+              plugin_root = SOURCE
+          else:
+              chunks = sorted((REPO / ".bootstrap").glob("source.b64.chunk-*"))
+              if not chunks:
+                  raise SystemExit("neither a materialized plugin nor bootstrap chunks were found")
+              encoded = b"".join(p.read_bytes().replace(b"\r", b"").replace(b"\n", b"") for p in chunks)
+              try:
+                  archive = base64.b64decode(encoded, validate=True)
+              except Exception as exc:
+                  raise SystemExit(f"invalid bootstrap base64: {exc}") from exc
+              extracted = safe_extract_tar_xz(archive, STAGE / "extract")
+              plugin_root = find_plugin_root(extracted)
+              shutil.copytree(plugin_root, SOURCE)
+              plugin_root = SOURCE
+
+          # Remove transport/runtime debris from the normalized source.
+          for p in sorted(SOURCE.rglob("*"), reverse=True):
+              rel = p.relative_to(SOURCE)
+              if ignored(rel):
+                  if p.is_dir():
+                      shutil.rmtree(p, ignore_errors=True)
+                  else:
+                      p.unlink(missing_ok=True)
+
+          required = [
+              ".codex-plugin/plugin.json", "scripts/ztad.py", "toolkit", "skills",
+              "policies", "schemas", "tests", "references/MASTER_PLAN.md",
+          ]
+          missing = [item for item in required if not (SOURCE / item).exists()]
+          if missing:
+              raise SystemExit(f"missing required source paths: {missing}")
+
+          manifest = json.loads((SOURCE / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+          if manifest.get("name") != "zero-trust-agentic-delivery":
+              raise SystemExit("unexpected plugin name")
+          if str(manifest.get("version")) != VERSION:
+              raise SystemExit(f"expected plugin version {VERSION}, found {manifest.get('version')!r}")
+
+          # Repository hygiene and operator-facing material.
+          generated = {
+              ".gitignore": """# Python\n__pycache__/\n*.py[cod]\n.pytest_cache/\n.mypy_cache/\n.ruff_cache/\n.coverage\n.coverage.*\nhtmlcov/\n.venv/\nvenv/\n\n# ZTAD runtime state\n.ztad/\n*.sqlite\n*.sqlite3\n*.db-wal\n*.db-shm\n\n# Build output\ndist/\nbuild/\n*.egg-info/\n\n# Editors / OS\n.vscode/\n.idea/\n.DS_Store\nThumbs.db\n""",
+              ".gitattributes": "* text=auto eol=lf\n*.png binary\n*.jpg binary\n*.jpeg binary\n*.gif binary\n*.zip binary\n*.xz binary\n",
+              ".editorconfig": "root = true\n\n[*]\ncharset = utf-8\nend_of_line = lf\ninsert_final_newline = true\ntrim_trailing_whitespace = true\n\n[*.py]\nindent_style = space\nindent_size = 4\n\n[*.{yml,yaml,json,md}]\nindent_style = space\nindent_size = 2\n",
+              "VERSION": VERSION + "\n",
+              "SECURITY.md": """# Security policy\n\nReport suspected vulnerabilities privately through GitHub Security Advisories for this repository. Do not publish credentials, exploit details, production data, or private source in a public issue.\n\nZTAD is a control toolkit, not a substitute for operating-system isolation, protected CI, branch rules, short-lived credentials, or deployment safeguards. A model response is never trusted execution evidence.\n\nThe supported line is 4.2.x. Host acceptance is mandatory before enabling governed merge or deployment.\n""",
+              "CONTRIBUTING.md": """# Contributing\n\n1. Open an issue describing the defect or bounded change.\n2. Keep changes small and preserve the zero-trust authority model.\n3. Add regression tests for every confirmed defect.\n4. Run the full test suite, offline evals, bundle validation, policy wiring, and reproducible-build check.\n5. Do not weaken protected checks, evidence binding, role separation, path controls, or retry-loop guards.\n6. Submit changes through a pull request. Never commit credentials or production data.\n\nSee `docs/HOST_ACCEPTANCE.md`, `docs/MODEL_SELECTION.md`, and `references/MASTER_PLAN.md`.\n""",
+              "CHANGELOG.md": """# Changelog\n\n## 4.2.0\n\n- Integrated adaptive multi-model routing and maximum useful parallelism.\n- Added durable DAG scheduling, leases, retries, quarantine, and explicit recovery.\n- Added isolated writer worktrees and deterministic candidate integration.\n- Bound approvals to real model runs, exact SHA/diff identity, and machine evidence.\n- Added loop fingerprints, progress invariants, scope guards, and child-task containment.\n- Hardened archive, path, Windows case-folding, test-integrity, and evidence controls.\n- Added explicit host-acceptance boundaries for providers, GitHub, CI, deployment, canary, and rollback.\n""",
+              "CODEOWNERS": "* @alihus294\n/.github/ @alihus294\n/.codex-plugin/ @alihus294\n/policies/ @alihus294\n/schemas/ @alihus294\n/toolkit/ @alihus294\n/hooks/ @alihus294\n",
+          }
+          for rel, content in generated.items():
+              path = SOURCE / rel
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(content, encoding="utf-8", newline="\n")
+
+          ci = '''name: CI
+
+          on:
+            push:
+              branches: [main]
+            pull_request:
+            merge_group:
+
+          permissions:
+            contents: read
+
+          concurrency:
+            group: ci-${{ github.workflow }}-${{ github.ref }}
+            cancel-in-progress: true
+
+          jobs:
+            validate:
+              runs-on: ubuntu-latest
+              timeout-minutes: 30
+              steps:
+                - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+                - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+                  with:
+                    python-version: "3.13"
+                - name: Install validation dependencies
+                  run: |
+                    python -m pip install --disable-pip-version-check pytest pytest-cov PyYAML==6.0.3 jsonschema==4.26.0 'cryptography>=48.0.1,<51'
+                    if [ -f requirements-dev.txt ]; then python -m pip install --disable-pip-version-check -r requirements-dev.txt; fi
+                - name: Compile
+                  run: python -B -m compileall -q toolkit scripts tests evals
+                - name: Unit and integration tests
+                  run: python -B -m pytest -q
+                - name: Offline evaluations
+                  run: |
+                    if [ -f evals/run_evals.py ]; then python -B evals/run_evals.py; fi
+                - name: Validate bundle and policy wiring
+                  run: |
+                    python -B scripts/ztad.py validate-bundle --root .
+                    python -B scripts/ztad.py policy-wiring --root .
+                - name: Reproducible distribution build
+                  run: |
+                    python -B scripts/build_distribution.py --source . --out "$RUNNER_TEMP/build-a" --version 4.2.0
+                    python -B scripts/build_distribution.py --source . --out "$RUNNER_TEMP/build-b" --version 4.2.0
+                    diff -u "$RUNNER_TEMP/build-a/DELIVERY_CHECKSUMS.sha256" "$RUNNER_TEMP/build-b/DELIVERY_CHECKSUMS.sha256"
+          '''
+          (SOURCE / ".github/workflows").mkdir(parents=True, exist_ok=True)
+          (SOURCE / ".github/workflows/ci.yml").write_text(textwrap.dedent(ci), encoding="utf-8", newline="\n")
+
+          dependabot = '''version: 2
+          updates:
+            - package-ecosystem: pip
+              directory: /
+              schedule:
+                interval: weekly
+              open-pull-requests-limit: 5
+            - package-ecosystem: github-actions
+              directory: /
+              schedule:
+                interval: weekly
+              open-pull-requests-limit: 5
+          '''
+          (SOURCE / ".github/dependabot.yml").write_text(textwrap.dedent(dependabot), encoding="utf-8", newline="\n")
+
+          builder = r'''from __future__ import annotations
+          import argparse, hashlib, json, shutil, tempfile, zipfile
+          from pathlib import Path, PurePosixPath
+
+          FIXED = (1980, 1, 1, 0, 0, 0)
+          EXCLUDED_PARTS = {'.git', '.bootstrap', '.pytest_cache', '__pycache__', '.mypy_cache', '.ruff_cache', '.venv', 'venv', 'dist', 'build'}
+
+          def ignored(rel: Path) -> bool:
+              return bool(set(rel.parts) & EXCLUDED_PARTS) or rel.name.startswith('.coverage') or rel.suffix in {'.pyc', '.pyo'}
+
+          def files(root: Path):
+              return [p for p in sorted(root.rglob('*')) if p.is_file() and not ignored(p.relative_to(root))]
+
+          def digest(path: Path) -> str:
+              h = hashlib.sha256()
+              with path.open('rb') as fh:
+                  for b in iter(lambda: fh.read(1024 * 1024), b''): h.update(b)
+              return h.hexdigest()
+
+          def write_manifest(root: Path, name='MANIFEST.sha256'):
+              target = root / name
+              rows = []
+              for p in files(root):
+                  if p == target: continue
+                  rows.append(f'{digest(p)}  {p.relative_to(root).as_posix()}')
+              target.write_text('\n'.join(rows) + '\n', encoding='utf-8', newline='\n')
+
+          def zip_tree(root: Path, archive: Path, top: str):
+              archive.parent.mkdir(parents=True, exist_ok=True)
+              with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+                  for p in files(root):
+                      rel = PurePosixPath(top) / PurePosixPath(p.relative_to(root).as_posix())
+                      info = zipfile.ZipInfo(str(rel), FIXED)
+                      info.create_system = 3
+                      info.external_attr = (0o100755 if p.stat().st_mode & 0o111 else 0o100644) << 16
+                      info.compress_type = zipfile.ZIP_DEFLATED
+                      zf.writestr(info, p.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+
+          def build(source: Path, out: Path, version: str):
+              source = source.resolve(); out.mkdir(parents=True, exist_ok=True)
+              with tempfile.TemporaryDirectory(prefix='ztad-build-') as td:
+                  td = Path(td)
+                  plugin = td / f'zero-trust-agentic-delivery-plugin-{version}'
+                  shutil.copytree(source, plugin, ignore=lambda d,n:[x for x in n if ignored(Path(d).resolve().relative_to(source) / x)])
+                  write_manifest(plugin)
+                  plugin_zip = out / f'zero-trust-agentic-delivery-plugin-{version}.zip'
+                  zip_tree(plugin, plugin_zip, plugin.name)
+
+                  market = td / 'zero-trust-agentic-delivery-marketplace'
+                  nested = market / 'plugins/zero-trust-agentic-delivery'
+                  shutil.copytree(plugin, nested)
+                  meta = market / '.agents/plugins/marketplace.json'; meta.parent.mkdir(parents=True)
+                  meta.write_text(json.dumps({'name':'ztad-local','plugins':[{'name':'zero-trust-agentic-delivery','source':{'source':'local','path':'./plugins/zero-trust-agentic-delivery'},'description':'Zero-Trust Agentic Delivery Mesh'}]}, indent=2, sort_keys=True) + '\n', encoding='utf-8', newline='\n')
+                  (market / 'MARKETPLACE_VERSION.json').write_text(json.dumps({'name':'ztad-local','version':version}, indent=2, sort_keys=True) + '\n', encoding='utf-8', newline='\n')
+                  write_manifest(market)
+                  market_zip = out / f'zero-trust-agentic-delivery-marketplace-{version}.zip'
+                  zip_tree(market, market_zip, market.name)
+
+                  source_zip = out / f'ZTAD-Mesh-{version}-source.zip'
+                  zip_tree(source, source_zip, f'ZTAD-Mesh-{version}')
+
+              artifacts = [plugin_zip, market_zip, source_zip]
+              checks = '\n'.join(f'{digest(p)}  {p.name}' for p in sorted(artifacts)) + '\n'
+              (out / 'DELIVERY_CHECKSUMS.sha256').write_text(checks, encoding='utf-8', newline='\n')
+              (out / 'RELEASE_MANIFEST.json').write_text(json.dumps({'product':'ZTAD-Mesh','version':version,'artifacts':[{'name':p.name,'sha256':digest(p),'size':p.stat().st_size} for p in sorted(artifacts)]}, indent=2, sort_keys=True) + '\n', encoding='utf-8', newline='\n')
+              return artifacts
+
+          if __name__ == '__main__':
+              ap=argparse.ArgumentParser(); ap.add_argument('--source',type=Path,default=Path('.')); ap.add_argument('--out',type=Path,required=True); ap.add_argument('--version',required=True)
+              a=ap.parse_args(); build(a.source,a.out,a.version)
+          '''
+          builder = textwrap.dedent(builder)
+          (SOURCE / "scripts/build_distribution.py").write_text(builder, encoding="utf-8", newline="\n")
+
+          release_process = '''# Release process
+
+          1. Complete target-host acceptance and model/provider probes.\n2. Run the full CI suite and offline evals.\n3. Build twice with `scripts/build_distribution.py`; checksums must match.\n4. Review the exact candidate SHA with an independent frontier session.\n5. Tag the verified commit.\n6. Publish the Marketplace, standalone Plugin, source archive, manifest, and checksums.\n7. Install in a fresh Codex session and begin with `AUDIT` and `DRY_RUN`.\n8. Governed merge or deployment remains disabled until external platform evidence is verified.\n'''
+          (SOURCE / "docs/RELEASE_PROCESS.md").write_text(release_process, encoding="utf-8", newline="\n")
+
+          # Source manifest is generated after all normalized files are present.
+          source_manifest = SOURCE / "SOURCE_MANIFEST.sha256"
+          rows = []
+          for p in sorted(SOURCE.rglob("*")):
+              if p.is_file() and p != source_manifest and not ignored(p.relative_to(SOURCE)):
+                  rows.append(f"{sha256(p)}  {p.relative_to(SOURCE).as_posix()}")
+          source_manifest.write_text("\n".join(rows) + "\n", encoding="utf-8", newline="\n")
+
+          # Install only the validation dependencies needed by the source.
+          run("python", "-m", "pip", "install", "--disable-pip-version-check", "pytest", "pytest-cov", "PyYAML==6.0.3", "jsonschema==4.26.0", "cryptography>=48.0.1,<51")
+          if (SOURCE / "requirements-dev.txt").is_file():
+              run("python", "-m", "pip", "install", "--disable-pip-version-check", "-r", "requirements-dev.txt", cwd=SOURCE)
+
+          run("python", "-B", "-m", "compileall", "-q", "toolkit", "scripts", "tests", cwd=SOURCE)
+          run("python", "-B", "-m", "pytest", "-q", cwd=SOURCE)
+          if (SOURCE / "evals/run_evals.py").is_file():
+              run("python", "-B", "evals/run_evals.py", cwd=SOURCE)
+          run("python", "-B", "scripts/ztad.py", "validate-bundle", "--root", ".", cwd=SOURCE)
+          run("python", "-B", "scripts/ztad.py", "policy-wiring", "--root", ".", cwd=SOURCE)
+
+          # Reproducible build check.
+          a, b = STAGE / "build-a", STAGE / "build-b"
+          run("python", "-B", "scripts/build_distribution.py", "--source", ".", "--out", str(a), "--version", VERSION, cwd=SOURCE)
+          run("python", "-B", "scripts/build_distribution.py", "--source", ".", "--out", str(b), "--version", VERSION, cwd=SOURCE)
+          for pa in sorted(a.iterdir()):
+              pb = b / pa.name
+              if not pb.is_file() or sha256(pa) != sha256(pb):
+                  raise SystemExit(f"non-reproducible distribution artifact: {pa.name}")
+          shutil.copytree(a, DIST, dirs_exist_ok=True)
+
+          # Replace only the working tree; keep .git. This removes bootstrap/probe debris from main.
+          for child in REPO.iterdir():
+              if child.name == ".git":
+                  continue
+              if child.is_dir(): shutil.rmtree(child)
+              else: child.unlink()
+          for child in SOURCE.iterdir():
+              dest = REPO / child.name
+              if child.is_dir(): shutil.copytree(child, dest)
+              else: shutil.copy2(child, dest)
+
+          # Copy release assets outside tracked source; they will be uploaded after the commit.
+          release_out = REPO / ".release-out"
+          shutil.copytree(DIST, release_out)
+          (release_out / "RELEASE_NOTES.md").write_text(
+              f"# ZTAD Mesh {VERSION}\n\nValidated multi-model autonomous delivery source, Codex Marketplace, standalone Plugin, source archive, checksums, and manifest. Target-host acceptance remains mandatory before governed merge or deployment.\n",
+              encoding="utf-8", newline="\n"
+          )
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A ':!.release-out'
+          if ! git diff --cached --quiet; then
+            git commit -m "release: publish clean ZTAD Mesh 4.2.0 source"
+            git push origin HEAD:main
+          fi
+
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            TAG_SHA="$(git rev-list -n 1 "v${VERSION}")"
+            test "$TAG_SHA" = "$HEAD_SHA" || { echo "existing tag v${VERSION} targets $TAG_SHA, expected $HEAD_SHA" >&2; exit 1; }
+          else
+            git tag -a "v${VERSION}" -m "ZTAD Mesh ${VERSION}"
+            git push origin "v${VERSION}"
+          fi
+
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            gh release upload "v${VERSION}" .release-out/* --clobber
+          else
+            gh release create "v${VERSION}" .release-out/* \
+              --title "ZTAD Mesh ${VERSION}" \
+              --notes-file .release-out/RELEASE_NOTES.md \
+              --verify-tag
+          fi
+
+          rm -rf .release-out
