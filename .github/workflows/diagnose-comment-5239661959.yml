@@ -1,0 +1,37 @@
+name: Diagnose corrected part 3 segment 2 payload
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-comment-5239661959.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Inspect exact stored payload chunks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/comments/5239661959" > "$RUNNER_TEMP/comment.json"
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          item = json.loads((Path(os.environ['RUNNER_TEMP']) / 'comment.json').read_text(encoding='utf-8'))
+          header, sep, raw = item['body'].partition('\n')
+          payload = ''.join(raw.split())
+          print(f'header={header}')
+          print(f'length={len(payload)} sha256={hashlib.sha256(payload.encode("ascii")).hexdigest()}')
+          for i in range(4):
+              chunk = payload[i*4000:(i+1)*4000]
+              print(f'chunk={i} length={len(chunk)} sha256={hashlib.sha256(chunk.encode("ascii")).hexdigest()} prefix={chunk[:24]} suffix={chunk[-24:]}')
+          PY
