@@ -1,0 +1,144 @@
+name: Assemble canonical verified source part 4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/assemble-part4-canonical.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify chunks and publish canonical segments
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          import tempfile
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          issue = 2
+          chunk_specs = {
+              (0, 0): (5239859933, 'd589859e41fa4be1ef2129297c8987c0f0b89bdb16e9e59762dc8f74364adcdd'),
+              (0, 1): (5239873243, '4624f43b8888e75241b4a938e1a4db2303bfa6b30b767206cc7dc624f12c1cad'),
+              (0, 2): (5239887194, '996231719d3575943247e842aea40c3cc87c81e85d4ed9909e859f56fd57ae47'),
+              (0, 3): (5239923685, 'b2b84c3531aa9d4bd2ad5e6a5ff30c37df6a557e5e0118b806e3ecfaa165b4d0'),
+              (1, 0): (5239940591, 'e5612fbb55b5b85eef6f1a398b111f54ee7ba815df604e023054f62aa179477f'),
+              (1, 1): (5239963839, '31645d89e073d8861e80114c61ccf97379ff57364a882b733fb4d26ac0fbe913'),
+              (1, 2): (5239986267, '588050053c6ec3e5500562d418c51b8c57d0dd26f47b87c434e94bde1d5363ec'),
+              (1, 3): (5240009368, '48b75d87dfc8948ab18e8c022686f55575d26b0c4e78df7a311304da430a98c7'),
+              (2, 0): (5240031707, '2c0252b9ff6edf846b9972050e653afcb719735a2d31f02883adabd28237264b'),
+              (2, 1): (5240053799, 'c6423f57b24a5e01d79b31580312b09ab01d0e013962850b294cac3a3ef81e45'),
+              (2, 2): (5240079858, '84dcc69e305f59ed0960f417a2bfcf0f2273dec39e9a12b506dc2e867f6f9c04'),
+              (2, 3): (5240102782, '6a642902c65c34b529e18111f7c6d8808dd1e750eff30934666c31975d4f9bf2'),
+              (3, 0): (5240124217, 'bdede308357a5b06d28fc9a3da3f1da85900e0b714da1cfdd0274956a454b6d6'),
+          }
+          segment_specs = {
+              0: (16000, '2304583bc2f7394acfb5ac0e0ffbf878afb623ba51747fb3fd40864f5e75f4ca'),
+              1: (16000, '27912ed84e19cefa2d07f2429f38c9b88abe4a07b0a2ce343835a9d02df42090'),
+              2: (16000, '94df9d65dccba759c39ee410da43142533ae4488b65757681231940182245e16'),
+              3: (4000, 'bdede308357a5b06d28fc9a3da3f1da85900e0b714da1cfdd0274956a454b6d6'),
+          }
+          expected_part_hash = '6ad4f2c680e10ca75185a05376d805a5994ae6936882f8400af6d6810ccc09b8'
+          chunk_re = re.compile(r'ZTAD_SOURCE_PART4_SEGMENT_CHUNK ([0-3]) ([0-3]) 4000 ([0-9a-f]{64})')
+          canonical_re = re.compile(r'ZTAD_SOURCE_PART4_SEGMENT ([0-3]) ([0-9]+) ([0-9a-f]{64})')
+
+          def api(args, payload=None):
+              command = ['gh', 'api', *args]
+              request_path = None
+              if payload is not None:
+                  with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False) as stream:
+                      json.dump(payload, stream, separators=(',', ':'))
+                      request_path = stream.name
+                  command.extend(['--input', request_path])
+              try:
+                  return json.loads(subprocess.run(command, check=True, capture_output=True, text=True).stdout)
+              finally:
+                  if request_path:
+                      Path(request_path).unlink(missing_ok=True)
+
+          chunks = {}
+          for key, (comment_id, expected_hash) in chunk_specs.items():
+              item = api([f'repos/{repo}/issues/comments/{comment_id}'])
+              header, separator, raw = item['body'].partition('\n')
+              match = chunk_re.fullmatch(header.strip()) if separator else None
+              payload = ''.join(raw.split()) if separator else ''
+              digest = hashlib.sha256(payload.encode('ascii')).hexdigest()
+              if not match or (int(match.group(1)), int(match.group(2))) != key or match.group(3) != expected_hash:
+                  raise SystemExit(f'invalid chunk header for {key}')
+              if len(payload) != 4000 or digest != expected_hash:
+                  raise SystemExit(f'invalid chunk payload for {key}: length={len(payload)} hash={digest}')
+              chunks[key] = payload
+
+          segments = {}
+          for index, (expected_length, expected_hash) in segment_specs.items():
+              count = 4 if index < 3 else 1
+              payload = ''.join(chunks[(index, chunk)] for chunk in range(count))
+              digest = hashlib.sha256(payload.encode('ascii')).hexdigest()
+              if len(payload) != expected_length or digest != expected_hash:
+                  raise SystemExit(f'segment {index} integrity failure: length={len(payload)} hash={digest}')
+              segments[index] = payload
+
+          part = ''.join(segments[index] for index in range(4))
+          part_hash = hashlib.sha256(part.encode('ascii')).hexdigest()
+          if len(part) != 52000 or part_hash != expected_part_hash:
+              raise SystemExit(f'part 4 integrity failure: length={len(part)} hash={part_hash}')
+
+          comments = []
+          for page in range(1, 30):
+              page_items = api([f'repos/{repo}/issues/{issue}/comments?per_page=100&page={page}'])
+              comments.extend(page_items)
+              if len(page_items) < 100:
+                  break
+          valid_existing = {}
+          for item in comments:
+              body = item.get('body')
+              if not isinstance(body, str):
+                  continue
+              header, separator, raw = body.partition('\n')
+              match = canonical_re.fullmatch(header.strip()) if separator else None
+              if not match:
+                  continue
+              index = int(match.group(1))
+              expected_length, expected_hash = segment_specs[index]
+              payload = ''.join(raw.split())
+              digest = hashlib.sha256(payload.encode('ascii')).hexdigest()
+              if int(match.group(2)) == expected_length and match.group(3) == expected_hash and len(payload) == expected_length and digest == expected_hash:
+                  valid_existing[index] = item['id']
+
+          published = {}
+          for index, payload in segments.items():
+              expected_length, expected_hash = segment_specs[index]
+              if index in valid_existing:
+                  published[index] = valid_existing[index]
+                  continue
+              body = f'ZTAD_SOURCE_PART4_SEGMENT {index} {expected_length} {expected_hash}\n{payload}'
+              item = api(['--method', 'POST', f'repos/{repo}/issues/{issue}/comments'], {'body': body})
+              published[index] = item['id']
+
+          for index, comment_id in published.items():
+              item = api([f'repos/{repo}/issues/comments/{comment_id}'])
+              header, separator, raw = item['body'].partition('\n')
+              match = canonical_re.fullmatch(header.strip()) if separator else None
+              payload = ''.join(raw.split()) if separator else ''
+              expected_length, expected_hash = segment_specs[index]
+              digest = hashlib.sha256(payload.encode('ascii')).hexdigest()
+              if not match or int(match.group(1)) != index or int(match.group(2)) != expected_length or match.group(3) != expected_hash or len(payload) != expected_length or digest != expected_hash:
+                  raise SystemExit(f'provider verification failed for canonical segment {index}')
+          print(json.dumps({'part': 4, 'length': len(part), 'sha256': part_hash, 'comments': published}, sort_keys=True))
+          PY
