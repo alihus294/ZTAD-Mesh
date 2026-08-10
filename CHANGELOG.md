@@ -21,8 +21,11 @@
 - Removed the legacy installer version fallback; installation now fails closed when VERSION is missing, symlinked, or malformed.
 - Pinned the public-source CI test environment, moved generated CI evidence outside the source tree, and pinned GitHub Actions to reviewed full commit SHAs.
 - Added deterministic complete-release metadata through `SOURCE_DATE_EPOCH` and regression coverage for full release-tree reproducibility.
-- Increased the verified local test inventory to 227 after adding release-reproducibility regression tests.
-- Pinned the governed-signing runtime to cryptography 49.0.0 and added native Linux/Windows CI verification for the exact dependency lock.
+- Increased the verified test inventory to 227 after adding release-reproducibility regression tests.
+- Published the exact 253-file source tree after validating the Base64 transport, compressed archive, extracted byte count, required paths, and final Git tree.
+- Fixed Windows patch transport by preserving Git patches as bytes and canonically recovering LF framing after text-mode CRLF conversion; patch validation and worktree application now use the same binary-safe path.
+- Scoped `SOURCE_DATE_EPOCH` to deterministic distribution builds so Windows dependency installation no longer receives a pre-1980 ZIP timestamp.
+- Pinned governed signing to `cryptography 50.0.0` to include the CVE-2026-69247 PKCS#7 oracle fix, raised the accepted signing floor to `>=50.0.0,<51`, and updated the reviewed build/test locks to setuptools 83.0.0, coverage 7.15.4, and hypothesis 6.165.2.
 - Added repository issue forms, editor configuration, expanded CODEOWNERS, stronger pull-request evidence fields, and deterministic archive validation in CI.
 
 ## 2.0.0 — 2026-08-09
