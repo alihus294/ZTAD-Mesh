@@ -35,6 +35,7 @@ The low-risk path is deliberately small. It does not run redundant scout, plan-a
 - exact run/session/SHA/diff/evidence binding for approvals;
 - no automatic transition to `MERGE_READY` from model success;
 - loop fingerprints, measurable-progress requirements, bounded repair budgets, quarantine, and explicit reactivation;
+- deterministic Plugin/Marketplace builds with post-publication checksum verification;
 - conservative host-acceptance and platform-readiness reporting.
 
 ## Thirteen explicit-only skills
@@ -67,6 +68,25 @@ Models propose or write bounded patches
 
 A model response is never CI evidence, approval evidence, deployment evidence, or proof of production health.
 
+## Verified release artifacts
+
+The release workflow is CI-gated. After a successful `main` CI run it:
+
+1. checks out the exact CI-approved commit and refuses stale-main publication;
+2. validates version identity across `VERSION`, plugin metadata, and Python package metadata;
+3. re-runs release-critical regressions with `ResourceWarning` treated as an error;
+4. builds Plugin and Marketplace distributions twice and compares them byte-for-byte;
+5. validates both archives and their internal manifests;
+6. creates `CHECKSUMS.sha256`;
+7. creates an exact commit-bound version tag and publishes without overwriting an existing release;
+8. re-downloads the public assets and verifies checksums and archive validity again.
+
+After downloading the release files, verify them before installation:
+
+```bash
+python scripts/verify_release.py CHECKSUMS.sha256
+```
+
 ## Safe first run
 
 ```bash
@@ -82,12 +102,14 @@ Inspect the dry-run execution mode, model-call count, route preview, scopes, che
 
 ## Claim boundary
 
-The bundled SQLite stores provide durable single-host coordination, not multi-host high availability. Local validation does not prove hosted model quality, provider credentials, GitHub rulesets, protected CI, merge queue, deployment, canary health, or rollback on a target environment. Those remain mandatory target-host acceptance gates.
+The bundled SQLite stores provide durable single-host coordination, not multi-host high availability. Local validation and repository CI do not prove hosted model quality, provider credentials, GitHub rulesets, merge queue, deployment, canary health, or rollback on a target environment. Those remain mandatory target-host acceptance gates.
 
 ## Operational references
 
+- `QUICKSTART.md` — installation and first-run sequence.
 - `docs/ARCHITECTURE.md` — risk-proportional architecture and authority boundaries.
 - `docs/MODEL_SELECTION.md` — model eligibility, preferences, benchmark freshness, and reasoning ceilings.
 - `docs/OPERATING_GUIDE.md` — operating paths, escalation, and recovery.
 - `docs/HOST_ACCEPTANCE.md` — mandatory target-host gates.
+- `docs/PLUGIN_INSTALLATION.md` — versioned release installation.
 - `docs/VALIDATION_REPORT.md` — executed validation evidence and claim boundaries.
