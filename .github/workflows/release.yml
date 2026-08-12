@@ -41,20 +41,20 @@ jobs:
           else
             sha="$DISPATCH_SHA"
           fi
-          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
             echo "Invalid source commit: $sha" >&2
             exit 1
-          fi
+          }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      - name: Check out exact CI-approved source
+      - name: Check out exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.source.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify source is current main
+      - name: Verify source is current CI-approved main
         shell: bash
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
@@ -63,7 +63,13 @@ jobs:
           set -euo pipefail
           main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
           test "$SOURCE_SHA" = "$main_sha" || {
-            echo "Refusing to release stale commit $SOURCE_SHA; main is $main_sha" >&2
+            echo "Refusing stale release: source=$SOURCE_SHA main=$main_sha" >&2
+            exit 1
+          }
+          successes="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SOURCE_SHA}&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name == "CI" and .head_branch == "main" and .conclusion == "success")] | length')"
+          test "$successes" -ge 1 || {
+            echo "No successful CI run found for current main $SOURCE_SHA" >&2
             exit 1
           }
 
@@ -107,7 +113,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      - name: Refuse conflicting existing tag or release
+      - name: Check existing tag and release identity
         shell: bash
         env:
           TAG: ${{ steps.version.outputs.tag }}
@@ -115,23 +121,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/tmp/tag.json 2>/dev/null; then
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
             tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
             test "$tag_sha" = "$SOURCE_SHA" || {
-              echo "Tag $TAG already points to $tag_sha, not $SOURCE_SHA" >&2
+              echo "Conflicting tag $TAG: $tag_sha != $SOURCE_SHA" >&2
               exit 1
             }
-            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "Release $TAG already exists for the approved source; nothing to publish."
-              echo "ZTAD_RELEASE_ALREADY_EXISTS=1" >> "$GITHUB_ENV"
-            fi
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "ZTAD_RELEASE_ALREADY_EXISTS=1" >> "$GITHUB_ENV"
           fi
 
       - name: Compile Python sources
         if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
         run: python -m compileall -q toolkit scripts evals tests
 
-      - name: Re-run release-critical tests
+      - name: Re-run release-critical regressions
         if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
         env:
           PYTHONPATH: toolkit
@@ -179,7 +184,7 @@ jobs:
           python -B scripts/ztad.py validate-distribution --archive "$plugin" --kind plugin
           python -B scripts/ztad.py validate-distribution --archive "$marketplace" --kind marketplace
 
-      - name: Materialize release assets and checksums
+      - name: Materialize checksummed release assets
         if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
         shell: bash
         env:
@@ -225,7 +230,7 @@ jobs:
           cat > "${RUNNER_TEMP}/release-notes.md" <<EOF
           ## ZTAD Mesh ${VERSION}
 
-          Guarded risk-proportional release built from exact commit \`${SOURCE_SHA}\`.
+          Guarded risk-proportional release built from exact CI-approved commit \`${SOURCE_SHA}\`.
 
           Release properties:
           - R0/R1: Luna primary worker, deterministic gates, one Sol final guard.
@@ -251,7 +256,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test ! "$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName --jq ".[] | select(.tagName == \"${TAG}\") | .tagName")" = "$TAG"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Refusing to overwrite existing release $TAG" >&2
+            exit 1
+          fi
           gh release create "$TAG" \
             "${RUNNER_TEMP}/release/zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
             "${RUNNER_TEMP}/release/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
@@ -263,7 +271,6 @@ jobs:
             --latest
 
       - name: Re-download and verify published release
-        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
         shell: bash
         env:
           TAG: ${{ steps.version.outputs.tag }}
@@ -272,6 +279,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          rm -rf "${RUNNER_TEMP}/published"
           mkdir -p "${RUNNER_TEMP}/published"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "${RUNNER_TEMP}/published"
           python scripts/verify_release.py "${RUNNER_TEMP}/published/CHECKSUMS.sha256"
@@ -281,8 +289,14 @@ jobs:
             --archive "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" --kind marketplace
           tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
           test "$tag_sha" = "$SOURCE_SHA"
-          asset_count="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')"
-          test "$asset_count" = "3"
+          release_state="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '[.isDraft,.isPrerelease] | @tsv')"
+          test "$release_state" = $'false\tfalse'
+          asset_names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)"
+          expected_names="$(printf '%s\n' \
+            'CHECKSUMS.sha256' \
+            "zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
+            "zero-trust-agentic-delivery-plugin-${VERSION}.zip" | sort)"
+          test "$asset_names" = "$expected_names"
 
       - name: Prove source checkout remained unchanged
         shell: bash
