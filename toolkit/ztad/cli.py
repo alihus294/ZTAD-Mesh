@@ -76,6 +76,71 @@ def _repo_path(repo: GitRepository, raw: str | Path) -> Path:
     return path if path.is_absolute() else repo.root / path
 
 
+def _route_preview(plan, router: AdaptiveModelRouter) -> dict[str, Any]:
+    deterministic_roles = {"repository_indexer", "patch_integrator", "check_runner"}
+    items: list[dict[str, Any]] = []
+    for node in plan.nodes:
+        if node.role in deterministic_roles:
+            continue
+        metadata = node.metadata or {}
+        profile = TaskProfile(
+            task_family=node.task_family, role=node.role, risk=node.risk,
+            complexity=int(metadata.get("complexity", 1)), ambiguity=int(metadata.get("ambiguity", 0)),
+            required_provider_diversity=bool(metadata.get("require_provider_diversity", False)),
+            preferred_provider=metadata.get("preferred_provider"),
+            preferred_registry_id=metadata.get("preferred_registry_id"),
+            maximum_reasoning_effort=metadata.get("maximum_reasoning_effort"),
+            excluded_models=tuple(metadata.get("excluded_models", [])),
+            excluded_providers=tuple(metadata.get("excluded_providers", [])),
+        )
+        try:
+            selected = router.route(profile)
+            ranking = router.ranked(profile)[:3]
+            items.append({
+                "node_id": node.node_id, "role": node.role, "task_family": node.task_family,
+                "selected": selected.to_dict(), "top_candidates": ranking,
+            })
+        except LookupError as exc:
+            items.append({
+                "node_id": node.node_id, "role": node.role, "task_family": node.task_family,
+                "selected": None, "top_candidates": [], "error": str(exc),
+            })
+    return {
+        "model_call_count": len(items), "nodes": items,
+        "claim_boundary": (
+            "Catalog-prior route preview only. It performs no model call and does not prove provider availability, "
+            "authentication, benchmark promotion, or target-host acceptance."
+        ),
+    }
+
+
+def _provider_capability_fingerprint(registry: ProviderRegistry) -> str:
+    probes = registry.probe_all()
+    material: dict[str, Any] = {}
+    for name, probe in sorted(probes.items()):
+        material[name] = {
+            "provider": probe.get("provider", name),
+            "available": bool(probe.get("available")),
+            "executable": probe.get("executable"),
+            "version": probe.get("version"),
+        }
+    return sha256_json(material)
+
+
+def _benchmark_cache_metadata(cases, registry: ProviderRegistry) -> dict[str, str]:
+    suite_hash = benchmark_suite_hash(cases)
+    provider_fingerprint = _provider_capability_fingerprint(registry)
+    cache_hash = sha256_json({
+        "benchmark_suite_hash": suite_hash,
+        "provider_executable_fingerprint": provider_fingerprint,
+    })
+    return {
+        "benchmark_suite_hash": suite_hash,
+        "provider_executable_fingerprint": provider_fingerprint,
+        "benchmark_cache_hash": cache_hash,
+    }
+
+
 def _repo_args(parser: argparse.ArgumentParser, *, revisions: bool = False) -> None:
     parser.add_argument("--repo", default=".", help="Repository path")
     if revisions:
@@ -359,6 +424,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--prior-failures", type=int, default=0)
     p.add_argument("--require-provider-diversity", action="store_true")
     p.add_argument("--previous-provider")
+    p.add_argument("--preferred-registry-id")
+    p.add_argument("--maximum-reasoning-effort", choices=["none", "low", "medium", "high", "xhigh", "max", "ultra"])
 
     p = sub.add_parser("model-benchmark", help="Run explicit local task-family benchmarks for routing")
     _repo_args(p)
@@ -396,7 +463,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--check-config", default=".delivery/ztad/config.json")
     p.add_argument("--command-policy", default=str(_root_file("policies/command-policy.yaml")))
     p.add_argument("--risk-policy", default=str(_root_file("policies/risk-policy.yaml")))
-    p.add_argument("--max-parallel-writers", type=int, default=8)
+    p.add_argument("--catalog", default=str(_root_file("policies/model-catalog.yaml")))
+    p.add_argument("--max-parallel-writers", type=int, default=6)
     p.add_argument("--max-plan-candidates", type=int, default=4)
     p.add_argument("--dry-run", action="store_true")
 
@@ -420,7 +488,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--auto-benchmark", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--benchmark-cases", default=str(_root_file("evals/model-benchmark-cases.json")))
     p.add_argument("--benchmark-timeout-seconds", type=int, default=600)
-    p.add_argument("--max-parallel-writers", type=int, default=8)
+    p.add_argument("--max-parallel-writers", type=int, default=6)
     p.add_argument("--max-plan-candidates", type=int, default=4)
     p.add_argument("--max-nodes", type=int, default=8)
     p.add_argument("--maximum-ticks", type=int, default=100)
@@ -770,6 +838,8 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
             complexity=args.complexity, ambiguity=args.ambiguity,
             prior_failures=args.prior_failures,
             required_provider_diversity=args.require_provider_diversity,
+            preferred_registry_id=args.preferred_registry_id,
+            maximum_reasoning_effort=args.maximum_reasoning_effort,
         )
         decision = router.route(profile, previous_provider=args.previous_provider)
         return {"selected": decision.to_dict(), "ranking": router.ranked(profile, previous_provider=args.previous_provider)}, 0
@@ -782,10 +852,14 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                 raise ValueError("provider config must contain a providers array")
             provider_items.extend(GenericStructuredCommandProvider.from_mapping(item) for item in raw)
         router = AdaptiveModelRouter.from_file(Path(args.catalog))
-        result = ModelBenchmarkRunner(router, ProviderRegistry(provider_items)).run(
-            load_benchmark_cases(Path(args.cases)), cwd=Path(args.repo).resolve(),
+        provider_registry = ProviderRegistry(provider_items)
+        benchmark_cases = load_benchmark_cases(Path(args.cases))
+        cache_metadata = _benchmark_cache_metadata(benchmark_cases, provider_registry)
+        result = ModelBenchmarkRunner(router, provider_registry).run(
+            benchmark_cases, cwd=Path(args.repo).resolve(),
             registry_ids=args.registry_id, timeout_seconds=args.timeout_seconds,
         )
+        result.update(cache_metadata)
         if args.mesh_database:
             store = MeshStore(Path(args.mesh_database))
             for model in result["results"]:
@@ -795,9 +869,9 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                     store.record_model_performance(
                         registry_id=model["registry_id"], task_family=case["task_family"],
                         success=bool(case["success"]), quality=float(case["score"]),
-                        latency=float(case["latency_seconds"]),
-                        cost=max(0.01, float((case.get("input_tokens") or 0) + (case.get("output_tokens") or 0)) / 100000.0),
-                        catalog_hash=result["catalog_hash"], benchmark_suite_hash=result["benchmark_suite_hash"],
+                        latency=next(item.latency_index for item in router.candidates if item.registry_id == model["registry_id"]),
+                        cost=next(item.cost_index for item in router.candidates if item.registry_id == model["registry_id"]),
+                        catalog_hash=result["catalog_hash"], benchmark_suite_hash=result["benchmark_cache_hash"],
                     )
             result["persisted_to_mesh_database"] = str(Path(args.mesh_database).resolve())
         return result, 0
@@ -833,7 +907,11 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
         )
         payload = mesh_plan.to_dict()
         if args.dry_run:
-            return {"dry_run": True, "repository_mutated": False, "plan": payload}, 0
+            router = AdaptiveModelRouter.from_file(Path(args.catalog))
+            return {
+                "dry_run": True, "repository_mutated": False, "plan": payload,
+                "route_preview": _route_preview(mesh_plan, router),
+            }, 0
         written = write_mesh_plan(mesh_plan, repository=repo.root, output_file=Path(args.plan_output))
         return {"dry_run": False, "repository_mutated": True, "plan": payload, "written": written}, 0
     if command == "mesh-autopilot":
@@ -856,8 +934,12 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
             maximum_plan_candidates=args.max_plan_candidates,
         )
         if args.dry_run:
+            router = AdaptiveModelRouter.from_file(Path(args.catalog))
             result = preparation.to_dict(include_plan=True)
-            result.update({"dry_run": True, "repository_mutated": False, "database_mutated": False})
+            result.update({
+                "dry_run": True, "repository_mutated": False, "database_mutated": False,
+                "route_preview": _route_preview(preparation.plan, router),
+            })
             return result, 0
         persisted = submit_prepared_autopilot(
             preparation=preparation, contract=contract, title=str(contract.get("title") or task_id),
@@ -877,10 +959,11 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
         router = AdaptiveModelRouter.from_file(Path(args.catalog))
         provider_registry = ProviderRegistry(provider_items)
         benchmark_result = None
+        cases = load_benchmark_cases(Path(args.benchmark_cases))
+        cache_metadata = _benchmark_cache_metadata(cases, provider_registry)
+        catalog_hash = sha256_json(router.catalog)
+        benchmark_cache_hash = cache_metadata["benchmark_cache_hash"]
         if args.auto_benchmark:
-            cases = load_benchmark_cases(Path(args.benchmark_cases))
-            catalog_hash = sha256_json(router.catalog)
-            suite_hash = benchmark_suite_hash(cases)
             active_families = {
                 node["task_family"] for node in mesh_store.list_nodes(task_id=preparation.task_id)
                 if node["role"] not in {"repository_indexer", "patch_integrator", "check_runner"}
@@ -889,7 +972,8 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
             missing_families = {
                 family for family in active_families
                 if not mesh_store.performance_overrides(
-                    family, catalog_hash=catalog_hash, benchmark_suite_hash=suite_hash
+                    family, catalog_hash=catalog_hash, benchmark_suite_hash=benchmark_cache_hash,
+                    minimum_runs=int(router.policy.get("minimum_observations_for_override", 1)),
                 )
             }
             selected_cases = [case for case in cases if case.task_family in missing_families]
@@ -897,6 +981,7 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                 benchmark_result = ModelBenchmarkRunner(router, provider_registry).run(
                     selected_cases, cwd=repo.root, timeout_seconds=args.benchmark_timeout_seconds,
                 )
+                benchmark_result.update(cache_metadata)
                 for model in benchmark_result["results"]:
                     if not model.get("available"):
                         continue
@@ -904,16 +989,16 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                         mesh_store.record_model_performance(
                             registry_id=model["registry_id"], task_family=case["task_family"],
                             success=bool(case["success"]), quality=float(case["score"]),
-                            latency=float(case["latency_seconds"]),
-                            cost=max(0.01, float((case.get("input_tokens") or 0) + (case.get("output_tokens") or 0)) / 100000.0),
+                            latency=next(item.latency_index for item in router.candidates if item.registry_id == model["registry_id"]),
+                            cost=next(item.cost_index for item in router.candidates if item.registry_id == model["registry_id"]),
                             catalog_hash=benchmark_result["catalog_hash"],
-                            benchmark_suite_hash=benchmark_result["benchmark_suite_hash"],
+                            benchmark_suite_hash=benchmark_cache_hash,
                         )
         runtime = MeshRuntime(
             repository=repo.root, mesh_store=mesh_store,
             continuity_store=ContinuityStore(Path(preparation.continuity_database)),
             router=router, providers=provider_registry, worker_id=args.worker_id,
-            global_parallel_cap=args.max_nodes,
+            global_parallel_cap=args.max_nodes, performance_context_hash=benchmark_cache_hash,
         )
         execution = runtime.run_until_idle(
             maximum_ticks=args.maximum_ticks, maximum_seconds=args.maximum_seconds,
@@ -984,10 +1069,11 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
         router = AdaptiveModelRouter.from_file(Path(args.catalog))
         provider_registry = ProviderRegistry(provider_items)
         benchmark_result = None
+        cases = load_benchmark_cases(Path(args.benchmark_cases))
+        cache_metadata = _benchmark_cache_metadata(cases, provider_registry)
+        catalog_hash = sha256_json(router.catalog)
+        benchmark_cache_hash = cache_metadata["benchmark_cache_hash"]
         if args.auto_benchmark:
-            cases = load_benchmark_cases(Path(args.benchmark_cases))
-            catalog_hash = sha256_json(router.catalog)
-            suite_hash = benchmark_suite_hash(cases)
             active_families = {
                 node["task_family"] for node in mesh_store.list_nodes()
                 if node["role"] not in {"patch_integrator", "check_runner"}
@@ -996,7 +1082,8 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
             missing_families = {
                 family for family in active_families
                 if not mesh_store.performance_overrides(
-                    family, catalog_hash=catalog_hash, benchmark_suite_hash=suite_hash
+                    family, catalog_hash=catalog_hash, benchmark_suite_hash=benchmark_cache_hash,
+                    minimum_runs=int(router.policy.get("minimum_observations_for_override", 1)),
                 )
             }
             selected_cases = [case for case in cases if case.task_family in missing_families]
@@ -1005,6 +1092,7 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                     selected_cases, cwd=Path(args.repo).resolve(),
                     timeout_seconds=args.benchmark_timeout_seconds,
                 )
+                benchmark_result.update(cache_metadata)
                 for model in benchmark_result["results"]:
                     if not model.get("available"):
                         continue
@@ -1012,16 +1100,16 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                         mesh_store.record_model_performance(
                             registry_id=model["registry_id"], task_family=case["task_family"],
                             success=bool(case["success"]), quality=float(case["score"]),
-                            latency=float(case["latency_seconds"]),
-                            cost=max(0.01, float((case.get("input_tokens") or 0) + (case.get("output_tokens") or 0)) / 100000.0),
+                            latency=next(item.latency_index for item in router.candidates if item.registry_id == model["registry_id"]),
+                            cost=next(item.cost_index for item in router.candidates if item.registry_id == model["registry_id"]),
                             catalog_hash=benchmark_result["catalog_hash"],
-                            benchmark_suite_hash=benchmark_result["benchmark_suite_hash"],
+                            benchmark_suite_hash=benchmark_cache_hash,
                         )
         runtime = MeshRuntime(
             repository=Path(args.repo), mesh_store=mesh_store,
             continuity_store=ContinuityStore(Path(args.continuity_database)),
             router=router, providers=provider_registry, worker_id=args.worker_id,
-            global_parallel_cap=args.max_nodes,
+            global_parallel_cap=args.max_nodes, performance_context_hash=benchmark_cache_hash,
         )
         if command == "mesh-run-once":
             result = runtime.run_once(maximum_nodes=args.max_nodes).to_dict()

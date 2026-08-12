@@ -1,8 +1,8 @@
-# ZTAD Mesh 4.2.0 Traceability Matrix
+# ZTAD Mesh 4.3.0 Traceability Matrix
 
 Active normative requirements: **96**.
 
-This matrix maps active 4.2.0 requirements to implementation and verification. External controls are not considered active until target-platform evidence verifies them.
+This matrix maps the retained normative control catalogue to implementation and verification. Version 4.3 changes risk-proportional orchestration and model routing without weakening the 96 existing authority, scope, evidence, recovery, and platform-boundary requirements. External controls are not considered active until target-platform evidence verifies them.
 
 ## Coverage by enforcement class
 
@@ -28,6 +28,15 @@ This matrix maps active 4.2.0 requirements to implementation and verification. E
 | 24. Validation and release | 1 |
 | 26. Normative control catalogue | 87 |
 
+## v4.3 orchestration invariants
+
+- R0/R1 guarded fast path preserves deterministic indexing, isolated writing, integration/checks, actual-risk classification, and independent review while removing redundant model fan-out.
+- R2 bounded mesh preserves the same authority boundaries with limited focused context/review.
+- R3/R4 retain the full independent mesh.
+- Upward actual-diff risk invalidates a weaker topology before approval.
+- The Sol reasoning ceiling is HIGH for every role.
+- Performance-learning changes affect routing only; they do not create evidence or authority.
+
 ## Interpretation
 
 - `DETERMINISTIC`: enforced by local/protected code and tests.
@@ -37,4 +46,4 @@ This matrix maps active 4.2.0 requirements to implementation and verification. E
 - `CAPABILITY_GATED`: autonomy is capped until the capability is independently verified.
 - `OPERATIONAL` / `DOCUMENTED_*`: governed by runbook, architecture, or scenario testing.
 
-The row-level source of truth is `requirements.csv`.
+The row-level retained normative source of truth is `requirements.csv`; v4.3 does not delete or weaken those requirements.

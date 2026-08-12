@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import copy
 import json
 import re
 import time
@@ -12,6 +13,7 @@ from typing import Any
 from .agent_output import validate_agent_result
 from .checks import run_checks
 from .loop_guard import AttemptFingerprint, ProgressSnapshot
+from .mesh_plan import build_mesh_plan, write_mesh_plan
 from .mesh_store import MeshStore
 from .model_router import AdaptiveModelRouter, RouteDecision, TaskProfile
 from .orchestrator import ContinuityStore
@@ -62,6 +64,7 @@ _ROLE_TO_AGENT_ROLE = {
     "data_reviewer": "independent_reviewer",
     "test_designer": "planner",
     "context_scout": "planner",
+    "focused_reviewer": "independent_reviewer",
     "architecture_advisor": "architecture_advisor",
     "plan_adjudicator": "architecture_advisor",
     "release_advisor": "release_advisor",
@@ -89,6 +92,7 @@ class MeshRuntime:
         output_root: Path | None = None,
         global_parallel_cap: int = 8,
         trusted_control_roots: tuple[Path, ...] | None = None,
+        performance_context_hash: str | None = None,
     ):
         self.repo = GitRepository(repository)
         self.mesh_store = mesh_store
@@ -96,6 +100,7 @@ class MeshRuntime:
         self.router = router
         self.providers = providers
         self.worker_id = worker_id
+        self.performance_context_hash = performance_context_hash
         self.output_root = (output_root or self.repo.root / ".delivery" / "ztad" / "mesh-runs").resolve()
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.global_parallel_cap = max(1, global_parallel_cap)
@@ -103,6 +108,281 @@ class MeshRuntime:
         roots = trusted_control_roots or (package_root,)
         self.trusted_control_roots = tuple(root.resolve() for root in roots)
         self.worktrees = WorktreeManager(self.repo)
+
+    @staticmethod
+    def _next_risk(risk: str) -> str:
+        order = ["R0", "R1", "R2", "R3", "R4"]
+        index = order.index(risk)
+        return order[min(len(order) - 1, index + 1)]
+
+    def _candidate(self, registry_id: str):
+        return next((item for item in self.router.candidates if item.registry_id == registry_id), None)
+
+    @staticmethod
+    def _continuity_target_for_role(role: str) -> str | None:
+        if role in {"repository_indexer", "context_scout", "architecture_advisor", "plan_adjudicator", "test_designer"}:
+            return "PLANNING"
+        if role in {"worker", "repairer", "supervisor_takeover", "patch_integrator"}:
+            return "WORKER_IMPLEMENTING"
+        if role == "check_runner":
+            return "MACHINE_CHECKS"
+        if role in {"supervisor", "focused_reviewer", "security_reviewer", "data_reviewer", "closure", "release_advisor"}:
+            return "SUPERVISOR_REVIEW"
+        return None
+
+    def _sync_continuity_phase(self, node: dict[str, Any]) -> str:
+        target = self._continuity_target_for_role(str(node["role"]))
+        task = self.continuity_store.get_task(node["task_id"])
+        if target is None:
+            return str(task["state"])
+        order = ["READY", "PLANNING", "WORKER_IMPLEMENTING", "MACHINE_CHECKS", "SUPERVISOR_REVIEW"]
+        if task["state"] not in order or order.index(task["state"]) >= order.index(target):
+            return str(task["state"])
+        for _ in range(6):
+            task = self.continuity_store.get_task(node["task_id"])
+            current = str(task["state"])
+            if current not in order or order.index(current) >= order.index(target):
+                return current
+            if current == "READY":
+                next_state = "PLANNING" if target == "PLANNING" else "WORKER_IMPLEMENTING"
+            elif current == "PLANNING":
+                next_state = "WORKER_IMPLEMENTING"
+            elif current == "WORKER_IMPLEMENTING":
+                next_state = "MACHINE_CHECKS"
+            elif current == "MACHINE_CHECKS":
+                next_state = "SUPERVISOR_REVIEW"
+            else:
+                return current
+            try:
+                task = self.continuity_store.transition(
+                    node["task_id"], next_state, actor="mesh-runtime",
+                    expected_version=int(task["version"]),
+                    payload={"mesh_node_id": node["node_id"], "mesh_role": node["role"]},
+                    idempotency_key=f"mesh-phase:{node['task_id']}:{current}:{next_state}",
+                )
+            except RuntimeError:
+                continue
+        raise RuntimeError("Unable to synchronize Continuity phase after bounded optimistic retries")
+
+    def _transition_parent_control_state(self, node: dict[str, Any], target: str, *, reason: str) -> str:
+        task = self.continuity_store.get_task(node["task_id"])
+        if str(task["state"]) == target:
+            return target
+        try:
+            updated = self.continuity_store.transition(
+                node["task_id"], target, actor="mesh-runtime-controller",
+                expected_version=int(task["version"]),
+                payload={"mesh_node_id": node["node_id"], "reason": reason},
+                idempotency_key=f"mesh-control:{node['task_id']}:{node['node_id']}:{target}:{reason}",
+            )
+            return str(updated["state"])
+        except RuntimeError:
+            latest = self.continuity_store.get_task(node["task_id"])
+            if str(latest["state"]) == target:
+                return target
+            raise
+
+    def _record_performance(
+        self, *, registry_id: str, task_family: str, success: bool, quality: float
+    ) -> None:
+        candidate = self._candidate(registry_id)
+        if candidate is None:
+            return
+        self.mesh_store.record_model_performance(
+            registry_id=registry_id,
+            task_family=task_family,
+            success=success,
+            quality=max(0.0, min(1.0, float(quality))),
+            latency=candidate.latency_index,
+            cost=candidate.cost_index,
+            catalog_hash=sha256_json(self.router.catalog),
+            benchmark_suite_hash=self.performance_context_hash,
+        )
+
+    @staticmethod
+    def _candidate_prior_quality(decision: RouteDecision, task_family: str) -> float:
+        return float(
+            decision.candidate.task_quality.get(
+                task_family, decision.candidate.task_quality.get("default", 0.0)
+            )
+        )
+
+    @staticmethod
+    def _is_capability_abstention(output: dict[str, Any]) -> bool:
+        return str(output.get("result_type")) in {
+            "INSUFFICIENT_CONTEXT", "INSUFFICIENT_EVIDENCE", "WAITING_EXTERNAL_DEPENDENCY",
+            "AUTO_REPLAN", "QUARANTINE_AND_CONTINUE",
+        }
+
+    def _submit_replan(
+        self,
+        *,
+        node: dict[str, Any],
+        target_risk: str,
+        reason: str,
+        details: dict[str, Any],
+        consume_repair_cycle: bool,
+    ) -> dict[str, Any] | None:
+        current_risk = str(node["risk"])
+        if target_risk not in RISK_ORDER or RISK_ORDER[target_risk] < RISK_ORDER[current_risk]:
+            raise ValueError("Replan target risk may not downgrade the current risk")
+        self._sync_continuity_phase(node)
+        parent = self.continuity_store.get_task(node["task_id"])
+        contract = copy.deepcopy(parent["contract"])
+        budget = contract.setdefault("budget", {})
+        remaining_repairs = int(budget.get("max_repair_cycles", 0))
+        if consume_repair_cycle and remaining_repairs <= 0:
+            self._transition_parent_control_state(
+                node, "QUARANTINED", reason="REPAIR_BUDGET_EXHAUSTED"
+            )
+            return None
+        if consume_repair_cycle:
+            budget["max_repair_cycles"] = remaining_repairs - 1
+        parent_control_state = "AUTO_REPAIR" if reason == "BLOCKING_FINAL_GUARD_FINDINGS" else "AUTO_REPLAN"
+        self._transition_parent_control_state(node, parent_control_state, reason=reason)
+        governance = contract.setdefault("governance", {})
+        governance["policy_risk"] = target_risk
+        decisions = governance.setdefault("human_decisions", [])
+        decision_record = {
+            "type": "ZTAD_AUTOMATED_REPLAN",
+            "source_task_id": node["task_id"],
+            "source_node_id": node["node_id"],
+            "reason": reason,
+            "from_risk": current_risk,
+            "to_risk": target_risk,
+            "details": details,
+        }
+        decisions.append(decision_record)
+        material = {
+            "source_task_id": node["task_id"],
+            "source_node_id": node["node_id"],
+            "reason": reason,
+            "target_risk": target_risk,
+            "details": details,
+            "remaining_repairs": budget.get("max_repair_cycles"),
+        }
+        digest = sha256_json(material).removeprefix("sha256:")[:16]
+        child_task_id = f"replan-{target_risk.casefold()}-{digest}"
+        prompt_root = f".delivery/ztad/tasks/{child_task_id}/prompts"
+        plan_output = f".delivery/ztad/tasks/{child_task_id}/mesh-plan.json"
+        metadata = node.get("metadata") or {}
+        child_plan = build_mesh_plan(
+            task_id=child_task_id,
+            risk=target_risk,
+            contract=contract,
+            prompt_root=prompt_root,
+            output_schema=node["output_schema"],
+            check_config=str(metadata.get("check_config", ".delivery/ztad/config.json")),
+            command_policy=str(metadata.get("command_policy", "policies/command-policy.yaml")),
+            risk_policy=str(metadata.get("risk_policy", "policies/risk-policy.yaml")),
+        )
+        plan_written = write_mesh_plan(
+            child_plan, repository=self.repo.root, output_file=Path(plan_output)
+        )
+        child = self.continuity_store.submit_task(
+            repository=str(self.repo.root),
+            title=f"Replan: {parent['title']}",
+            contract=contract,
+            risk=target_risk,
+            priority=int(parent.get("priority", 0)),
+            idempotency_key=sha256_json({"ztad_replan": material}),
+            task_id=child_task_id,
+        )
+        submitted = self.mesh_store.submit_graph(child_plan.nodes)
+        return {
+            "created": not bool(child.get("idempotent_replay")),
+            "child_task_id": child_task_id,
+            "risk": target_risk,
+            "reason": reason,
+            "plan_id": child_plan.plan_id,
+            "execution_mode": child_plan.to_dict()["execution_mode"],
+            "model_call_count": child_plan.to_dict()["model_call_count"],
+            "submitted_nodes": len(submitted),
+            "plan_written": plan_written,
+        }
+
+    def _structured_control(self, node: dict[str, Any], output: dict[str, Any]) -> dict[str, Any]:
+        action = str(output.get("requested_action") or "")
+        result_type = str(output.get("result_type") or "")
+        blocking_findings = [
+            item for item in (output.get("findings") or [])
+            if str(item.get("severity")) in {"P0", "P1"}
+            and str(item.get("verification_status", "PROPOSED")) != "FALSIFIED"
+        ]
+        errors: list[str] = []
+        force_quarantine = False
+        replan: dict[str, Any] | None = None
+
+        if blocking_findings or action in {"VERIFY_FINDINGS", "REPAIR_CONFIRMED_FINDINGS"}:
+            errors.append("structured_control:blocking_findings_require_verification_or_repair")
+            force_quarantine = True
+            # Automatic low-risk repair is serialized through a child task. Higher-risk
+            # multi-review meshes fail closed to avoid spawning competing repair plans.
+            if str(node["risk"]) in {"R0", "R1"} and bool((node.get("metadata") or {}).get("mandatory_final_guard")):
+                replan = {
+                    "target_risk": str(node["risk"]),
+                    "reason": "BLOCKING_FINAL_GUARD_FINDINGS",
+                    "consume_repair_cycle": True,
+                    "details": {
+                        "requested_action": action,
+                        "findings": [
+                            {key: item.get(key) for key in ("finding_id", "severity", "title", "description", "verification_status")}
+                            for item in blocking_findings[:20]
+                        ],
+                    },
+                }
+        elif action == "REQUEST_CONTEXT_EXPANSION" or result_type == "INSUFFICIENT_CONTEXT":
+            errors.append("structured_control:context_expansion_required")
+            force_quarantine = True
+            target = self._next_risk(str(node["risk"]))
+            if str(node["risk"]) in {"R0", "R1", "R2"} and target != str(node["risk"]):
+                replan = {
+                    "target_risk": target,
+                    "reason": "CONTEXT_EXPANSION_TO_STRONGER_TOPOLOGY",
+                    "consume_repair_cycle": False,
+                    "details": {"requested_action": action, "result_type": result_type},
+                }
+        elif action == "ESCALATE_RISK" or result_type == "RISK_ESCALATION_REQUESTED":
+            errors.append("structured_control:risk_escalation_requested")
+            force_quarantine = True
+            proposed = str((output.get("risk_escalation") or {}).get("proposed_risk") or "")
+            current = str(node["risk"])
+            target = proposed if proposed in RISK_ORDER and RISK_ORDER[proposed] > RISK_ORDER[current] else self._next_risk(current)
+            if target != current:
+                replan = {
+                    "target_risk": target,
+                    "reason": "MODEL_REQUESTED_UPWARD_RISK_ESCALATION",
+                    "consume_repair_cycle": False,
+                    "details": {"requested_action": action, "risk_escalation": output.get("risk_escalation")},
+                }
+        elif action == "AUTO_REPLAN" or result_type == "AUTO_REPLAN":
+            errors.append("structured_control:auto_replan_requested")
+            force_quarantine = True
+            replan = {
+                "target_risk": str(node["risk"]),
+                "reason": "MODEL_REQUESTED_BOUNDED_REPLAN",
+                "consume_repair_cycle": True,
+                "details": {"requested_action": action, "result_type": result_type},
+            }
+        elif action in {"QUARANTINE_TASK", "REQUEST_STRONG_SUPERVISOR"} or result_type == "QUARANTINE_AND_CONTINUE":
+            errors.append(f"structured_control:{action or result_type}")
+            force_quarantine = True
+            if action == "REQUEST_STRONG_SUPERVISOR" and RISK_ORDER[str(node["risk"])] < RISK_ORDER["R3"]:
+                replan = {
+                    "target_risk": "R3",
+                    "reason": "STRONG_SUPERVISOR_REQUESTED",
+                    "consume_repair_cycle": False,
+                    "details": {"requested_action": action},
+                }
+        elif result_type in {"INSUFFICIENT_EVIDENCE", "WAITING_EXTERNAL_DEPENDENCY"}:
+            errors.append(f"structured_control:{result_type.casefold()}")
+            force_quarantine = True
+        return {
+            "errors": errors,
+            "force_quarantine": force_quarantine,
+            "replan": replan,
+            "blocking_findings": len(blocking_findings),
+        }
 
     def _profile(self, node: dict[str, Any]) -> TaskProfile:
         metadata = node.get("metadata") or {}
@@ -125,6 +405,8 @@ class MeshRuntime:
             prior_failures=int(node.get("attempts", 0)),
             required_provider_diversity=bool(metadata.get("require_provider_diversity", False)),
             preferred_provider=metadata.get("preferred_provider"),
+            preferred_registry_id=metadata.get("preferred_registry_id"),
+            maximum_reasoning_effort=metadata.get("maximum_reasoning_effort"),
             excluded_models=tuple(excluded_models),
             excluded_providers=tuple(excluded_providers),
         )
@@ -133,7 +415,9 @@ class MeshRuntime:
         profile = self._profile(node)
         previous_provider = node.get("selected_provider") or (node.get("metadata") or {}).get("previous_provider")
         overrides = self.mesh_store.performance_overrides(
-            node["task_family"], catalog_hash=sha256_json(self.router.catalog)
+            node["task_family"], catalog_hash=sha256_json(self.router.catalog),
+            benchmark_suite_hash=self.performance_context_hash,
+            minimum_runs=int(self.router.policy.get("minimum_observations_for_override", 1)),
         )
         routes: list[RouteDecision] = []
         unavailable: set[str] = set()
@@ -160,6 +444,8 @@ class MeshRuntime:
             complexity=int(metadata.get("complexity", 1)), ambiguity=int(metadata.get("ambiguity", 0)),
             prior_failures=int(node.get("attempts", 0)),
             required_provider_diversity=False, preferred_provider=metadata.get("preferred_provider"),
+            preferred_registry_id=metadata.get("preferred_registry_id"),
+            maximum_reasoning_effort=metadata.get("maximum_reasoning_effort"),
             excluded_models=tuple(metadata.get("excluded_models", [])),
             excluded_providers=tuple(metadata.get("excluded_providers", [])),
         )
@@ -437,6 +723,12 @@ class MeshRuntime:
         run_id = f"checks-{uuid.uuid4()}"
         worktree = self.worktrees.create(node["node_id"], base_sha)
         try:
+            combined_artifacts = self.mesh_store.dependency_artifacts(
+                node["node_id"], artifact_types=("COMBINED_PATCH",), transitive=False
+            )
+            source_models = []
+            for item in combined_artifacts:
+                source_models.extend(item.get("metadata", {}).get("source_models", []) or [])
             patches = self._artifact_paths(node["node_id"])
             if not patches:
                 raise ValueError("machine_checks_have_no_integrated_patch")
@@ -506,6 +798,28 @@ class MeshRuntime:
                 node_id=node["node_id"], artifact_type="CHECK_RESULT", path=str(result_path),
                 sha256=sha256_file(result_path), metadata={"head_sha": candidate_sha, "evidence_refs": registered},
             )
+            if not risk_escalated:
+                checks_passed = not bool(report.get("blocked"))
+                for source in source_models:
+                    registry_id = source.get("registry_id")
+                    if registry_id:
+                        self._record_performance(
+                            registry_id=str(registry_id),
+                            task_family=str(source.get("task_family") or "implementation"),
+                            success=checks_passed, quality=1.0 if checks_passed else 0.0,
+                        )
+            replan = None
+            if risk_escalated:
+                replan = self._submit_replan(
+                    node=node, target_risk=actual_risk.risk,
+                    reason="ACTUAL_DIFF_RISK_ESCALATION",
+                    details={
+                        "planned_risk": node["risk"],
+                        "actual_risk": actual_risk.to_dict(),
+                        "candidate_sha": candidate_sha,
+                    },
+                    consume_repair_cycle=False,
+                )
             if report.get("blocked") or risk_escalated:
                 failure_errors = ["machine_checks_blocked"] if report.get("blocked") else []
                 if risk_escalated:
@@ -518,7 +832,7 @@ class MeshRuntime:
                     "node_id": node["node_id"], "task_id": node["task_id"], "success": False,
                     "state": failure["state"], "route": None, "validation_errors": failure_errors,
                     "candidate_sha": candidate_sha, "check_report": report, "artifact": artifact,
-                    "actual_risk": actual_risk.to_dict(), "risk_escalated": risk_escalated,
+                    "actual_risk": actual_risk.to_dict(), "risk_escalated": risk_escalated, "replan": replan,
                 }
             updated = self.mesh_store.finish_node(
                 node["node_id"], owner=self.worker_id, success=True, run_id=run_id,
@@ -548,6 +862,19 @@ class MeshRuntime:
         worktree = self.worktrees.create(node["node_id"], base_sha)
         run_id = f"integrate-{uuid.uuid4()}"
         try:
+            source_artifacts = self.mesh_store.dependency_artifacts(
+                node["node_id"], artifact_types=("PATCH",), transitive=False
+            )
+            source_models = [
+                {
+                    "registry_id": item["metadata"].get("registry_id"),
+                    "provider": item["metadata"].get("provider"),
+                    "model": item["metadata"].get("model"),
+                    "task_family": item["metadata"].get("task_family", "implementation"),
+                    "node_id": item["node_id"],
+                }
+                for item in source_artifacts if item.get("metadata", {}).get("registry_id")
+            ]
             patches = self._artifact_paths(node["node_id"])
             if not patches:
                 result = self._finish_failure(
@@ -573,6 +900,11 @@ class MeshRuntime:
             if not scope["allowed"]:
                 errors.append("integration_scope_violation:" + sha256_json(scope))
             if errors:
+                for source in source_models:
+                    self._record_performance(
+                        registry_id=str(source["registry_id"]), task_family=str(source["task_family"]),
+                        success=False, quality=0.0,
+                    )
                 result = self._finish_failure(
                     node, run_id=run_id, registry_id="deterministic-integrator", provider="local", errors=errors,
                 )
@@ -583,7 +915,7 @@ class MeshRuntime:
                 }
             artifact = self.mesh_store.register_artifact(
                 node_id=node["node_id"], artifact_type="COMBINED_PATCH", path=str(output_path.resolve()),
-                sha256=sha256_file(output_path), metadata={"source_patches": applied["applied"], "changed_paths": patch["changed_paths"]},
+                sha256=sha256_file(output_path), metadata={"source_patches": applied["applied"], "changed_paths": patch["changed_paths"], "source_models": source_models},
             )
             updated = self.mesh_store.finish_node(
                 node["node_id"], owner=self.worker_id, success=True, run_id=run_id,
@@ -604,6 +936,18 @@ class MeshRuntime:
             self.worktrees.remove(worktree)
 
     def _execute(self, node: dict[str, Any]) -> dict[str, Any]:
+        try:
+            continuity_state = self._sync_continuity_phase(node)
+        except Exception as exc:
+            errors = [f"continuity_phase_sync_error:{type(exc).__name__}:{exc}"]
+            failure = self._finish_failure(
+                node, run_id=f"continuity-{uuid.uuid4()}", registry_id="deterministic-continuity-sync",
+                provider="local", errors=errors, force_quarantine=True,
+            )
+            return {
+                "node_id": node["node_id"], "task_id": node["task_id"], "success": False,
+                "state": failure["state"], "route": None, "validation_errors": errors,
+            }
         if node["role"] == "repository_indexer":
             return self._execute_repository_indexer(node)
         if node["role"] == "patch_integrator":
@@ -712,13 +1056,11 @@ class MeshRuntime:
                     input_tokens=result.input_tokens, output_tokens=result.output_tokens,
                     output_hash=result.output_hash, run_id=result.run_id,
                 )
-                quality = 1.0 if result.success and not errors else max(0.0, 0.5 - 0.05 * len(errors))
-                token_cost = float((result.input_tokens or 0) + (result.output_tokens or 0)) / 100_000.0
-                self.mesh_store.record_model_performance(
-                    registry_id=decision.candidate.registry_id, task_family=node["task_family"],
-                    success=result.success and not errors, quality=quality, latency=latency,
-                    cost=max(0.01, token_cost),
-                )
+                if not result.success or errors:
+                    self._record_performance(
+                        registry_id=decision.candidate.registry_id, task_family=node["task_family"],
+                        success=False, quality=0.0,
+                    )
                 route_attempts.append({"route": decision.to_dict(), "run": result.to_dict(), "validation_errors": sorted(set(errors))})
                 if result.success and not errors:
                     selected = (decision, result, prompt, errors)
@@ -760,6 +1102,16 @@ class MeshRuntime:
                     validation_errors.append("write_role_produced_no_patch")
 
             output = result.output or {}
+            control = self._structured_control(node, output)
+            validation_errors.extend(control["errors"])
+            replan = None
+            if control["replan"] is not None:
+                replan_spec = control["replan"]
+                replan = self._submit_replan(
+                    node=node, target_risk=str(replan_spec["target_risk"]),
+                    reason=str(replan_spec["reason"]), details=dict(replan_spec["details"]),
+                    consume_repair_cycle=bool(replan_spec["consume_repair_cycle"]),
+                )
             strategy_hash = str(metadata.get("strategy_hash") or sha256_json({
                 "role": node["role"], "family": node["task_family"], "dimension": metadata.get("dimension"),
             }))
@@ -785,6 +1137,20 @@ class MeshRuntime:
             if not attempt.get("progress", False) and int(node.get("attempts", 0)) > 0:
                 validation_errors.append("no_progress_cycle")
             success = result.success and not validation_errors
+            if node["write_access"]:
+                if not success:
+                    quality = 0.25 if self._is_capability_abstention(output) else 0.0
+                    self._record_performance(
+                        registry_id=decision.candidate.registry_id, task_family=node["task_family"],
+                        success=False, quality=quality,
+                    )
+            else:
+                abstained = self._is_capability_abstention(output)
+                self._record_performance(
+                    registry_id=decision.candidate.registry_id, task_family=node["task_family"],
+                    success=not abstained,
+                    quality=0.25 if abstained else self._candidate_prior_quality(decision, node["task_family"]),
+                )
             if success:
                 model_result_artifact = self._register_model_result_artifact(node=node, result=result)
                 if patch_info and patch_info["has_changes"]:
@@ -792,7 +1158,7 @@ class MeshRuntime:
                         node_id=node["node_id"], artifact_type="PATCH",
                         path=str(Path(patch_info["patch_path"]).resolve()),
                         sha256=sha256_file(Path(patch_info["patch_path"])),
-                        metadata={"changed_paths": changed_paths, "base_sha": base_sha},
+                        metadata={"changed_paths": changed_paths, "base_sha": base_sha, "registry_id": decision.candidate.registry_id, "provider": decision.candidate.provider, "model": decision.candidate.model, "task_family": node["task_family"], "quality_pending": True},
                     )
                 updated = self.mesh_store.finish_node(
                     node["node_id"], owner=self.worker_id, success=True, run_id=result.run_id,
@@ -802,7 +1168,12 @@ class MeshRuntime:
                 state = self._finish_failure(
                     node, run_id=result.run_id, registry_id=decision.candidate.registry_id,
                     provider=decision.candidate.provider, errors=validation_errors,
+                    force_quarantine=bool(control["force_quarantine"]),
                 )
+                if bool(control["force_quarantine"]) and replan is None:
+                    self._transition_parent_control_state(
+                        node, "QUARANTINED", reason="STRUCTURED_CONTROL_CONTAINMENT"
+                    )
                 updated = {"state": state["state"]}
             return {
                 "node_id": node["node_id"], "task_id": node["task_id"], "success": success,
@@ -810,6 +1181,7 @@ class MeshRuntime:
                 "run": result.to_dict(), "validation_errors": sorted(set(validation_errors)),
                 "changed_paths": changed_paths, "patch": patch_info, "artifact": artifact,
                 "model_result_artifact": model_result_artifact, "attempt": attempt,
+                "structured_control": control, "replan": replan,
             }
         except Exception as exc:
             errors = [f"runtime_validation_error:{type(exc).__name__}:{exc}"]

@@ -1,27 +1,40 @@
-# Zero-Trust Agentic Delivery Mesh 4.2.0
+# Zero-Trust Agentic Delivery Mesh 4.3.0
 
-ZTAD Mesh is a Codex plugin and deterministic control toolkit for bounded, multi-model software delivery. It selects qualified models by task family, builds a dependency-aware DAG, runs independent read-only analysis in parallel, isolates every writer in a dedicated Git worktree, creates one checked candidate commit, and permits review or release recommendations only when they bind to real model runs and machine-generated evidence.
+ZTAD Mesh is a Codex plugin and deterministic control toolkit for bounded software delivery. Version 4.3 makes orchestration proportional to verified risk: trivial and low-risk work uses a guarded fast path, normal feature work uses a bounded mesh, and sensitive/high-risk work retains the full independent mesh.
 
 ## Operating objective
 
-ZTAD targets **never idle while safe runnable work exists**, not the impossible promise that every task always succeeds. A blocked task is repaired, re-planned, re-routed, reconstructed, delayed, or quarantined while unrelated ready work continues. State is durable on one host and can be resumed after process interruption.
+ZTAD targets **never idle while safe runnable work exists** without turning model confidence into authority. A blocked task is repaired, re-planned, re-routed, reconstructed, delayed, or quarantined while unrelated ready work continues. State is durable on one host and can be resumed after process interruption.
 
-## What 4.2.0 actually implements
+## Risk-proportional topology
+
+| Risk | Normal topology | Intended model calls |
+|---|---|---:|
+| R0 / R1 | deterministic index → Luna worker → deterministic integration/checks → actual-diff risk → one Sol final guard | 2 |
+| R2 | deterministic index → focused Terra scout → Luna worker → deterministic integration/checks → up to two focused Terra reviews | bounded |
+| R3 / R4 | full context/plan/test/implementation/review mesh with frontier gates | risk-dependent |
+
+The low-risk path is deliberately small. It does not run redundant scout, plan-adjudication, test-oracle, review-fan-out, synthesis, or release-advisor model calls. If the actual candidate diff raises risk, the lower-risk topology is invalidated and a stronger child plan must complete before approval can continue.
+
+## What 4.3.0 implements
 
 - deterministic repository indexing before model calls;
-- adaptive model routing from catalog priors, host probes, bounded task-family benchmarks, and measured reliability;
-- maximum useful parallelism, not blind fan-out;
-- parallel context scouts, plan candidates, test-oracle design, implementation shards, and review dimensions;
+- Luna as the preferred low/medium-risk implementation worker when it remains eligible;
+- Terra as balanced fallback and focused R2 support;
+- Sol as independent frontier consultant/reviewer with a **hard HIGH reasoning ceiling** on every invocation;
+- exact model-call count and route preview in dry-run output;
+- provider availability checks and qualified fallback;
+- catalog/benchmark performance bound to catalog and provider-capability context;
+- minimum repeated observations before measured performance can influence routing;
+- writer quality updated from downstream integration/check outcomes instead of schema validity alone;
+- bounded structured controls for blocking findings, context expansion, repair, replan, risk escalation, quarantine, and strong-supervisor requests;
 - dedicated worktrees and non-overlapping scope locks for writers;
-- bounded, hash-addressed dependency-result artifacts;
-- provider output isolation outside code worktrees and stale-output replay rejection;
 - deterministic patch integration into one candidate commit;
-- machine-check gate before model review;
-- risk reclassification from the actual candidate diff;
+- machine-check gate before independent review;
+- actual-diff risk reclassification with automatic upward replan;
 - exact run/session/SHA/diff/evidence binding for approvals;
-- loop fingerprints and measurable progress requirements;
-- durable DAG state, leases, retries, quarantine, and explicit reactivation;
-- Codex lifecycle hooks as defense in depth;
+- no automatic transition to `MERGE_READY` from model success;
+- loop fingerprints, measurable-progress requirements, bounded repair budgets, quarantine, and explicit reactivation;
 - conservative host-acceptance and platform-readiness reporting.
 
 ## Thirteen explicit-only skills
@@ -46,7 +59,7 @@ ZTAD targets **never idle while safe runnable work exists**, not the impossible 
 Models propose or write bounded patches
 → deterministic tools create facts
 → one candidate SHA is built and checked
-→ independent frontier review proposes a decision
+→ independent review proposes a decision
 → approval controller validates exact run/SHA/diff/evidence identity
 → protected platform controllers merge or deploy
 → runtime evidence promotes or rolls back
@@ -62,22 +75,19 @@ python -B scripts/ztad.py policy-wiring --root .
 python -B scripts/ztad.py host-acceptance --plugin-root . --repo /path/to/repository
 python -B scripts/ztad.py provider-probe
 python -B scripts/ztad.py model-benchmark --repo /path/to/repository
+python -B scripts/ztad.py mesh-autopilot --repo /path/to/repository --contract /path/to/change-contract.json --dry-run
 ```
 
-After plugin installation, start a new Codex session and explicitly invoke:
-
-```text
-$zero-trust-delivery
-```
-
-Begin with `AUDIT`, `DRY_RUN`, and `mesh-autopilot --dry-run`. Do not enable governed merge or production transitions until the target Git host, CI, artifact, deployment, canary, and rollback controls produce verified evidence.
+Inspect the dry-run execution mode, model-call count, route preview, scopes, check configuration, and risk policy before bounded operation.
 
 ## Claim boundary
 
-The bundled SQLite stores provide durable single-host coordination, not multi-host high availability. Local tests cannot prove hosted Codex discovery, provider credentials, GitHub rulesets, protected CI, merge queue, deployment, canary health, or rollback on your infrastructure. These remain mandatory target-host acceptance gates.
+The bundled SQLite stores provide durable single-host coordination, not multi-host high availability. Local validation does not prove hosted model quality, provider credentials, GitHub rulesets, protected CI, merge queue, deployment, canary health, or rollback on a target environment. Those remain mandatory target-host acceptance gates.
 
 ## Operational references
 
-- `docs/MODEL_SELECTION.md` — adaptive routing and useful parallelism.
+- `docs/ARCHITECTURE.md` — risk-proportional architecture and authority boundaries.
+- `docs/MODEL_SELECTION.md` — model eligibility, preferences, benchmark freshness, and reasoning ceilings.
+- `docs/OPERATING_GUIDE.md` — operating paths, escalation, and recovery.
 - `docs/HOST_ACCEPTANCE.md` — mandatory target-host gates.
-- `docs/VALIDATION_REPORT.md` — executed evidence and claim boundaries.
+- `docs/VALIDATION_REPORT.md` — executed validation evidence and claim boundaries.

@@ -11,7 +11,7 @@ default:
   stop_at_budget_percent: 80
 R0:
   implementation_runs: 1
-  independent_reviews: 0
+  independent_reviews: 1
   repair_cycles: 1
   closure_reviews: 0
   escalation_runs: 0
@@ -31,7 +31,7 @@ R1:
   stop_at_budget_percent: 80
 R2:
   implementation_runs: 1
-  independent_reviews: 1
+  independent_reviews: 2
   repair_cycles: 2
   closure_reviews: 1
   escalation_runs: 1

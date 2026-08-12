@@ -23,6 +23,8 @@ class TaskProfile:
     prior_failures: int = 0
     required_provider_diversity: bool = False
     preferred_provider: str | None = None
+    preferred_registry_id: str | None = None
+    maximum_reasoning_effort: str | None = None
     excluded_models: tuple[str, ...] = ()
     excluded_providers: tuple[str, ...] = ()
 
@@ -33,6 +35,8 @@ class TaskProfile:
             raise ValueError("complexity and ambiguity must be between 0 and 5")
         if self.prior_failures < 0:
             raise ValueError("prior_failures must be non-negative")
+        if self.maximum_reasoning_effort is not None and self.maximum_reasoning_effort not in {"none", "low", "medium", "high", "xhigh", "max", "ultra"}:
+            raise ValueError("maximum_reasoning_effort is unsupported")
 
 
 @dataclass(frozen=True)
@@ -179,6 +183,15 @@ class AdaptiveModelRouter:
         available = [item for item in order if item in candidate.reasoning_efforts]
         if not available:
             raise ValueError(f"Candidate {candidate.registry_id} has no supported reasoning effort")
+        caps = self.policy.get("maximum_reasoning_effort_by_registry", {}) or {}
+        cap = profile.maximum_reasoning_effort or caps.get(candidate.registry_id)
+        if cap is not None:
+            if cap not in order:
+                raise ValueError(f"Unsupported reasoning cap for {candidate.registry_id}: {cap}")
+            cap_index = order.index(cap)
+            available = [item for item in available if order.index(item) <= cap_index]
+            if not available:
+                raise ValueError(f"Candidate {candidate.registry_id} has no reasoning effort at or below cap {cap}")
         wanted_index = order.index(target)
         return min(available, key=lambda item: abs(order.index(item) - wanted_index))
 
@@ -222,6 +235,8 @@ class AdaptiveModelRouter:
             diversity_bonus = 0.0
             preference_bonus = 0.0
             reasons = [f"quality {quality:.3f} >= floor {quality_floor:.3f}"]
+            if profile.preferred_registry_id and candidate.registry_id == profile.preferred_registry_id:
+                reasons.append("preferred registry")
             if profile.preferred_provider and candidate.provider == profile.preferred_provider:
                 preference_bonus = float(self.policy.get("preferred_provider_bonus", 0.02))
                 reasons.append("preferred provider bonus")
@@ -238,6 +253,10 @@ class AdaptiveModelRouter:
             options.append(RouteDecision(candidate, self._reasoning(candidate, profile), sandbox, quality_floor, score, tuple(reasons)))
         if not options:
             raise LookupError("No available model satisfies the task quality, tier, provider, and sandbox constraints")
+        if profile.preferred_registry_id:
+            preferred = [item for item in options if item.candidate.registry_id == profile.preferred_registry_id]
+            if preferred:
+                options = preferred
         # Higher score wins; deterministic tie breakers prefer lower cost/latency and stable registry id.
         return sorted(
             options,

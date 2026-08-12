@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.3.0 — 2026-08-12
+
+- Added guarded R0/R1 fast paths: deterministic index, Luna implementation, deterministic integration/checks with actual-diff risk reclassification, and exactly one Sol final guard.
+- Added bounded R2 routing with one focused Terra scout, one Luna implementation, deterministic integration/checks, and up to two focused Terra reviews.
+- Retained the full independent mesh for R3/R4.
+- Added explicit preferred-model routing and a defense-in-depth hard HIGH reasoning ceiling for every Sol invocation.
+- Prevented protocol-correct benchmark abstentions from receiving perfect capability scores and kept learned cost/latency in normalized catalog-index units.
+- Added dry-run model-call counts and intended model usage to every mesh plan.
+- Added controller handling for blocking findings, context expansion, risk escalation, bounded repair/replan, and task-local quarantine.
+- Bound learned routing performance to catalog/provider capability context and required repeated observations before override.
+- Synchronized Continuity phases without auto-granting `MERGE_READY`; exhausted repair budgets now quarantine cleanly.
+- Added a structural CLI shadowing guard and a ResourceWarning-as-error CI gate for critical v4.3 controls.
+- Synchronized architecture, operating guides, model-selection guidance, skills, validation, and traceability documentation with the implemented v4.3 topology.
+
 ## 4.2.1 — 2026-08-12
 
 - Fixed `audit` and installer `dry-run` CLI dispatch crashing before planning because the imported `plan` symbol was shadowed by the Mesh planner local variable.

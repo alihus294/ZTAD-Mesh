@@ -659,11 +659,12 @@ class MeshStore:
                 "SELECT catalog_hash,benchmark_suite_hash FROM model_performance WHERE registry_id=? AND task_family=?",
                 (registry_id, task_family),
             ).fetchone()
-            if existing and catalog_hash and existing["catalog_hash"] not in {None, catalog_hash}:
+            if existing and catalog_hash is not None and existing["catalog_hash"] != catalog_hash:
                 conn.execute("DELETE FROM model_performance WHERE registry_id=? AND task_family=?", (registry_id, task_family))
                 existing = None
-            if existing and benchmark_suite_hash and existing["benchmark_suite_hash"] not in {None, benchmark_suite_hash}:
+            if existing and benchmark_suite_hash is not None and existing["benchmark_suite_hash"] != benchmark_suite_hash:
                 conn.execute("DELETE FROM model_performance WHERE registry_id=? AND task_family=?", (registry_id, task_family))
+                existing = None
             conn.execute(
                 """INSERT INTO model_performance(
                        registry_id,task_family,runs,successes,quality_sum,latency_sum,cost_sum,
@@ -688,18 +689,23 @@ class MeshStore:
             conn.close()
 
     def performance_overrides(
-        self, task_family: str, *, catalog_hash: str | None = None, benchmark_suite_hash: str | None = None
+        self, task_family: str, *, catalog_hash: str | None = None, benchmark_suite_hash: str | None = None,
+        minimum_runs: int = 1,
     ) -> dict[str, dict[str, float]]:
+        if minimum_runs < 1:
+            raise ValueError("minimum_runs must be at least 1")
         conn = self._connect()
         try:
             rows = conn.execute("SELECT * FROM model_performance WHERE task_family=?", (task_family,)).fetchall()
             result: dict[str, dict[str, float]] = {}
             for row in rows:
-                if catalog_hash and row["catalog_hash"] not in {None, catalog_hash}:
+                if catalog_hash is not None and row["catalog_hash"] != catalog_hash:
                     continue
-                if benchmark_suite_hash and row["benchmark_suite_hash"] not in {None, benchmark_suite_hash}:
+                if benchmark_suite_hash is not None and row["benchmark_suite_hash"] != benchmark_suite_hash:
                     continue
                 runs = max(1, int(row["runs"]))
+                if runs < minimum_runs:
+                    continue
                 result[row["registry_id"]] = {
                     "quality": float(row["quality_sum"]) / runs,
                     "reliability": float(row["successes"]) / runs,

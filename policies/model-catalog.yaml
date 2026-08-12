@@ -4,6 +4,11 @@ routing:
   host_probe_and_benchmark_required: true
   catalog_prior_weight: 3.0
   preferred_provider_bonus: 0.02
+  preferred_worker_registry_id: codex-luna
+  balanced_fallback_registry_id: codex-terra
+  frontier_consultant_registry_id: codex-sol
+  maximum_reasoning_effort_by_registry:
+    codex-sol: high
   global_parallel_cap: 16
   minimum_quality_by_risk:
     R0: 0.70
@@ -12,6 +17,7 @@ routing:
     R3: 0.90
     R4: 0.94
   frontier_role_quality_floor: 0.92
+  minimum_observations_for_override: 2
 models:
   - registry_id: codex-luna
     provider: codex
@@ -26,6 +32,7 @@ models:
     max_parallel: 8
     task_quality:
       default: 0.76
+      implementation: 0.84
       repository_navigation: 0.88
       context_scout: 0.84
       documentation: 0.90
@@ -55,7 +62,7 @@ models:
     model: gpt-5.6-sol
     tier: frontier
     enabled: true
-    reasoning_efforts: [medium, high, xhigh, max]
+    reasoning_efforts: [medium, high]
     sandboxes: [read-only, workspace-write]
     reliability: 0.97
     cost_index: 1.00

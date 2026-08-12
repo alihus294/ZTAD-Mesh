@@ -57,6 +57,17 @@ jobs:
           PYTHONPATH: toolkit
         run: python -B -m pytest -q
 
+      - name: Fail on resource leaks in critical v4.3 controls
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        env:
+          PYTHONPATH: toolkit
+        run: >-
+          python -B -m pytest -q -W error::ResourceWarning
+          tests/test_v43_last_gaps.py
+          tests/test_v43_final_hardening.py
+          tests/test_v43_runtime_controls.py
+          tests/test_v43_guarded_fast_path.py
+
       - name: Run offline functional and adversarial evals
         run: python -B evals/run_evals.py --output "${{ runner.temp }}/eval-summary.json"
 
@@ -86,11 +97,11 @@ jobs:
 
       - name: Validate built Plugin archive
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.2.1.zip" --kind plugin
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.3.0.zip" --kind plugin
 
       - name: Validate built Marketplace archive
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.2.1.zip" --kind marketplace
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.3.0.zip" --kind marketplace
 
       - name: Prove repository remained unchanged
         shell: bash
