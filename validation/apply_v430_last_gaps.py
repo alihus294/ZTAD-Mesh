@@ -41,9 +41,9 @@ test_path.write_text(r'''from __future__ import annotations
 
 import ast
 import json
+import sqlite3
 import subprocess
 import symtable
-import time
 from pathlib import Path
 
 import pytest
@@ -90,7 +90,8 @@ def test_exhausted_repair_budget_quarantines_parent_without_orphan_auto_repair(t
     repo, _ = init_git_repo(tmp_path / "repo")
     contract = valid_contract(risk="R0", components=["README.md"])
     contract["budget"]["max_repair_cycles"] = 0
-    continuity = ContinuityStore(tmp_path / "continuity.db")
+    continuity_db = tmp_path / "continuity.db"
+    continuity = ContinuityStore(continuity_db)
     continuity.submit_task(
         repository=str(repo), title="exhausted", contract=contract, risk="R0",
         task_id="parent", idempotency_key="parent",
@@ -110,8 +111,8 @@ def test_exhausted_repair_budget_quarantines_parent_without_orphan_auto_repair(t
     )
     assert result is None
     assert continuity.get_task("parent")["state"] == "QUARANTINED"
-    status = continuity.system_status()
-    assert status["total"] == 1
+    with sqlite3.connect(continuity_db) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 1
 
 
 def test_cli_execute_cannot_shadow_any_module_import_it_references():
