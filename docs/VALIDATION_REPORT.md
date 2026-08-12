@@ -1,4 +1,4 @@
-# Validation Report — ZTAD Mesh 4.2.0
+# Validation Report — ZTAD Mesh 4.3.0
 
 ## Decision
 
@@ -6,42 +6,58 @@
 OFFLINE_DISTRIBUTION_ACCEPTED_WITH_TARGET_HOST_ACCEPTANCE_REQUIRED
 ```
 
-## Executed validation
+## Dedicated v4.3 final validation
+
+A clean candidate was validated on GitHub Actions across Ubuntu and Windows with Python 3.11 and 3.13. All four matrix jobs completed successfully.
 
 | Gate | Result |
 |---|---:|
-| Unit/integration tests | 227/227 passed on Ubuntu and Windows with Python 3.11 and 3.13 |
-| Offline deterministic/adversarial evals | 44/44 passed in the CI matrix |
-| Selected critical mutation guards | 14/14 killed (100% for this selected set) |
-| External fuzz cases | 43,000; 0 unhandled errors |
-| Transactional ledger process writes | 320 across 5×64-writer rounds; 0 reported errors |
-| Branch-aware total coverage | 80% including tests |
-| Branch-aware toolkit coverage | 75% |
+| Unit/integration tests | 263/263 passed |
+| Cross-platform matrix | Ubuntu 3.11, Ubuntu 3.13, Windows 3.11, Windows 3.13 — all passed |
+| Offline deterministic/adversarial evals | 44/44 passed |
+| Critical v4.3 control-path stress | 29/29 tests × 5 consecutive runs passed |
+| Selected critical mutation guards | 14/14 killed; 0 survived; 0 invalid |
+| External fuzz cases | 43,000; 0 reported errors |
+| Transactional ledger process writes | 320 across 5×64-writer rounds |
+| Branch-aware toolkit coverage | 76% total; mesh plan 90%, mesh runtime 78%, mesh store 84%, model router 88% |
 | Bundle structure | valid |
 | Skills | 13, explicit-only |
-| Policies | 26/26 declared and loadable with classified consumers |
+| Policies | 26/26 declared/found; policy wiring valid |
 | Schemas | 17 |
 | Traceability requirements | 96 |
-| Deterministic distribution | two complete builds compared byte-for-byte; Plugin and Marketplace archives validated |
-| Source publication | exact 253-file archive and Git tree verified before publication |
+| Deterministic distribution | two complete v4.3.0 builds compared byte-for-byte |
+| Plugin and Marketplace archives | both validated successfully |
+| Source preservation | clean after validation, fuzz, mutation, and distribution work |
 
-## Cross-platform defects closed during publication
+The dedicated validation run was executed on the code candidate before the final documentation synchronization. A test-owned SQLite connection produced one `ResourceWarning` during the coverage pass despite all gates succeeding. The final branch closes that connection deterministically and adds a CI gate that treats `ResourceWarning` in the critical v4.3 control paths as an error.
 
-- A repository-wide `SOURCE_DATE_EPOCH=0` leaked into Windows dependency installation and produced an invalid pre-1980 ZIP timestamp. CI now derives the reproducible timestamp from the commit only for distribution-build steps.
-- Text-mode patch transport on Windows converted Git patch framing from LF to CRLF. Patch generation, validation, and worktree application now preserve bytes and recover canonical Git framing before `git apply`.
+## v4.3 behaviors explicitly covered
+
+- R0/R1 normal execution uses Luna implementation plus exactly one independent Sol final guard.
+- Sol reasoning never exceeds HIGH.
+- R2 uses the bounded topology rather than the full high-risk mesh.
+- R3/R4 retain the full independent mesh.
+- Upward actual-diff risk invalidates the lower-risk path and submits a stronger replan.
+- Blocking P0/P1 findings cannot silently pass.
+- Schema-valid output does not become perfect implementation quality by itself.
+- Benchmark abstention/refusal cannot receive a perfect capability score.
+- Performance overrides are context-bound and require the configured minimum observation count.
+- Exhausted repair budget quarantines rather than leaving an orphan repair state.
+- Continuity reaches supervisor review without auto-granting `MERGE_READY`.
+- CLI import-shadowing regression is guarded structurally.
 
 ## What the numbers do not prove
 
-- The mutation score covers the 14 explicitly selected critical mutations, not every possible program mutation.
-- Fuzzing used bounded generated inputs and is not a proof of absence of defects.
+- The mutation score covers the 14 selected critical mutations, not every possible mutation.
+- Fuzzing is bounded generated testing, not proof of absence of defects.
 - Offline evals do not execute or rank hosted models.
-- GitHub-hosted Windows runners do not prove the user's exact PowerShell, Codex, Git, credential, hook, or endpoint configuration.
-- Passing repository CI does not prove branch protection, merge queue, deployment, canary, rollback, OIDC, or target-environment enforcement.
+- GitHub-hosted runners do not prove a target workstation's Codex, credentials, hooks, endpoint controls, or provider authentication.
+- Passing repository CI does not prove branch protection, merge queue, deployment, canary, rollback, OIDC, or production-environment enforcement.
 
 ## Runtime dependency boundary
 
-The public-source CI installs the exact reviewed locks on every matrix job: PyYAML 6.0.3, jsonschema 4.26.0, cryptography 50.0.0, pytest 9.1.1, coverage 7.15.4, pytest-cov 7.1.0, and hypothesis 6.165.2. Governed signing requires `cryptography >=50.0.0,<51`. The historical local-environment record under `validation/` remains provenance for the earlier offline run; it is not evidence that an unverified target host satisfies the current lock.
+CI installs the exact reviewed dependency locks and runs `pip check` on every matrix job. Governed signing and all target-host capabilities remain subject to host acceptance rather than inference from source configuration.
 
 ## Release condition
 
-Do not grant merge or production authority until `docs/HOST_ACCEPTANCE.md` passes and the target platform emits exact-SHA, protected evidence for its controls.
+Do not grant merge/deployment authority inside ZTAD itself until `docs/HOST_ACCEPTANCE.md` and target-platform gates emit exact-subject protected evidence. Repository CI proves the source/test state for its exact commit; it does not grant production authority.
