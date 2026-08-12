@@ -27,10 +27,12 @@ jobs:
           cache: pip
           cache-dependency-path: toolkit/requirements-dev.lock.txt
       - run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
-      - name: Repair migration helper assertion
+      - name: Repair migration helper assertion and legacy policy regression
         run: python validation/fix_v430_core_helper.py
       - name: Apply core migration
         run: python validation/apply_v430_core.py
+      - name: Keep repository workflow unchanged for Actions-token compatibility
+        run: git restore -- .github/workflows/ci.yml
       - name: Static compile and diff checks
         run: |
           python -m compileall -q toolkit tests
