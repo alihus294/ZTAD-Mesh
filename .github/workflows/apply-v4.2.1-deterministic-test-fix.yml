@@ -1,0 +1,49 @@
+name: Apply v4.2.1 deterministic regression repair
+
+on:
+  push:
+    branches:
+      - fix/v4.2.1-cli-dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: toolkit
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/v4.2.1-cli-dispatch
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: toolkit/requirements-dev.lock.txt
+      - run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+      - name: Apply deterministic test repair
+        run: python validation/repair_v421_machine_check_regression.py
+      - name: Stress repaired regression
+        shell: pwsh
+        run: |
+          1..5 | ForEach-Object {
+            python -B -m pytest -q `
+              tests/test_v42_autopilot_redteam.py::test_non_succeeded_dependency_never_unlocks_review `
+              tests/test_v42_autopilot_redteam.py::test_failed_machine_check_blocks_all_review_nodes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Commit repaired test
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_v42_autopilot_redteam.py
+          git diff --cached --check
+          git commit -m "test: make machine-check dependency regression deterministic"
+          git push origin HEAD:fix/v4.2.1-cli-dispatch
