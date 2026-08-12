@@ -79,7 +79,7 @@ def prepare_autopilot(
     command_policy: str,
     mesh_database: str = ".delivery/ztad/state/mesh.db",
     continuity_database: str = ".delivery/ztad/state/continuity.db",
-    maximum_parallel_writers: int = 8,
+    maximum_parallel_writers: int = 6,
     maximum_plan_candidates: int = 4,
 ) -> AutopilotPreparation:
     repo = GitRepository(repository)

@@ -688,8 +688,11 @@ class MeshStore:
             conn.close()
 
     def performance_overrides(
-        self, task_family: str, *, catalog_hash: str | None = None, benchmark_suite_hash: str | None = None
+        self, task_family: str, *, catalog_hash: str | None = None, benchmark_suite_hash: str | None = None,
+        minimum_runs: int = 1,
     ) -> dict[str, dict[str, float]]:
+        if minimum_runs < 1:
+            raise ValueError("minimum_runs must be at least 1")
         conn = self._connect()
         try:
             rows = conn.execute("SELECT * FROM model_performance WHERE task_family=?", (task_family,)).fetchall()
@@ -700,6 +703,8 @@ class MeshStore:
                 if benchmark_suite_hash and row["benchmark_suite_hash"] not in {None, benchmark_suite_hash}:
                     continue
                 runs = max(1, int(row["runs"]))
+                if runs < minimum_runs:
+                    continue
                 result[row["registry_id"]] = {
                     "quality": float(row["quality_sum"]) / runs,
                     "reliability": float(row["successes"]) / runs,

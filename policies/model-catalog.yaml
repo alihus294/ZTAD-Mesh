@@ -17,6 +17,7 @@ routing:
     R3: 0.90
     R4: 0.94
   frontier_role_quality_floor: 0.92
+  minimum_observations_for_override: 2
 models:
   - registry_id: codex-luna
     provider: codex

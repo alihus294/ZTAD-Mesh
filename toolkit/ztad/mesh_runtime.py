@@ -92,6 +92,7 @@ class MeshRuntime:
         output_root: Path | None = None,
         global_parallel_cap: int = 8,
         trusted_control_roots: tuple[Path, ...] | None = None,
+        performance_context_hash: str | None = None,
     ):
         self.repo = GitRepository(repository)
         self.mesh_store = mesh_store
@@ -99,6 +100,7 @@ class MeshRuntime:
         self.router = router
         self.providers = providers
         self.worker_id = worker_id
+        self.performance_context_hash = performance_context_hash
         self.output_root = (output_root or self.repo.root / ".delivery" / "ztad" / "mesh-runs").resolve()
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.global_parallel_cap = max(1, global_parallel_cap)
@@ -116,6 +118,70 @@ class MeshRuntime:
     def _candidate(self, registry_id: str):
         return next((item for item in self.router.candidates if item.registry_id == registry_id), None)
 
+    @staticmethod
+    def _continuity_target_for_role(role: str) -> str | None:
+        if role in {"repository_indexer", "context_scout", "architecture_advisor", "plan_adjudicator", "test_designer"}:
+            return "PLANNING"
+        if role in {"worker", "repairer", "supervisor_takeover", "patch_integrator"}:
+            return "WORKER_IMPLEMENTING"
+        if role == "check_runner":
+            return "MACHINE_CHECKS"
+        if role in {"supervisor", "focused_reviewer", "security_reviewer", "data_reviewer", "closure", "release_advisor"}:
+            return "SUPERVISOR_REVIEW"
+        return None
+
+    def _sync_continuity_phase(self, node: dict[str, Any]) -> str:
+        target = self._continuity_target_for_role(str(node["role"]))
+        task = self.continuity_store.get_task(node["task_id"])
+        if target is None:
+            return str(task["state"])
+        order = ["READY", "PLANNING", "WORKER_IMPLEMENTING", "MACHINE_CHECKS", "SUPERVISOR_REVIEW"]
+        if task["state"] not in order or order.index(task["state"]) >= order.index(target):
+            return str(task["state"])
+        for _ in range(6):
+            task = self.continuity_store.get_task(node["task_id"])
+            current = str(task["state"])
+            if current not in order or order.index(current) >= order.index(target):
+                return current
+            if current == "READY":
+                next_state = "PLANNING" if target == "PLANNING" else "WORKER_IMPLEMENTING"
+            elif current == "PLANNING":
+                next_state = "WORKER_IMPLEMENTING"
+            elif current == "WORKER_IMPLEMENTING":
+                next_state = "MACHINE_CHECKS"
+            elif current == "MACHINE_CHECKS":
+                next_state = "SUPERVISOR_REVIEW"
+            else:
+                return current
+            try:
+                task = self.continuity_store.transition(
+                    node["task_id"], next_state, actor="mesh-runtime",
+                    expected_version=int(task["version"]),
+                    payload={"mesh_node_id": node["node_id"], "mesh_role": node["role"]},
+                    idempotency_key=f"mesh-phase:{node['task_id']}:{current}:{next_state}",
+                )
+            except RuntimeError:
+                continue
+        raise RuntimeError("Unable to synchronize Continuity phase after bounded optimistic retries")
+
+    def _transition_parent_control_state(self, node: dict[str, Any], target: str, *, reason: str) -> str:
+        task = self.continuity_store.get_task(node["task_id"])
+        if str(task["state"]) == target:
+            return target
+        try:
+            updated = self.continuity_store.transition(
+                node["task_id"], target, actor="mesh-runtime-controller",
+                expected_version=int(task["version"]),
+                payload={"mesh_node_id": node["node_id"], "reason": reason},
+                idempotency_key=f"mesh-control:{node['task_id']}:{node['node_id']}:{target}:{reason}",
+            )
+            return str(updated["state"])
+        except RuntimeError:
+            latest = self.continuity_store.get_task(node["task_id"])
+            if str(latest["state"]) == target:
+                return target
+            raise
+
     def _record_performance(
         self, *, registry_id: str, task_family: str, success: bool, quality: float
     ) -> None:
@@ -130,6 +196,7 @@ class MeshRuntime:
             latency=candidate.latency_index,
             cost=candidate.cost_index,
             catalog_hash=sha256_json(self.router.catalog),
+            benchmark_suite_hash=self.performance_context_hash,
         )
 
     @staticmethod
@@ -159,6 +226,10 @@ class MeshRuntime:
         current_risk = str(node["risk"])
         if target_risk not in RISK_ORDER or RISK_ORDER[target_risk] < RISK_ORDER[current_risk]:
             raise ValueError("Replan target risk may not downgrade the current risk")
+        self._sync_continuity_phase(node)
+        parent = self.continuity_store.get_task(node["task_id"])
+        parent_control_state = "AUTO_REPAIR" if reason == "BLOCKING_FINAL_GUARD_FINDINGS" else "AUTO_REPLAN"
+        self._transition_parent_control_state(node, parent_control_state, reason=reason)
         parent = self.continuity_store.get_task(node["task_id"])
         contract = copy.deepcopy(parent["contract"])
         budget = contract.setdefault("budget", {})
@@ -262,7 +333,7 @@ class MeshRuntime:
             errors.append("structured_control:context_expansion_required")
             force_quarantine = True
             target = self._next_risk(str(node["risk"]))
-            if target != str(node["risk"]):
+            if str(node["risk"]) in {"R0", "R1", "R2"} and target != str(node["risk"]):
                 replan = {
                     "target_risk": target,
                     "reason": "CONTEXT_EXPANSION_TO_STRONGER_TOPOLOGY",
@@ -342,7 +413,9 @@ class MeshRuntime:
         profile = self._profile(node)
         previous_provider = node.get("selected_provider") or (node.get("metadata") or {}).get("previous_provider")
         overrides = self.mesh_store.performance_overrides(
-            node["task_family"], catalog_hash=sha256_json(self.router.catalog)
+            node["task_family"], catalog_hash=sha256_json(self.router.catalog),
+            benchmark_suite_hash=self.performance_context_hash,
+            minimum_runs=int(self.router.policy.get("minimum_observations_for_override", 1)),
         )
         routes: list[RouteDecision] = []
         unavailable: set[str] = set()
@@ -861,6 +934,18 @@ class MeshRuntime:
             self.worktrees.remove(worktree)
 
     def _execute(self, node: dict[str, Any]) -> dict[str, Any]:
+        try:
+            continuity_state = self._sync_continuity_phase(node)
+        except Exception as exc:
+            errors = [f"continuity_phase_sync_error:{type(exc).__name__}:{exc}"]
+            failure = self._finish_failure(
+                node, run_id=f"continuity-{uuid.uuid4()}", registry_id="deterministic-continuity-sync",
+                provider="local", errors=errors, force_quarantine=True,
+            )
+            return {
+                "node_id": node["node_id"], "task_id": node["task_id"], "success": False,
+                "state": failure["state"], "route": None, "validation_errors": errors,
+            }
         if node["role"] == "repository_indexer":
             return self._execute_repository_indexer(node)
         if node["role"] == "patch_integrator":
@@ -1083,6 +1168,10 @@ class MeshRuntime:
                     provider=decision.candidate.provider, errors=validation_errors,
                     force_quarantine=bool(control["force_quarantine"]),
                 )
+                if bool(control["force_quarantine"]) and replan is None:
+                    self._transition_parent_control_state(
+                        node, "QUARANTINED", reason="STRUCTURED_CONTROL_CONTAINMENT"
+                    )
                 updated = {"state": state["state"]}
             return {
                 "node_id": node["node_id"], "task_id": node["task_id"], "success": success,

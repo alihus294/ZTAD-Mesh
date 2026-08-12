@@ -176,7 +176,7 @@ def build_mesh_plan(
     contract: dict[str, Any],
     prompt_root: str = ".delivery/ztad/mesh-prompts",
     output_schema: str = "schemas/agent-result.schema.json",
-    maximum_parallel_writers: int = 8,
+    maximum_parallel_writers: int = 6,
     maximum_plan_candidates: int = 4,
     check_config: str = ".delivery/ztad/config.json",
     command_policy: str = "policies/command-policy.yaml",
@@ -201,8 +201,11 @@ def build_mesh_plan(
         scope_groups = raw_scope_groups
     all_scopes = sum((list(group) for group in scope_groups), [])
     budget = contract.get("budget", {}) or {}
+    max_implementation_runs = int(budget.get("max_implementation_runs", 0))
     max_review_runs = int(budget.get("max_review_runs", 0))
     max_repair_cycles = int(budget.get("max_repair_cycles", 0))
+    if max_implementation_runs < 1:
+        raise ValueError("Mesh execution requires at least one implementation run")
     if rank <= 1 and max_review_runs < 1:
         raise ValueError("R0/R1 guarded fast path requires at least one independent review run")
     if rank == 2 and max_review_runs < 1:
