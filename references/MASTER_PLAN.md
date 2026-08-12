@@ -1,4 +1,4 @@
-# ZTAD Mesh 4.2.0 — Normative Master Plan
+# ZTAD Mesh 4.3.0 — Normative Master Plan
 
 ## 1. Mission
 
@@ -102,7 +102,7 @@ Before the first model call, ZTAD builds a deterministic repository index contai
 - deployment/control files;
 - dynamic/reflection gaps and known unknowns.
 
-The index is conservative. It does not claim complete runtime understanding. Parallel context scouts inspect independent dimensions. Their structured outputs are stored as bounded, hash-addressed artifacts. If an artifact is truncated or insufficient, later nodes request targeted context expansion instead of guessing.
+The index is conservative. It does not claim complete runtime understanding. Context scouts are risk-proportional: omitted on the normal R0/R1 path, focused on R2, and parallelized on R3/R4 when independent dimensions justify them. Their structured outputs are stored as bounded, hash-addressed artifacts. If an artifact is truncated or insufficient, later nodes request targeted context expansion instead of guessing.
 
 ## 8. Model catalog and routing
 
@@ -160,13 +160,13 @@ It selects the least expensive qualified resource, not the cheapest resource ove
 
 ### Role tiers
 
-- Economy: navigation, scouting, documentation, qualified mechanical work.
-- Balanced: normal implementation, repair, and test design.
-- Frontier: plan adjudication, sensitive review, high-risk diagnosis, takeover, closure, and release advice.
+- Economy: Luna is the preferred bounded implementation worker for R0/R1 and eligible R2 work.
+- Balanced: Terra is the fallback/focused R2 context and review resource.
+- Frontier: Sol handles required frontier consultation/review, with every Sol invocation hard-capped at HIGH reasoning.
 
 ## 9. Maximum useful parallelism
 
-ZTAD parallelizes independent work only:
+ZTAD parallelizes independent work only when the selected risk topology requires it:
 
 - repository/context scout dimensions;
 - plan candidates;
@@ -199,7 +199,7 @@ SQLite is not multi-host high availability. Distributed deployment requires a sh
 
 ## 11. Standard DAG
 
-A risk-adaptive plan contains some or all of:
+A risk-adaptive plan selects the smallest safe topology: R0/R1 guarded fast path, R2 bounded mesh, and R3/R4 full mesh. Depending on risk it contains some or all of:
 
 1. deterministic repository index;
 2. parallel context scouts;
@@ -397,7 +397,7 @@ Hooks are not the only security boundary. A trusted sandbox, protected CI, repos
 
 ## 23. Budget and cost
 
-Budgets cover calls, tokens, cost, wall time, attempts, and parallelism. Economy models handle qualified high-volume work; frontier models are reserved for high-value gates and hard recovery.
+Budgets cover calls, tokens, cost, wall time, attempts, and parallelism. Luna handles qualified low/medium-risk implementation, Terra provides balanced fallback/focused R2 support, and Sol is reserved for frontier gates and hard recovery with a mandatory HIGH reasoning ceiling.
 
 When budget approaches its limit, the system does not repeat low-value attempts. It reduces fan-out, switches to evidence collection, escalates once, or quarantines the task while continuing others.
 

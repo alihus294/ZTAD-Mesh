@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from contextlib import closing
 import json
 import sqlite3
 import subprocess
@@ -72,7 +73,7 @@ def test_exhausted_repair_budget_quarantines_parent_without_orphan_auto_repair(t
     )
     assert result is None
     assert continuity.get_task("parent")["state"] == "QUARANTINED"
-    with sqlite3.connect(continuity_db) as conn:
+    with closing(sqlite3.connect(continuity_db)) as conn:
         assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 1
 
 

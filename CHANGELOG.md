@@ -8,6 +8,11 @@
 - Added explicit preferred-model routing and a defense-in-depth hard HIGH reasoning ceiling for every Sol invocation.
 - Prevented protocol-correct benchmark abstentions from receiving perfect capability scores and kept learned cost/latency in normalized catalog-index units.
 - Added dry-run model-call counts and intended model usage to every mesh plan.
+- Added controller handling for blocking findings, context expansion, risk escalation, bounded repair/replan, and task-local quarantine.
+- Bound learned routing performance to catalog/provider capability context and required repeated observations before override.
+- Synchronized Continuity phases without auto-granting `MERGE_READY`; exhausted repair budgets now quarantine cleanly.
+- Added a structural CLI shadowing guard and a ResourceWarning-as-error CI gate for critical v4.3 controls.
+- Synchronized architecture, operating guides, model-selection guidance, skills, validation, and traceability documentation with the implemented v4.3 topology.
 
 ## 4.2.1 — 2026-08-12
 
