@@ -1,0 +1,294 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  publish:
+    name: Publish verified release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Resolve exact source commit
+        id: source
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            sha="$WORKFLOW_RUN_SHA"
+          else
+            sha="$DISPATCH_SHA"
+          fi
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid source commit: $sha" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact CI-approved source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify source is current main
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          test "$SOURCE_SHA" = "$main_sha" || {
+            echo "Refusing to release stale commit $SOURCE_SHA; main is $main_sha" >&2
+            exit 1
+          }
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            toolkit/pyproject.toml
+            toolkit/requirements.lock.txt
+            toolkit/requirements-dev.lock.txt
+
+      - name: Install exact release environment
+        run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+
+      - name: Verify installed dependency consistency
+        run: python -m pip check
+
+      - name: Resolve and validate version identity
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || {
+            echo "Invalid VERSION: $version" >&2
+            exit 1
+          }
+          python - <<'PY'
+          import json
+          import pathlib
+          import tomllib
+
+          version = pathlib.Path("VERSION").read_text(encoding="utf-8").strip()
+          plugin = json.loads(pathlib.Path(".codex-plugin/plugin.json").read_text(encoding="utf-8"))["version"]
+          pyproject = tomllib.loads(pathlib.Path("toolkit/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          if not (version == plugin == pyproject):
+              raise SystemExit(f"Version mismatch: VERSION={version}, plugin={plugin}, pyproject={pyproject}")
+          PY
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse conflicting existing tag or release
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/tmp/tag.json 2>/dev/null; then
+            tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
+            test "$tag_sha" = "$SOURCE_SHA" || {
+              echo "Tag $TAG already points to $tag_sha, not $SOURCE_SHA" >&2
+              exit 1
+            }
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $TAG already exists for the approved source; nothing to publish."
+              echo "ZTAD_RELEASE_ALREADY_EXISTS=1" >> "$GITHUB_ENV"
+            fi
+          fi
+
+      - name: Compile Python sources
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        run: python -m compileall -q toolkit scripts evals tests
+
+      - name: Re-run release-critical tests
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        env:
+          PYTHONPATH: toolkit
+        run: >-
+          python -B -m pytest -q -W error::ResourceWarning
+          tests/test_cli_dispatch_regression.py
+          tests/test_v43_guarded_fast_path.py
+          tests/test_v43_runtime_controls.py
+          tests/test_v43_last_gaps.py
+          tests/test_v43_final_hardening.py
+
+      - name: Validate bundle and policy wiring
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B scripts/ztad.py --output "${RUNNER_TEMP}/bundle-validation.json" validate-bundle --root .
+          python -B scripts/ztad.py --output "${RUNNER_TEMP}/policy-wiring.json" policy-wiring --root .
+
+      - name: Set commit-derived reproducible timestamp
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct '${{ steps.source.outputs.sha }}')" >> "$GITHUB_ENV"
+
+      - name: Build deterministic distributions twice
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B scripts/ztad.py --output "${RUNNER_TEMP}/distribution-a.json" build-distribution --root . --output-dir "${RUNNER_TEMP}/dist-a"
+          python -B scripts/ztad.py --output "${RUNNER_TEMP}/distribution-b.json" build-distribution --root . --output-dir "${RUNNER_TEMP}/dist-b"
+          diff -qr "${RUNNER_TEMP}/dist-a" "${RUNNER_TEMP}/dist-b"
+
+      - name: Validate exact release archives
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          plugin="${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${VERSION}.zip"
+          marketplace="${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${VERSION}.zip"
+          test -f "$plugin"
+          test -f "$marketplace"
+          python -B scripts/ztad.py validate-distribution --archive "$plugin" --kind plugin
+          python -B scripts/ztad.py validate-distribution --archive "$marketplace" --kind marketplace
+
+      - name: Materialize release assets and checksums
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/release"
+          cp "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${VERSION}.zip" "${RUNNER_TEMP}/release/"
+          cp "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" "${RUNNER_TEMP}/release/"
+          (
+            cd "${RUNNER_TEMP}/release"
+            sha256sum "zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
+              "zero-trust-agentic-delivery-marketplace-${VERSION}.zip" > CHECKSUMS.sha256
+            python "$GITHUB_WORKSPACE/scripts/verify_release.py" CHECKSUMS.sha256
+          )
+
+      - name: Create exact tag if absent
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${TAG}" \
+              -f sha="$SOURCE_SHA" >/dev/null
+          fi
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
+          test "$tag_sha" = "$SOURCE_SHA"
+
+      - name: Write release notes
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/release-notes.md" <<EOF
+          ## ZTAD Mesh ${VERSION}
+
+          Guarded risk-proportional release built from exact commit \`${SOURCE_SHA}\`.
+
+          Release properties:
+          - R0/R1: Luna primary worker, deterministic gates, one Sol final guard.
+          - R2: bounded topology with Luna primary worker and Terra support/fallback.
+          - R3/R4: full independent Mesh.
+          - Sol reasoning effort is hard-capped at HIGH.
+          - Actual-diff risk escalation invalidates weaker paths and submits stronger replans.
+          - Blocking P0/P1 findings cannot silently pass.
+          - Routing performance is context-bound and downstream deterministic results influence writer quality.
+          - Plugin and Marketplace archives are deterministic, independently validated, and covered by \`CHECKSUMS.sha256\`.
+
+          CI source: ${CI_RUN_URL:-manual-dispatch}
+
+          Target-host acceptance remains mandatory for provider credentials, GitHub enforcement, merge/deployment authority, production canaries, and rollback controls.
+          EOF
+
+      - name: Publish release without overwrite
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test ! "$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName --jq ".[] | select(.tagName == \"${TAG}\") | .tagName")" = "$TAG"
+          gh release create "$TAG" \
+            "${RUNNER_TEMP}/release/zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
+            "${RUNNER_TEMP}/release/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
+            "${RUNNER_TEMP}/release/CHECKSUMS.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "ZTAD Mesh ${VERSION}" \
+            --notes-file "${RUNNER_TEMP}/release-notes.md" \
+            --latest
+
+      - name: Re-download and verify published release
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/published"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "${RUNNER_TEMP}/published"
+          python scripts/verify_release.py "${RUNNER_TEMP}/published/CHECKSUMS.sha256"
+          python -B scripts/ztad.py validate-distribution \
+            --archive "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-plugin-${VERSION}.zip" --kind plugin
+          python -B scripts/ztad.py validate-distribution \
+            --archive "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" --kind marketplace
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
+          test "$tag_sha" = "$SOURCE_SHA"
+          asset_count="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')"
+          test "$asset_count" = "3"
+
+      - name: Prove source checkout remained unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain=v1 --untracked-files=all)" || {
+            git status --short
+            exit 1
+          }
