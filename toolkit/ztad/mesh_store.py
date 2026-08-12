@@ -659,11 +659,12 @@ class MeshStore:
                 "SELECT catalog_hash,benchmark_suite_hash FROM model_performance WHERE registry_id=? AND task_family=?",
                 (registry_id, task_family),
             ).fetchone()
-            if existing and catalog_hash and existing["catalog_hash"] not in {None, catalog_hash}:
+            if existing and catalog_hash is not None and existing["catalog_hash"] != catalog_hash:
                 conn.execute("DELETE FROM model_performance WHERE registry_id=? AND task_family=?", (registry_id, task_family))
                 existing = None
-            if existing and benchmark_suite_hash and existing["benchmark_suite_hash"] not in {None, benchmark_suite_hash}:
+            if existing and benchmark_suite_hash is not None and existing["benchmark_suite_hash"] != benchmark_suite_hash:
                 conn.execute("DELETE FROM model_performance WHERE registry_id=? AND task_family=?", (registry_id, task_family))
+                existing = None
             conn.execute(
                 """INSERT INTO model_performance(
                        registry_id,task_family,runs,successes,quality_sum,latency_sum,cost_sum,
@@ -698,9 +699,9 @@ class MeshStore:
             rows = conn.execute("SELECT * FROM model_performance WHERE task_family=?", (task_family,)).fetchall()
             result: dict[str, dict[str, float]] = {}
             for row in rows:
-                if catalog_hash and row["catalog_hash"] not in {None, catalog_hash}:
+                if catalog_hash is not None and row["catalog_hash"] != catalog_hash:
                     continue
-                if benchmark_suite_hash and row["benchmark_suite_hash"] not in {None, benchmark_suite_hash}:
+                if benchmark_suite_hash is not None and row["benchmark_suite_hash"] != benchmark_suite_hash:
                     continue
                 runs = max(1, int(row["runs"]))
                 if runs < minimum_runs:

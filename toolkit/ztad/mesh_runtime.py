@@ -228,16 +228,18 @@ class MeshRuntime:
             raise ValueError("Replan target risk may not downgrade the current risk")
         self._sync_continuity_phase(node)
         parent = self.continuity_store.get_task(node["task_id"])
-        parent_control_state = "AUTO_REPAIR" if reason == "BLOCKING_FINAL_GUARD_FINDINGS" else "AUTO_REPLAN"
-        self._transition_parent_control_state(node, parent_control_state, reason=reason)
-        parent = self.continuity_store.get_task(node["task_id"])
         contract = copy.deepcopy(parent["contract"])
         budget = contract.setdefault("budget", {})
         remaining_repairs = int(budget.get("max_repair_cycles", 0))
+        if consume_repair_cycle and remaining_repairs <= 0:
+            self._transition_parent_control_state(
+                node, "QUARANTINED", reason="REPAIR_BUDGET_EXHAUSTED"
+            )
+            return None
         if consume_repair_cycle:
-            if remaining_repairs <= 0:
-                return None
             budget["max_repair_cycles"] = remaining_repairs - 1
+        parent_control_state = "AUTO_REPAIR" if reason == "BLOCKING_FINAL_GUARD_FINDINGS" else "AUTO_REPLAN"
+        self._transition_parent_control_state(node, parent_control_state, reason=reason)
         governance = contract.setdefault("governance", {})
         governance["policy_risk"] = target_risk
         decisions = governance.setdefault("human_decisions", [])
