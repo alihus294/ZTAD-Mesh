@@ -904,8 +904,8 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                         mesh_store.record_model_performance(
                             registry_id=model["registry_id"], task_family=case["task_family"],
                             success=bool(case["success"]), quality=float(case["score"]),
-                            latency=float(case["latency_seconds"]),
-                            cost=max(0.01, float((case.get("input_tokens") or 0) + (case.get("output_tokens") or 0)) / 100000.0),
+                            latency=next(item.latency_index for item in router.candidates if item.registry_id == model["registry_id"]),
+                            cost=next(item.cost_index for item in router.candidates if item.registry_id == model["registry_id"]),
                             catalog_hash=benchmark_result["catalog_hash"],
                             benchmark_suite_hash=benchmark_result["benchmark_suite_hash"],
                         )
@@ -1012,8 +1012,8 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                         mesh_store.record_model_performance(
                             registry_id=model["registry_id"], task_family=case["task_family"],
                             success=bool(case["success"]), quality=float(case["score"]),
-                            latency=float(case["latency_seconds"]),
-                            cost=max(0.01, float((case.get("input_tokens") or 0) + (case.get("output_tokens") or 0)) / 100000.0),
+                            latency=next(item.latency_index for item in router.candidates if item.registry_id == model["registry_id"]),
+                            cost=next(item.cost_index for item in router.candidates if item.registry_id == model["registry_id"]),
                             catalog_hash=benchmark_result["catalog_hash"],
                             benchmark_suite_hash=benchmark_result["benchmark_suite_hash"],
                         )
