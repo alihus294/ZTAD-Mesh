@@ -1,16 +1,24 @@
-# ZTAD Mesh 4.2.0 Quick Start
+# ZTAD Mesh 4.3.0 Quick Start
 
-1. Install the versioned Codex Marketplace package.
-2. Close the installation session and start a fresh Codex session.
-3. Verify the plugin, hooks, and thirteen explicit-only skills.
-4. In the target repository invoke `$zero-trust-delivery`.
-5. Run host acceptance, provider probes, and task-family benchmarks.
-6. Run repository `AUDIT`, then `DRY_RUN`.
-7. Create a validated Change Contract.
-8. Run `mesh-autopilot --dry-run` and inspect the planned DAG, scopes, routes, checks, and risk policy.
-9. Start bounded operation only after dry-run and target-host gates pass.
+1. Download the versioned Marketplace archive from the `v4.3.0` GitHub Release.
+2. Download `CHECKSUMS.sha256` and verify the release files before installation.
+3. Extract the Marketplace archive to a stable local path and install `zero-trust-agentic-delivery@ztad-local` through the official Codex plugin flow.
+4. Close the installation session and start a fresh Codex session.
+5. Confirm the plugin, hooks, and thirteen explicit-only skills are discovered and trusted.
+6. In the target repository invoke `$zero-trust-delivery` explicitly.
+7. Run host acceptance and provider probes. Run task-family benchmarks only when provider/model access is available.
+8. Run repository `AUDIT`, then `DRY_RUN`; both must be structured and non-mutating.
+9. Create a validated Change Contract.
+10. Run `mesh-autopilot --dry-run` and inspect risk, model-call count, route preview, scopes, checks, and escalation behavior.
+11. Start bounded operation only after dry-run and target-host gates pass.
 
-Local package validation:
+Release verification:
+
+```bash
+python scripts/verify_release.py CHECKSUMS.sha256
+```
+
+Local source validation:
 
 ```bash
 python -B scripts/ztad.py validate-bundle --root .
@@ -28,5 +36,14 @@ python -B scripts/ztad.py model-benchmark --repo <REPOSITORY>
 python -B scripts/ztad.py mesh-autopilot --repo <REPOSITORY> --contract <CONTRACT.json> --dry-run
 python -B scripts/ztad.py mesh-autopilot --repo <REPOSITORY> --contract <CONTRACT.json>
 ```
+
+Normal routing intent:
+
+- R0/R1: deterministic index → Luna implementation → deterministic integration/checks and actual-diff risk → one Sol final guard.
+- R2: bounded topology with Luna as preferred worker and Terra as focused support/fallback.
+- R3/R4: full independent Mesh.
+- Every Sol invocation is hard-capped at `HIGH` reasoning.
+
+Any upward actual-diff risk invalidates the weaker path and requires the stronger risk topology before approval may continue. A model result never grants merge or production authority.
 
 For a persistent local worker process, use `mesh-service` with explicit database, continuity database, worker ID, time bounds, and poll interval. An external process manager is required to restart that service after host or process failure.
