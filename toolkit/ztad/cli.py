@@ -795,8 +795,8 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
                     store.record_model_performance(
                         registry_id=model["registry_id"], task_family=case["task_family"],
                         success=bool(case["success"]), quality=float(case["score"]),
-                        latency=float(case["latency_seconds"]),
-                        cost=max(0.01, float((case.get("input_tokens") or 0) + (case.get("output_tokens") or 0)) / 100000.0),
+                        latency=next(item.latency_index for item in router.candidates if item.registry_id == model["registry_id"]),
+                        cost=next(item.cost_index for item in router.candidates if item.registry_id == model["registry_id"]),
                         catalog_hash=result["catalog_hash"], benchmark_suite_hash=result["benchmark_suite_hash"],
                     )
             result["persisted_to_mesh_database"] = str(Path(args.mesh_database).resolve())

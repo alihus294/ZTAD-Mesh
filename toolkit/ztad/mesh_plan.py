@@ -23,8 +23,18 @@ class MeshPlan:
     rationale: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
+        deterministic_roles = {"repository_indexer", "patch_integrator", "check_runner"}
+        model_nodes = [node for node in self.nodes if node.role not in deterministic_roles]
+        intended_usage: dict[str, int] = {}
+        for node in model_nodes:
+            registry_id = str((node.metadata or {}).get("preferred_registry_id") or "adaptive")
+            intended_usage[registry_id] = intended_usage.get(registry_id, 0) + 1
+        execution_mode = "GUARDED_FAST_PATH" if self.risk in {"R0", "R1"} else "BOUNDED_MESH" if self.risk == "R2" else "FULL_MESH"
         return {
             "schema_version": 1,
+            "execution_mode": execution_mode,
+            "model_call_count": len(model_nodes),
+            "intended_model_usage": dict(sorted(intended_usage.items())),
             "task_id": self.task_id,
             "risk": self.risk,
             "plan_id": self.plan_id,
@@ -180,17 +190,32 @@ def build_mesh_plan(
     expected_components = scope.get("expected_components", []) or []
     if not expected_components:
         raise ValueError("Change Contract has no expected_components")
-    scope_groups = _group_scopes(expected_components, max(1, maximum_parallel_writers))
-    scout_dimensions, review_dimensions = _dimensions(risk, contract)
     rank = _RISK_RANK[risk]
-    plan_candidates = min(maximum_plan_candidates, 1 if rank <= 1 else 2 if rank == 2 else 3 if rank == 3 else 4)
+    raw_scope_groups = _group_scopes(expected_components, max(1, maximum_parallel_writers))
+    if rank <= 2:
+        # Fast/medium paths deliberately use one isolated writer. Parallel writer fan-out
+        # is reserved for R3/R4 where its coordination cost is justified.
+        all_patterns = tuple(sorted({pattern for group in raw_scope_groups for pattern in group}))
+        scope_groups = (all_patterns,)
+    else:
+        scope_groups = raw_scope_groups
+    all_scopes = sum((list(group) for group in scope_groups), [])
+    budget = contract.get("budget", {}) or {}
+    max_review_runs = int(budget.get("max_review_runs", 0))
+    max_repair_cycles = int(budget.get("max_repair_cycles", 0))
+    if rank <= 1 and max_review_runs < 1:
+        raise ValueError("R0/R1 guarded fast path requires at least one independent review run")
+    if rank == 2 and max_review_runs < 1:
+        raise ValueError("R2 bounded mesh requires at least one independent review run")
+    scout_dimensions, review_dimensions = _dimensions(risk, contract)
+    plan_candidates = min(maximum_plan_candidates, 3 if rank == 3 else 4 if rank == 4 else 1)
     prompts: dict[str, str] = {}
     nodes: list[MeshNodeSpec] = []
     contract_hash = sha256_json(contract)
     base_metadata = {
         "contract_hash": contract_hash,
-        "prompt_version": "mesh-4.2",
-        "max_attempts": 4,
+        "prompt_version": "mesh-4.3",
+        "max_attempts": max(1, 1 + max_repair_cycles) if rank <= 2 else 4,
     }
 
     def add(
@@ -230,118 +255,212 @@ def build_mesh_plan(
             role=role, risk=risk, write_access=write, scopes=node_scopes,
             prompt_path=prompt_path, output_schema=output_schema, priority=priority,
             metadata=node_metadata, dependencies=dependencies,
-            idempotency_key=sha256_json({"task": task_id, "key": key, "contract": contract_hash}),
+            idempotency_key=sha256_json({"task": task_id, "risk": risk, "key": key, "contract": contract_hash}),
         ))
         return node_id
 
     indexer = add(
         "repository-index", title="Deterministic repository index", family="repository_index",
         role="repository_indexer", agent_role="planner", dimension="static-repository-index",
-        scopes=sum((list(group) for group in scope_groups), []), dependencies=(), priority=110,
+        scopes=all_scopes, dependencies=(), priority=110,
         metadata={"deterministic_node": True, "expected_components": list(expected_components)},
     )
 
+    def add_integrator_and_checks(implementation_ids: list[str]) -> tuple[str, str]:
+        integrator = add(
+            "integrate", title="Deterministic patch integration", family="integration",
+            role="patch_integrator", agent_role="implementer", dimension="patch-integration",
+            scopes=all_scopes, dependencies=implementation_ids, priority=60,
+            metadata={"deterministic_node": True},
+        )
+        checks = add(
+            "machine-checks", title="Deterministic machine verification", family="verification",
+            role="check_runner", agent_role="planner", dimension="configured-machine-checks",
+            scopes=all_scopes, dependencies=[integrator], priority=55,
+            metadata={
+                "deterministic_node": True, "consume_dependency_patches": True,
+                "check_config": check_config, "command_policy": command_policy, "risk_policy": risk_policy,
+            },
+        )
+        return integrator, checks
+
+    if rank <= 1:
+        worker = add(
+            "implement-1", title="Primary bounded implementation", family="implementation",
+            role="worker", agent_role="implementer", dimension="bounded-change",
+            write=True, scopes=scope_groups[0], dependencies=[indexer], priority=70,
+            metadata={
+                "preferred_registry_id": "codex-luna",
+                "maximum_reasoning_effort": "high",
+                "strategy_hash": sha256_json({"mode": "guarded-fast", "contract": contract_hash}),
+            },
+        )
+        integrator, checks = add_integrator_and_checks([worker])
+        add(
+            "final-guard", title="Independent frontier final guard", family="review",
+            role="supervisor", agent_role="independent_reviewer", dimension="final-guard",
+            scopes=all_scopes, dependencies=[integrator, checks], priority=50,
+            metadata={
+                "consume_dependency_patches": True,
+                "preferred_registry_id": "codex-sol",
+                "maximum_reasoning_effort": "high",
+                "mandatory_final_guard": True,
+            },
+        )
+        return _finalize_plan(
+            task_id=task_id, risk=risk, contract_hash=contract_hash, nodes=nodes, prompts=prompts,
+            scope_groups=scope_groups,
+            rationale=(
+                "guarded fast path: deterministic index -> Luna worker -> integration -> checks/risk reclassification -> one Sol final guard",
+                "no redundant scout, plan adjudicator, test-oracle, supervisor synthesis, or release-advisor calls on the normal R0/R1 path",
+                "actual-diff risk escalation invalidates this topology before final review",
+            ),
+        )
+
+    if rank == 2:
+        scout = add(
+            "scout-focused", title="Focused context scout", family="context_scout",
+            role="context_scout", agent_role="planner", dimension="runtime-and-tests",
+            scopes=all_scopes, dependencies=[indexer], priority=100,
+            metadata={
+                "require_context_sufficiency": True,
+                "preferred_registry_id": "codex-terra",
+                "maximum_reasoning_effort": "high",
+            },
+        )
+        worker = add(
+            "implement-1", title="Primary bounded implementation", family="implementation",
+            role="worker", agent_role="implementer", dimension="bounded-change",
+            write=True, scopes=scope_groups[0], dependencies=[scout], priority=70,
+            metadata={
+                "preferred_registry_id": "codex-luna",
+                "maximum_reasoning_effort": "high",
+                "strategy_hash": sha256_json({"mode": "bounded-r2", "contract": contract_hash}),
+            },
+        )
+        integrator, checks = add_integrator_and_checks([worker])
+        review_count = min(2, max_review_runs)
+        dimensions = ("scope-correctness-tests", "runtime-compatibility")[:review_count]
+        for index, dimension in enumerate(dimensions, 1):
+            add(
+                f"focused-review-{index}", title=f"Focused independent review {index}", family="review",
+                role="focused_reviewer", agent_role="independent_reviewer", dimension=dimension,
+                scopes=all_scopes, dependencies=[integrator, checks], priority=50,
+                metadata={
+                    "consume_dependency_patches": True,
+                    "preferred_registry_id": "codex-terra",
+                    "maximum_reasoning_effort": "high",
+                },
+            )
+        return _finalize_plan(
+            task_id=task_id, risk=risk, contract_hash=contract_hash, nodes=nodes, prompts=prompts,
+            scope_groups=scope_groups,
+            rationale=(
+                "bounded R2 mesh: one focused Terra scout, one Luna worker, deterministic integration/checks, and at most two focused Terra reviews",
+                "plan adjudication and release-advisor fan-out are reserved for R3/R4",
+                "actual-diff risk escalation invalidates this topology before review",
+            ),
+        )
+
+    # R3/R4 retain the full independent mesh. Cost is intentional because risk is high.
     scout_ids = [
         add(
             f"scout-{dimension}", title=f"{dimension.title()} context scout",
             family="context_scout", role="context_scout", agent_role="planner",
-            dimension=dimension, scopes=sum((list(group) for group in scope_groups), []),
-            dependencies=[indexer], priority=100,
+            dimension=dimension, scopes=all_scopes, dependencies=[indexer], priority=100,
             metadata={"require_context_sufficiency": True},
         )
         for dimension in scout_dimensions
     ]
-
     plan_ids = [
         add(
             f"plan-{index + 1}", title=f"Independent plan candidate {index + 1}",
             family="architecture", role="architecture_advisor", agent_role="architecture_advisor",
-            dimension=f"candidate-{index + 1}", scopes=sum((list(group) for group in scope_groups), []),
+            dimension=f"candidate-{index + 1}", scopes=all_scopes,
             dependencies=scout_ids, priority=90,
-            metadata={"require_provider_diversity": index > 0},
+            metadata={"require_provider_diversity": index > 0, "maximum_reasoning_effort": "high"},
         )
         for index in range(plan_candidates)
     ]
     adjudicator = add(
         "plan-adjudicator", title="Frontier plan adjudication", family="plan_adjudication",
         role="plan_adjudicator", agent_role="architecture_advisor", dimension="plan-adjudication",
-        scopes=sum((list(group) for group in scope_groups), []), dependencies=plan_ids,
-        priority=85, metadata={"require_provider_diversity": True},
+        scopes=all_scopes, dependencies=plan_ids, priority=85,
+        metadata={"require_provider_diversity": True, "maximum_reasoning_effort": "high"},
     )
     test_oracle = add(
         "test-oracle", title="Independent test-oracle design", family="test_design",
         role="test_designer", agent_role="planner", dimension="acceptance-and-negative-tests",
-        scopes=sum((list(group) for group in scope_groups), []), dependencies=[adjudicator], priority=80,
+        scopes=all_scopes, dependencies=[adjudicator], priority=80,
     )
-
     implementation_ids: list[str] = []
     for index, group in enumerate(scope_groups, 1):
         implementation_ids.append(add(
             f"implement-{index}", title=f"Implementation shard {index}", family="implementation",
             role="worker", agent_role="implementer", dimension=f"scope-shard-{index}",
             write=True, scopes=group, dependencies=[adjudicator, test_oracle], priority=70,
-            metadata={"strategy_hash": sha256_json({"plan": contract_hash, "scope": group})},
+            metadata={
+                "preferred_registry_id": "codex-terra" if risk == "R3" else None,
+                "strategy_hash": sha256_json({"plan": contract_hash, "scope": group}),
+            },
         ))
-
-    integrator = add(
-        "integrate", title="Deterministic patch integration", family="integration",
-        role="patch_integrator", agent_role="implementer", dimension="patch-integration",
-        scopes=sum((list(group) for group in scope_groups), []), dependencies=implementation_ids,
-        priority=60, metadata={"deterministic_node": True},
-    )
-
-    checks = add(
-        "machine-checks", title="Deterministic machine verification", family="verification",
-        role="check_runner", agent_role="planner", dimension="configured-machine-checks",
-        scopes=sum((list(group) for group in scope_groups), []), dependencies=[integrator],
-        priority=55, metadata={
-            "deterministic_node": True, "consume_dependency_patches": True,
-            "check_config": check_config, "command_policy": command_policy, "risk_policy": risk_policy,
-        },
-    )
-
+    integrator, checks = add_integrator_and_checks(implementation_ids)
     review_ids = [
         add(
             f"review-{dimension}", title=f"Independent {dimension} review", family="review",
             role=("security_reviewer" if dimension == "security" else "data_reviewer" if dimension == "data" else "supervisor"),
             agent_role="independent_reviewer", dimension=dimension,
-            scopes=sum((list(group) for group in scope_groups), []), dependencies=[integrator, checks], priority=50,
-            metadata={"consume_dependency_patches": True, "require_provider_diversity": True},
+            scopes=all_scopes, dependencies=[integrator, checks], priority=50,
+            metadata={
+                "consume_dependency_patches": True, "require_provider_diversity": True,
+                "maximum_reasoning_effort": "high",
+            },
         )
         for dimension in review_dimensions
     ]
-
     supervisor = add(
         "supervisor", title="Frontier synthesis and technical decision", family="review",
         role="supervisor", agent_role="independent_reviewer", dimension="review-synthesis",
-        scopes=sum((list(group) for group in scope_groups), []), dependencies=[integrator, checks, *review_ids],
-        priority=40, metadata={"consume_dependency_patches": True, "require_provider_diversity": True},
+        scopes=all_scopes, dependencies=[integrator, checks, *review_ids], priority=40,
+        metadata={
+            "consume_dependency_patches": True, "require_provider_diversity": True,
+            "maximum_reasoning_effort": "high",
+        },
     )
     add(
         "release-advisor", title="Frontier release-readiness advice", family="release",
         role="release_advisor", agent_role="release_advisor", dimension="release-and-rollback",
-        scopes=sum((list(group) for group in scope_groups), []), dependencies=[integrator, checks, supervisor],
-        priority=30, metadata={"consume_dependency_patches": True, "require_provider_diversity": True},
+        scopes=all_scopes, dependencies=[integrator, checks, supervisor], priority=30,
+        metadata={
+            "consume_dependency_patches": True, "require_provider_diversity": True,
+            "maximum_reasoning_effort": "high",
+        },
     )
-
-    material = {
-        "task_id": task_id, "risk": risk, "contract_hash": contract_hash,
-        "nodes": [(node.node_id, node.role, node.dependencies, node.scopes) for node in nodes],
-    }
-    return MeshPlan(
-        task_id=task_id, risk=risk, plan_id=sha256_json(material), nodes=tuple(nodes),
-        prompt_files=prompts, scope_groups=scope_groups,
+    return _finalize_plan(
+        task_id=task_id, risk=risk, contract_hash=contract_hash, nodes=nodes, prompts=prompts,
+        scope_groups=scope_groups,
         rationale=(
-            "one deterministic repository index precedes all model analysis",
+            "full R3/R4 mesh retains deterministic indexing, independent scouts/plans, adjudication, test oracle, isolated writers, checks, multidimensional reviews, synthesis, and release advice",
             f"{len(scout_ids)} independent context dimensions",
             f"{plan_candidates} independent plan candidates",
             f"{len(implementation_ids)} non-overlapping implementation shards",
             f"{len(review_ids)} independent review dimensions",
-            "one deterministic integration node prevents review of invisible or conflicting patches",
-            "one deterministic machine-check node binds verification and review to the same candidate SHA",
         ),
     )
 
+
+def _finalize_plan(
+    *, task_id: str, risk: str, contract_hash: str, nodes: list[MeshNodeSpec],
+    prompts: dict[str, str], scope_groups: tuple[tuple[str, ...], ...], rationale: tuple[str, ...],
+) -> MeshPlan:
+    material = {
+        "task_id": task_id, "risk": risk, "contract_hash": contract_hash,
+        "nodes": [(node.node_id, node.role, node.dependencies, node.scopes, node.metadata.get("preferred_registry_id")) for node in nodes],
+    }
+    return MeshPlan(
+        task_id=task_id, risk=risk, plan_id=sha256_json(material), nodes=tuple(nodes),
+        prompt_files=prompts, scope_groups=scope_groups, rationale=rationale,
+    )
 
 def write_mesh_plan(plan: MeshPlan, *, repository: Path, output_file: Path) -> dict[str, Any]:
     """Persist one task-scoped plan without escaping or overwriting unlike content.

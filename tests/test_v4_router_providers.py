@@ -30,11 +30,13 @@ def test_router_requires_frontier_for_supervisor_and_sensitive_risk():
         assert decision.candidate.model == "gpt-5.6-sol"
 
 
-def test_router_quality_floor_prevents_cheap_model_for_normal_feature():
+def test_router_quality_floor_allows_benchmarked_luna_for_r2_and_falls_back_safely():
     router = AdaptiveModelRouter.from_file(ROOT / "policies/model-catalog.yaml")
-    decision = router.route(TaskProfile("implementation", "worker", "R2", complexity=3))
-    assert decision.candidate.registry_id in {"codex-terra", "codex-sol"}
-    assert decision.candidate.registry_id != "codex-luna"
+    profile = TaskProfile("implementation", "worker", "R2", complexity=3, preferred_registry_id="codex-luna")
+    decision = router.route(profile)
+    assert decision.candidate.registry_id == "codex-luna"
+    fallback = router.route(profile, unavailable_registry_ids={"codex-luna"})
+    assert fallback.candidate.registry_id == "codex-terra"
 
 
 def test_router_uses_provider_diversity_when_candidates_are_equivalent():

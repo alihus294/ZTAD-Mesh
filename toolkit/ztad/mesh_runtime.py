@@ -62,6 +62,7 @@ _ROLE_TO_AGENT_ROLE = {
     "data_reviewer": "independent_reviewer",
     "test_designer": "planner",
     "context_scout": "planner",
+    "focused_reviewer": "independent_reviewer",
     "architecture_advisor": "architecture_advisor",
     "plan_adjudicator": "architecture_advisor",
     "release_advisor": "release_advisor",
@@ -125,6 +126,8 @@ class MeshRuntime:
             prior_failures=int(node.get("attempts", 0)),
             required_provider_diversity=bool(metadata.get("require_provider_diversity", False)),
             preferred_provider=metadata.get("preferred_provider"),
+            preferred_registry_id=metadata.get("preferred_registry_id"),
+            maximum_reasoning_effort=metadata.get("maximum_reasoning_effort"),
             excluded_models=tuple(excluded_models),
             excluded_providers=tuple(excluded_providers),
         )

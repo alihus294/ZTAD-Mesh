@@ -63,6 +63,9 @@ def benchmark_suite_hash(cases: Iterable[BenchmarkCase]) -> str:
     ]
     return sha256_bytes(canonical_json(material))
 
+_ABSTENTION_RESULT_TYPES = {"INSUFFICIENT_CONTEXT", "INSUFFICIENT_EVIDENCE", "WAITING_EXTERNAL_DEPENDENCY", "AUTO_REPLAN", "QUARANTINE_AND_CONTINUE"}
+
+
 def _score_output(output: dict[str, Any] | None, assertions: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
 
@@ -90,7 +93,11 @@ def _score_output(output: dict[str, Any] | None, assertions: dict[str, Any]) -> 
     for phrase in assertions.get("forbidden_substrings", []) or []:
         add(f"forbidden:{phrase}", str(phrase).casefold() not in serialized)
     passed = sum(1 for item in checks if item["passed"])
-    return {"score": passed / max(1, len(checks)), "checks": checks}
+    raw_score = passed / max(1, len(checks))
+    if output.get("result_type") in _ABSTENTION_RESULT_TYPES:
+        add("capability_demonstrated", False, output.get("result_type"))
+        raw_score = min(raw_score, 0.25)
+    return {"score": raw_score, "checks": checks}
 
 
 class ModelBenchmarkRunner:
