@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 from ztad.bundle import validate_bundle
@@ -13,10 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_v4_version_and_manifest_are_consistent():
     version = (ROOT / "VERSION").read_text().strip()
     plugin = json.loads((ROOT / ".codex-plugin/plugin.json").read_text())
-    pyproject = (ROOT / "toolkit/pyproject.toml").read_text()
-    assert version == "4.2.0"
+    pyproject = tomllib.loads((ROOT / "toolkit/pyproject.toml").read_text())
     assert plugin["version"] == version
-    assert 'version = "4.2.0"' in pyproject
+    assert pyproject["project"]["version"] == version
 
 
 def test_new_cli_commands_parse():

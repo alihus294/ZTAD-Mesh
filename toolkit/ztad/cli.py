@@ -32,7 +32,7 @@ from .providers import CodexExecProvider, GenericStructuredCommandProvider, Prov
 from .repository_index import assess_context_sufficiency, build_repository_index
 from .scope_guard import ScopeEnvelope
 from .injection import scan_documents
-from .installer import apply_install, distribution_root, plan, uninstall
+from . import installer
 from .ledger import append_record, create_checkpoint, verify_ledger
 from .marketplace import validate_marketplace
 from .models import (
@@ -64,7 +64,7 @@ def _write_result(result: Any, output: str | None) -> None:
 
 
 def _root_file(relative: str) -> Path:
-    return distribution_root() / relative
+    return installer.distribution_root() / relative
 
 
 def _data(path: str | Path) -> Any:
@@ -331,7 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--signed-output", required=True)
 
     p = sub.add_parser("policy-wiring", help="Prove which policy files have deterministic consumers")
-    p.add_argument("--root", default=str(distribution_root()))
+    p.add_argument("--root", default=str(installer.distribution_root()))
 
     p = sub.add_parser("ledger-checkpoint", help="Write a separately protected ledger head checkpoint")
     p.add_argument("--ledger", required=True)
@@ -374,7 +374,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--codex-executable", default="codex")
 
     p = sub.add_parser("host-acceptance", help="Non-mutating host readiness audit")
-    p.add_argument("--plugin-root", default=str(distribution_root()))
+    p.add_argument("--plugin-root", default=str(installer.distribution_root()))
     p.add_argument("--repo")
     p.add_argument("--skip-plugin-state", action="store_true")
 
@@ -476,13 +476,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--contract", required=True)
 
     p = sub.add_parser("validate-bundle", help="Validate this plugin and skill-suite package")
-    p.add_argument("--root", default=str(distribution_root()))
+    p.add_argument("--root", default=str(installer.distribution_root()))
 
     p = sub.add_parser("validate-marketplace", help="Validate a local marketplace and every bundled plugin")
     p.add_argument("--root", required=True)
 
     p = sub.add_parser("build-distribution", help="Build reproducible plugin and marketplace ZIP distributions")
-    p.add_argument("--root", default=str(distribution_root()))
+    p.add_argument("--root", default=str(installer.distribution_root()))
     p.add_argument("--output-dir", default="dist")
     p.add_argument("--no-stable-aliases", action="store_true")
 
@@ -823,7 +823,7 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
         repo = GitRepository(args.repo)
         contract_path = _repo_path(repo, args.contract)
         contract = _data(contract_path)
-        plan = build_mesh_plan(
+        mesh_plan = build_mesh_plan(
             task_id=args.task_id, risk=args.risk, contract=contract,
             prompt_root=args.prompt_root, output_schema=str(Path(args.output_schema).resolve()),
             check_config=args.check_config, command_policy=str(Path(args.command_policy).resolve()),
@@ -831,10 +831,10 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
             maximum_parallel_writers=args.max_parallel_writers,
             maximum_plan_candidates=args.max_plan_candidates,
         )
-        payload = plan.to_dict()
+        payload = mesh_plan.to_dict()
         if args.dry_run:
             return {"dry_run": True, "repository_mutated": False, "plan": payload}, 0
-        written = write_mesh_plan(plan, repository=repo.root, output_file=Path(args.plan_output))
+        written = write_mesh_plan(mesh_plan, repository=repo.root, output_file=Path(args.plan_output))
         return {"dry_run": False, "repository_mutated": True, "plan": payload, "written": written}, 0
     if command == "mesh-autopilot":
         repo = GitRepository(args.repo)
@@ -1061,15 +1061,15 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
         root = Path(args.root).resolve()
         return {"root": str(root), "sha256": hash_directory(root)}, 0
     if command in {"audit", "dry-run"}:
-        result = plan(args.repo, activate_ci=args.activate_ci, install_repo_skills=not args.no_repo_skills)
+        result = installer.plan(args.repo, activate_ci=args.activate_ci, install_repo_skills=not args.no_repo_skills)
         result.update({"mode": command.upper().replace("-", "_"), "repository_mutated": False})
         return result, 0
     if command in {"install", "update"}:
-        result = apply_install(args.repo, activate_ci=args.activate_ci, install_repo_skills=not args.no_repo_skills)
+        result = installer.apply_install(args.repo, activate_ci=args.activate_ci, install_repo_skills=not args.no_repo_skills)
         result["mode"] = command.upper()
         return result, 0 if result.get("applied") else 15
     if command == "uninstall":
-        return uninstall(args.repo), 0
+        return installer.uninstall(args.repo), 0
     if command == "preflight":
         repo = GitRepository(args.repo)
         contract_path = _repo_path(repo, args.contract)

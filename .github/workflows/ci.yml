@@ -86,11 +86,11 @@ jobs:
 
       - name: Validate built Plugin archive
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.2.0.zip" --kind plugin
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.2.1.zip" --kind plugin
 
       - name: Validate built Marketplace archive
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.2.0.zip" --kind marketplace
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.2.1.zip" --kind marketplace
 
       - name: Prove repository remained unchanged
         shell: bash

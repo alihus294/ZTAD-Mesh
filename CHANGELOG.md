@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.2.1 — 2026-08-12
+
+- Fixed `audit` and installer `dry-run` CLI dispatch crashing before planning because the imported `plan` symbol was shadowed by the Mesh planner local variable.
+- Changed CLI installer calls to a module-qualified `installer.*` namespace and renamed the Mesh local to `mesh_plan`, eliminating this class of command-local shadowing.
+- Added direct dispatch, real subprocess entry-point, repository non-mutation, namespace-invariant, and Mesh dry-run regression coverage.
+- Made release-version consistency derive from `VERSION` rather than hard-coding a specific patch version in the test suite.
+- Revalidated unit/integration, offline eval, external fuzz/concurrency, selected mutation, bundle/policy, coverage, and deterministic distribution gates.
+
 ## 4.2.0 — 2026-08-10
 
 - Rebuilt the real source as a bounded multi-model delivery mesh; prior unreleased 4.0/4.1 claims are not treated as distributed releases.
