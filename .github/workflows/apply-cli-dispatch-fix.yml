@@ -1,0 +1,396 @@
+name: Apply and verify CLI dispatch hotfix
+
+on:
+  push:
+    branches: [fix/cli-dispatch-shadowing-4.2.1]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out hotfix branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/cli-dispatch-shadowing-4.2.1
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            toolkit/pyproject.toml
+            toolkit/requirements.lock.txt
+            toolkit/requirements-dev.lock.txt
+
+      - name: Apply deterministic source patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {count}: {old[:120]!r}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          cli_path = ROOT / "toolkit/ztad/cli.py"
+          cli = cli_path.read_text(encoding="utf-8")
+
+          old_import = "from .installer import apply_install, distribution_root, plan, uninstall\n"
+          if cli.count(old_import) != 1:
+              raise SystemExit("Unexpected installer import shape")
+          cli = cli.replace(old_import, "from . import installer\n", 1)
+          cli = cli.replace("distribution_root()", "installer.distribution_root()")
+
+          helpers = '''\n\ndef _execute_installer_preview(args: argparse.Namespace, command: str) -> tuple[dict[str, Any], int]:\n    \"\"\"Run the installer planner without mutating the target repository.\"\"\"\n    result = installer.plan(\n        args.repo,\n        activate_ci=args.activate_ci,\n        install_repo_skills=not args.no_repo_skills,\n    )\n    result.update({\"mode\": command.upper().replace(\"-\", \"_\"), \"repository_mutated\": False})\n    return result, 0\n\n\ndef _execute_installer_apply(args: argparse.Namespace, command: str) -> tuple[dict[str, Any], int]:\n    \"\"\"Apply a bounded installer mutation through the installer module boundary.\"\"\"\n    result = installer.apply_install(\n        args.repo,\n        activate_ci=args.activate_ci,\n        install_repo_skills=not args.no_repo_skills,\n    )\n    result[\"mode\"] = command.upper()\n    return result, 0 if result.get(\"applied\") else 15\n\n\ndef _execute_installer_uninstall(args: argparse.Namespace) -> tuple[dict[str, Any], int]:\n    return installer.uninstall(args.repo), 0\n\n\ndef _execute_mesh_plan(args: argparse.Namespace) -> tuple[dict[str, Any], int]:\n    \"\"\"Build or persist a mesh plan without sharing names with installer APIs.\"\"\"\n    repo = GitRepository(args.repo)\n    contract_path = _repo_path(repo, args.contract)\n    contract = _data(contract_path)\n    mesh_plan = build_mesh_plan(\n        task_id=args.task_id, risk=args.risk, contract=contract,\n        prompt_root=args.prompt_root, output_schema=str(Path(args.output_schema).resolve()),\n        check_config=args.check_config, command_policy=str(Path(args.command_policy).resolve()),\n        risk_policy=str(Path(args.risk_policy).resolve()),\n        maximum_parallel_writers=args.max_parallel_writers,\n        maximum_plan_candidates=args.max_plan_candidates,\n    )\n    payload = mesh_plan.to_dict()\n    if args.dry_run:\n        return {\"dry_run\": True, \"repository_mutated\": False, \"plan\": payload}, 0\n    written = write_mesh_plan(mesh_plan, repository=repo.root, output_file=Path(args.plan_output))\n    return {\"dry_run\": False, \"repository_mutated\": True, \"plan\": payload, \"written\": written}, 0\n'''
+
+          marker = "\n\ndef execute(args: argparse.Namespace) -> tuple[Any, int]:\n"
+          if cli.count(marker) != 1:
+              raise SystemExit("Unexpected execute() declaration shape")
+          cli = cli.replace(marker, helpers + marker, 1)
+
+          old_mesh = '''    if command == "mesh-plan":\n        repo = GitRepository(args.repo)\n        contract_path = _repo_path(repo, args.contract)\n        contract = _data(contract_path)\n        plan = build_mesh_plan(\n            task_id=args.task_id, risk=args.risk, contract=contract,\n            prompt_root=args.prompt_root, output_schema=str(Path(args.output_schema).resolve()),\n            check_config=args.check_config, command_policy=str(Path(args.command_policy).resolve()),\n            risk_policy=str(Path(args.risk_policy).resolve()),\n            maximum_parallel_writers=args.max_parallel_writers,\n            maximum_plan_candidates=args.max_plan_candidates,\n        )\n        payload = plan.to_dict()\n        if args.dry_run:\n            return {"dry_run": True, "repository_mutated": False, "plan": payload}, 0\n        written = write_mesh_plan(plan, repository=repo.root, output_file=Path(args.plan_output))\n        return {"dry_run": False, "repository_mutated": True, "plan": payload, "written": written}, 0\n'''
+          new_mesh = '''    if command == "mesh-plan":\n        return _execute_mesh_plan(args)\n'''
+          if cli.count(old_mesh) != 1:
+              raise SystemExit("Unexpected mesh-plan dispatch shape")
+          cli = cli.replace(old_mesh, new_mesh, 1)
+
+          old_installer = '''    if command in {"audit", "dry-run"}:\n        result = plan(args.repo, activate_ci=args.activate_ci, install_repo_skills=not args.no_repo_skills)\n        result.update({"mode": command.upper().replace("-", "_"), "repository_mutated": False})\n        return result, 0\n    if command in {"install", "update"}:\n        result = apply_install(args.repo, activate_ci=args.activate_ci, install_repo_skills=not args.no_repo_skills)\n        result["mode"] = command.upper()\n        return result, 0 if result.get("applied") else 15\n    if command == "uninstall":\n        return uninstall(args.repo), 0\n'''
+          new_installer = '''    if command in {"audit", "dry-run"}:\n        return _execute_installer_preview(args, command)\n    if command in {"install", "update"}:\n        return _execute_installer_apply(args, command)\n    if command == "uninstall":\n        return _execute_installer_uninstall(args)\n'''
+          if cli.count(old_installer) != 1:
+              raise SystemExit("Unexpected installer dispatch shape")
+          cli = cli.replace(old_installer, new_installer, 1)
+
+          forbidden = [
+              "from .installer import",
+              "        plan = build_mesh_plan(",
+              "result = plan(args.repo",
+              "result = apply_install(args.repo",
+              "return uninstall(args.repo)",
+          ]
+          for token in forbidden:
+              if token in cli:
+                  raise SystemExit(f"Forbidden legacy dispatch token remains: {token}")
+          cli_path.write_text(cli, encoding="utf-8")
+
+          test_path = ROOT / "tests/test_cli_dispatch_regression.py"
+          test_path.write_text(r'''from __future__ import annotations
+
+import ast
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from conftest import init_git_repo, valid_contract
+from ztad.cli import build_parser, execute
+
+ROOT = Path(__file__).resolve().parents[1]
+CLI_PATH = ROOT / "toolkit/ztad/cli.py"
+ENTRYPOINT = ROOT / "scripts/ztad.py"
+
+
+def _snapshot(root: Path) -> dict[str, tuple[str, bytes | str | None]]:
+    snapshot: dict[str, tuple[str, bytes | str | None]] = {}
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            snapshot[relative] = ("symlink", os.readlink(path))
+        elif path.is_file():
+            snapshot[relative] = ("file", path.read_bytes())
+        elif path.is_dir():
+            snapshot[relative] = ("dir", None)
+    return snapshot
+
+
+def _target_repo(tmp_path: Path) -> Path:
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "README.md").write_text("user-owned content\n", encoding="utf-8")
+    custom = target / ".delivery/custom"
+    custom.mkdir(parents=True)
+    (custom / "keep.txt").write_text("do not mutate\n", encoding="utf-8")
+    return target
+
+
+def test_execute_does_not_shadow_module_import_bindings():
+    tree = ast.parse(CLI_PATH.read_text(encoding="utf-8"))
+    imported: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            imported.update(alias.asname or alias.name.split(".", 1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+            imported.update(alias.asname or alias.name for alias in node.names)
+    execute_node = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "execute"
+    )
+    locals_bound = {
+        node.id for node in ast.walk(execute_node)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del))
+    }
+    assert sorted(imported & locals_bound) == []
+
+
+@pytest.mark.parametrize("command", ["audit", "dry-run"])
+def test_installer_preview_dispatch_returns_structured_non_mutating_result(tmp_path: Path, command: str):
+    target = _target_repo(tmp_path)
+    before = _snapshot(target)
+    args = build_parser().parse_args([command, "--repo", str(target)])
+    result, code = execute(args)
+    assert code == 0
+    assert result["mode"] == command.upper().replace("-", "_")
+    assert result["repository_mutated"] is False
+    assert _snapshot(target) == before
+
+
+@pytest.mark.parametrize("command", ["audit", "dry-run"])
+def test_real_cli_entrypoint_preview_commands_are_non_mutating(tmp_path: Path, command: str):
+    target = _target_repo(tmp_path)
+    before = _snapshot(target)
+    proc = subprocess.run(
+        [sys.executable, "-B", str(ENTRYPOINT), command, "--repo", str(target)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["mode"] == command.upper().replace("-", "_")
+    assert payload["repository_mutated"] is False
+    assert _snapshot(target) == before
+
+
+def test_mesh_plan_dry_run_still_uses_non_mutating_dispatch(tmp_path: Path):
+    repo, _ = init_git_repo(tmp_path / "repo")
+    (repo / "src").mkdir()
+    (repo / "src/component.py").write_text("VALUE = 1\n", encoding="utf-8")
+    contract = valid_contract(risk="R0", components=["src/component.py"])
+    contract_path = repo / ".delivery/change-contract.json"
+    contract_path.parent.mkdir(parents=True, exist_ok=True)
+    contract_path.write_text(json.dumps(contract, indent=2), encoding="utf-8")
+    before = _snapshot(repo)
+    args = build_parser().parse_args([
+        "mesh-plan", "--repo", str(repo), "--task-id", "dispatch-regression",
+        "--risk", "R0", "--contract", str(contract_path), "--dry-run",
+    ])
+    result, code = execute(args)
+    assert code == 0
+    assert result["dry_run"] is True
+    assert result["repository_mutated"] is False
+    assert result["plan"]["task_id"] == "dispatch-regression"
+    assert _snapshot(repo) == before
+
+
+def test_mesh_autopilot_dry_run_remains_non_mutating_after_dispatch_refactor(tmp_path: Path):
+    repo, _ = init_git_repo(tmp_path / "repo")
+    (repo / "src").mkdir()
+    (repo / "src/component.py").write_text("VALUE = 1\n", encoding="utf-8")
+    contract = valid_contract(risk="R0", components=["src/component.py"])
+    contract_path = repo / ".delivery/change-contract.json"
+    contract_path.parent.mkdir(parents=True, exist_ok=True)
+    contract_path.write_text(json.dumps(contract, indent=2), encoding="utf-8")
+    before = _snapshot(repo)
+    args = build_parser().parse_args([
+        "mesh-autopilot", "--repo", str(repo), "--contract", str(contract_path), "--dry-run",
+    ])
+    result, code = execute(args)
+    assert code == 0
+    assert result["dry_run"] is True
+    assert result["repository_mutated"] is False
+    assert result["database_mutated"] is False
+    assert _snapshot(repo) == before
+''', encoding="utf-8")
+
+          replace_once(ROOT / "VERSION", "4.2.0\n", "4.2.1\n")
+          replace_once(ROOT / "toolkit/ztad/__init__.py", '__version__ = "4.2.0"', '__version__ = "4.2.1"')
+          replace_once(ROOT / "toolkit/pyproject.toml", 'version = "4.2.0"', 'version = "4.2.1"')
+
+          plugin_path = ROOT / ".codex-plugin/plugin.json"
+          plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
+          if plugin.get("version") != "4.2.0":
+              raise SystemExit("Unexpected plugin version")
+          plugin["version"] = "4.2.1"
+          plugin_path.write_text(json.dumps(plugin, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+          replace_once(ROOT / "tests/test_v4_cli_and_bundle.py", 'assert version == "4.2.0"', 'assert version == "4.2.1"')
+          replace_once(ROOT / "tests/test_v4_cli_and_bundle.py", 'assert \'version = "4.2.0"\' in pyproject', 'assert \'version = "4.2.1"\' in pyproject')
+
+          readme = ROOT / "README.md"
+          text = readme.read_text(encoding="utf-8")
+          text = text.replace("# Zero-Trust Agentic Delivery Mesh 4.2.0", "# Zero-Trust Agentic Delivery Mesh 4.2.1", 1)
+          text = text.replace("## What 4.2.0 actually implements", "## What 4.2.1 actually implements", 1)
+          readme.write_text(text, encoding="utf-8")
+
+          quickstart = ROOT / "QUICKSTART.md"
+          quickstart.write_text(quickstart.read_text(encoding="utf-8").replace("4.2.0", "4.2.1"), encoding="utf-8")
+
+          issue_template = ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml"
+          issue_template.write_text(issue_template.read_text(encoding="utf-8").replace("placeholder: 4.2.0", "placeholder: 4.2.1"), encoding="utf-8")
+
+          ci = ROOT / ".github/workflows/ci.yml"
+          ci_text = ci.read_text(encoding="utf-8")
+          ci_text = ci_text.replace("zero-trust-agentic-delivery-plugin-4.2.0.zip", "zero-trust-agentic-delivery-plugin-4.2.1.zip")
+          ci_text = ci_text.replace("zero-trust-agentic-delivery-marketplace-4.2.0.zip", "zero-trust-agentic-delivery-marketplace-4.2.1.zip")
+          ci.write_text(ci_text, encoding="utf-8")
+
+          changelog = ROOT / "CHANGELOG.md"
+          changelog_text = changelog.read_text(encoding="utf-8")
+          heading = "# Changelog\n\n"
+          if not changelog_text.startswith(heading):
+              raise SystemExit("Unexpected changelog heading")
+          release_notes = '''## 4.2.1 — 2026-08-12\n\n- Fixed `audit` and installer `dry-run` CLI dispatch failing with `UnboundLocalError` before installer planning could run.\n- Replaced direct installer symbol imports with a module-qualified `installer` boundary and renamed the mesh-plan local to `mesh_plan`, eliminating the name-collision class that caused the defect.\n- Split installer preview/apply/uninstall and mesh-plan dispatch into focused helpers so unrelated command branches no longer share ambiguous local names inside the central dispatcher.\n- Added direct-dispatch and real `scripts/ztad.py` subprocess regressions proving `audit` and `dry-run` return structured output without mutating the target repository.\n- Added an AST regression guard that rejects imported names rebound inside `execute()`, plus mesh-plan and mesh-autopilot dry-run non-mutation regressions.\n\n'''
+          changelog.write_text(heading + release_notes + changelog_text[len(heading):], encoding="utf-8")
+
+          # Active installation documentation must not claim a stale current version.
+          install_doc = ROOT / "docs/PLUGIN_INSTALLATION.md"
+          doc = install_doc.read_text(encoding="utf-8")
+          doc = doc.replace("# Codex Plugin Installation — 4.2.0", "# Codex Plugin Installation — 4.2.1", 1)
+          doc = doc.replace("zero-trust-agentic-delivery-marketplace-4.2.0.zip", "zero-trust-agentic-delivery-marketplace-4.2.1.zip")
+          doc = doc.replace("zero-trust-agentic-delivery-plugin-4.2.0.zip", "zero-trust-agentic-delivery-plugin-4.2.1.zip")
+          doc = doc.replace("- `ZTAD_MESH_4.2.0_Final_Release.zip` — complete release, reports, evidence, and checksums.\n", "")
+          install_doc.write_text(doc, encoding="utf-8")
+
+          print("Patch applied deterministically")
+          PY
+
+      - name: Install exact test environment
+        run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+
+      - name: Verify dependency consistency
+        run: python -m pip check
+
+      - name: Compile all Python sources
+        run: python -m compileall -q toolkit scripts evals tests validation
+
+      - name: Reject whitespace and patch-format defects
+        run: git diff --check
+
+      - name: Run full unit and integration suite
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest -q
+
+      - name: Run branch-aware toolkit coverage
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest --cov=ztad --cov-branch --cov-report=term-missing --cov-fail-under=75 -q
+
+      - name: Run offline functional and adversarial evals
+        run: python -B evals/run_evals.py --output "${{ runner.temp }}/eval-summary.json"
+
+      - name: Validate plugin bundle
+        run: python -B scripts/ztad.py validate-bundle --root .
+
+      - name: Verify policy wiring
+        run: python -B scripts/ztad.py policy-wiring --root .
+
+      - name: Reproduce fixed audit command through real entry point
+        shell: bash
+        run: |
+          target="${{ runner.temp }}/audit-target"
+          mkdir -p "$target/.delivery/custom"
+          printf 'user-owned\n' > "$target/README.md"
+          printf 'keep\n' > "$target/.delivery/custom/keep.txt"
+          before="$(find "$target" -type f -print0 | sort -z | xargs -0 sha256sum)"
+          python -B scripts/ztad.py audit --repo "$target" > "${{ runner.temp }}/audit.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("audit.json").read_text())
+          assert payload["mode"] == "AUDIT"
+          assert payload["repository_mutated"] is False
+          PY
+          after="$(find "$target" -type f -print0 | sort -z | xargs -0 sha256sum)"
+          test "$before" = "$after"
+
+      - name: Reproduce fixed dry-run command through real entry point
+        shell: bash
+        run: |
+          target="${{ runner.temp }}/dry-run-target"
+          mkdir -p "$target/.delivery/custom"
+          printf 'user-owned\n' > "$target/README.md"
+          printf 'keep\n' > "$target/.delivery/custom/keep.txt"
+          before="$(find "$target" -type f -print0 | sort -z | xargs -0 sha256sum)"
+          python -B scripts/ztad.py dry-run --repo "$target" > "${{ runner.temp }}/dry-run.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("dry-run.json").read_text())
+          assert payload["mode"] == "DRY_RUN"
+          assert payload["repository_mutated"] is False
+          PY
+          after="$(find "$target" -type f -print0 | sort -z | xargs -0 sha256sum)"
+          test "$before" = "$after"
+
+      - name: Run selected critical mutation suite
+        run: |
+          python -B validation/run_v42_mutations.py
+          git checkout -- validation/mutation-v42.json
+
+      - name: Run 43k fuzz and process-concurrency validation
+        run: |
+          python -B validation/run_v42_external_validation.py
+          git checkout -- validation/external-validation-v42.json
+
+      - name: Build deterministic distribution A
+        env:
+          SOURCE_DATE_EPOCH: "1786492800"
+        run: python -B scripts/ztad.py build-distribution --root . --output-dir "${{ runner.temp }}/dist-a"
+
+      - name: Build deterministic distribution B
+        env:
+          SOURCE_DATE_EPOCH: "1786492800"
+        run: python -B scripts/ztad.py build-distribution --root . --output-dir "${{ runner.temp }}/dist-b"
+
+      - name: Compare deterministic distribution trees byte-for-byte
+        run: diff -qr "${{ runner.temp }}/dist-a" "${{ runner.temp }}/dist-b"
+
+      - name: Validate rebuilt Plugin archive
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.2.1.zip" --kind plugin
+
+      - name: Validate rebuilt Marketplace archive
+        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.2.1.zip" --kind marketplace
+
+      - name: Ensure only intended source changes remain
+        shell: bash
+        run: |
+          git status --short
+          test ! -e validation/external-validation-v42.json || git diff --exit-code -- validation/external-validation-v42.json
+          test ! -e validation/mutation-v42.json || git diff --exit-code -- validation/mutation-v42.json
+          git diff --check
+
+      - name: Remove temporary self-patching workflow
+        run: git rm .github/workflows/apply-cli-dispatch-fix.yml
+
+      - name: Commit verified hotfix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: harden CLI dispatch and release 4.2.1"
+          git push origin HEAD:fix/cli-dispatch-shadowing-4.2.1
