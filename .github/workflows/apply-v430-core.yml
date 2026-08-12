@@ -27,6 +27,8 @@ jobs:
           cache: pip
           cache-dependency-path: toolkit/requirements-dev.lock.txt
       - run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+      - name: Repair migration helper assertion
+        run: python validation/fix_v430_core_helper.py
       - name: Apply core migration
         run: python validation/apply_v430_core.py
       - name: Static compile and diff checks
@@ -46,7 +48,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add . ':!.github/workflows/apply-v430-core.yml' ':!validation/apply_v430_core.py'
+          git add . ':!.github/workflows/apply-v430-core.yml' ':!validation/apply_v430_core.py' ':!validation/fix_v430_core_helper.py'
           git diff --cached --check
           git commit -m "feat: add guarded fast paths and bounded model routing"
           git push origin HEAD:feat/v4.3.0-guarded-fast-path
