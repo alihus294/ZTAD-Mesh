@@ -12,7 +12,8 @@
 - Bound learned routing performance to catalog/provider capability context and required repeated observations before override.
 - Synchronized Continuity phases without auto-granting `MERGE_READY`; exhausted repair budgets now quarantine cleanly.
 - Added a structural CLI shadowing guard and a ResourceWarning-as-error CI gate for critical v4.3 controls.
-- Synchronized architecture, operating guides, model-selection guidance, skills, validation, and traceability documentation with the implemented v4.3 topology.
+- Synchronized architecture, operating guides, model-selection guidance, skills, validation, traceability, quick-start, installation, capability, control-coverage, evaluation, and limitations documentation with the implemented v4.3 topology.
+- Added a CI-gated deterministic release workflow that refuses stale-main publication, validates exact version identity, rebuilds twice, verifies checksums, publishes exact commit-bound assets without overwrite, and re-downloads the public release for post-publication verification.
 
 ## 4.2.1 — 2026-08-12
 
