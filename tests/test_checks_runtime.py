@@ -16,14 +16,30 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _python_launcher(monkeypatch: pytest.MonkeyPatch) -> str:
-    """Use the running interpreter without depending on a pre-existing PATH entry."""
-    executable = Path(sys.executable).resolve()
+    """Use the running interpreter without resolving a venv launcher to base Python."""
+    # os.path.abspath keeps the active environment's launcher path intact. Path.resolve()
+    # can dereference a Windows venv launcher to the base runtime, which then loses the
+    # environment's installed test modules (for example pytest).
+    executable = Path(os.path.abspath(sys.executable))
     current_path = os.environ.get("PATH", "")
     monkeypatch.setenv("PATH", str(executable.parent) + os.pathsep + current_path)
     name = executable.name.lower()
     if name.startswith("python3"):
         return "python3"
     return "python"
+
+
+def test_python_launcher_preserves_active_environment_directory(tmp_path, monkeypatch):
+    scripts_dir = tmp_path / "active-venv" / ("Scripts" if os.name == "nt" else "bin")
+    executable = scripts_dir / ("python.exe" if os.name == "nt" else "python")
+    monkeypatch.setattr(sys, "executable", str(executable))
+    monkeypatch.setenv("PATH", str(tmp_path / "base-runtime"))
+
+    launcher = _python_launcher(monkeypatch)
+
+    injected = os.environ["PATH"].split(os.pathsep, 1)[0]
+    assert os.path.normcase(os.path.abspath(injected)) == os.path.normcase(os.path.abspath(str(scripts_dir)))
+    assert launcher == "python"
 
 
 def _write_controls(repo: Path, *, check_argv: list[str]) -> tuple[Path, Path]:
