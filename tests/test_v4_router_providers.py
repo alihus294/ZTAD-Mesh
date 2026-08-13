@@ -5,6 +5,7 @@ import json
 import pytest
 from pathlib import Path
 
+import ztad.providers as providers
 from ztad.model_benchmark import BenchmarkCase, benchmark_suite_hash
 from ztad.model_router import AdaptiveModelRouter, TaskProfile
 from ztad.providers import CodexExecProvider, ProviderRunRequest, ProviderRegistry, _command_argv, _prepare_run_artifacts, parse_jsonl_metadata
@@ -22,7 +23,7 @@ def _provider_output_path(argv):
 
 
 def test_windows_command_shim_is_wrapped_without_shell_interpolation(monkeypatch):
-    monkeypatch.setattr("ztad.providers.os.name", "nt")
+    monkeypatch.setattr(providers, "_PLATFORM_NAME", "nt")
     monkeypatch.setattr(
         "ztad.providers.shutil.which",
         lambda value: "C:\\Tools\\codex.CMD" if value == "codex" else None,

@@ -16,6 +16,7 @@ from .schema_validation import validate_instance
 from .util import atomic_write, canonical_json, load_data, sha256_bytes, utc_now
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_PLATFORM_NAME = os.name
 # Double quotes are retained for argv quoting by ``list2cmdline``; shell
 # metacharacters and control characters are rejected before the shim is used.
 _CMD_UNSAFE_CHARS = frozenset("&|<>^()%!")
@@ -27,7 +28,7 @@ def _command_argv(argv: Sequence[str]) -> list[str]:
         raise ValueError("Provider argv must not be empty")
     resolved = shutil.which(argv[0]) or argv[0]
     command = [resolved, *argv[1:]]
-    if os.name == "nt" and Path(resolved).suffix.casefold() in {".cmd", ".bat"}:
+    if _PLATFORM_NAME == "nt" and Path(resolved).suffix.casefold() in {".cmd", ".bat"}:
         if any(
             any(ord(character) < 32 or character in _CMD_UNSAFE_CHARS for character in item)
             for item in command
