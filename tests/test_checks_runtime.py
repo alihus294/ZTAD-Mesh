@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,17 @@ from ztad.checks import classify_check_history, run_checks
 from ztad.util import load_data
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _python_launcher(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Use the running interpreter without depending on a pre-existing PATH entry."""
+    executable = Path(sys.executable).resolve()
+    current_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", str(executable.parent) + os.pathsep + current_path)
+    name = executable.name.lower()
+    if name.startswith("python3"):
+        return "python3"
+    return "python"
 
 
 def _write_controls(repo: Path, *, check_argv: list[str]) -> tuple[Path, Path]:
@@ -36,9 +49,10 @@ def _write_controls(repo: Path, *, check_argv: list[str]) -> tuple[Path, Path]:
     return contract, config
 
 
-def test_run_checks_dry_run_does_not_create_evidence(tmp_path):
+def test_run_checks_dry_run_does_not_create_evidence(tmp_path, monkeypatch):
     repo, base = init_git_repo(tmp_path / "repo")
-    contract, config = _write_controls(repo, check_argv=["python3", "-m", "compileall", "-q", "."])
+    python = _python_launcher(monkeypatch)
+    contract, config = _write_controls(repo, check_argv=[python, "-m", "compileall", "-q", "."])
     output = repo / ".delivery/ztad/evidence/local"
     result = run_checks(
         repo,
@@ -58,6 +72,7 @@ def test_run_checks_dry_run_does_not_create_evidence(tmp_path):
 
 def test_run_checks_sanitizes_environment_and_output(tmp_path, monkeypatch):
     repo, _ = init_git_repo(tmp_path / "repo")
+    python = _python_launcher(monkeypatch)
     original_home = tmp_path / "original-home"
     original_home.mkdir()
     (original_home / "credential-marker").write_text("must-not-be-readable", encoding="utf-8")
@@ -73,7 +88,7 @@ def test_environment_is_sanitized():
     assert Path(os.environ['HOME']) != Path({str(original_home)!r})
     assert not (Path(os.environ['HOME']) / 'credential-marker').exists()
 """})
-    contract, config = _write_controls(repo, check_argv=["python3", "-m", "pytest", "-q", "-s", "-p", "no:cacheprovider", "tests/test_env_guard.py"])
+    contract, config = _write_controls(repo, check_argv=[python, "-m", "pytest", "-q", "-s", "-p", "no:cacheprovider", "tests/test_env_guard.py"])
     monkeypatch.setenv("ZTAD_SECRET_TOKEN", "must-not-leak")
     output = repo / ".delivery/ztad/evidence/local"
     result = run_checks(
@@ -101,9 +116,10 @@ def test_environment_is_sanitized():
     assert result["execution_boundary"]["network_isolation"] == "EXTERNAL_SANDBOX_REQUIRED"
 
 
-def test_run_checks_rejects_unknown_selection(tmp_path):
+def test_run_checks_rejects_unknown_selection(tmp_path, monkeypatch):
     repo, base = init_git_repo(tmp_path / "repo")
-    contract, config = _write_controls(repo, check_argv=["python3", "-m", "compileall", "-q", "."])
+    python = _python_launcher(monkeypatch)
+    contract, config = _write_controls(repo, check_argv=[python, "-m", "compileall", "-q", "."])
     with pytest.raises(ValueError, match="Unknown selected check ids"):
         run_checks(
             repo,
@@ -129,8 +145,9 @@ def test_check_history_fail_then_pass_remains_blocking():
     assert result["blocking"]
 
 
-def test_run_checks_blocks_persistent_repository_mutation(tmp_path):
+def test_run_checks_blocks_persistent_repository_mutation(tmp_path, monkeypatch):
     repo, _ = init_git_repo(tmp_path / "repo")
+    python = _python_launcher(monkeypatch)
     head = commit_files(repo, {"tests/test_mutates.py": """
 from pathlib import Path
 
@@ -140,7 +157,7 @@ def test_mutates_repository():
     contract, config = _write_controls(
         repo,
         check_argv=[
-            "python3", "-m", "pytest", "-q", "-s",
+            python, "-m", "pytest", "-q", "-s",
             "-p", "no:cacheprovider", "tests/test_mutates.py",
         ],
     )
