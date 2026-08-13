@@ -1,9 +1,9 @@
-# Codex Plugin Installation — 4.3.0
+# Codex Plugin Installation — 4.3.1
 
 Published release artifacts:
 
-- `zero-trust-agentic-delivery-marketplace-4.3.0.zip` — recommended local Codex Marketplace archive;
-- `zero-trust-agentic-delivery-plugin-4.3.0.zip` — standalone plugin archive;
+- `zero-trust-agentic-delivery-marketplace-4.3.1.zip` — recommended local Codex Marketplace archive;
+- `zero-trust-agentic-delivery-plugin-4.3.1.zip` — standalone plugin archive;
 - `CHECKSUMS.sha256` — SHA-256 list covering both archives.
 
 Verify the downloaded release directory before installation:
@@ -18,11 +18,11 @@ Do not copy only `SKILL.md` files. That omits hooks, providers, model routing, p
 
 After installation:
 
-1. confirm plugin version `4.3.0` is enabled;
+1. confirm plugin version `4.3.1` is enabled;
 2. confirm thirteen explicit-only skills are present;
 3. confirm hook discovery/trust;
 4. invoke `$zero-trust-delivery` explicitly;
-5. run bundle validation, host acceptance, provider probe, audit, and dry-run;
+5. run version-identity verification, bundle validation, host acceptance, provider probe, audit, and dry-run;
 6. inspect `mesh-autopilot --dry-run` and confirm the intended v4.3 topology and routes;
 7. confirm every Sol route is capped at `HIGH` reasoning;
 8. do not enable merge or production authority until external platform gates are verified.
