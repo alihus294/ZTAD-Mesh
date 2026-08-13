@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.3.4 — 2026-08-13
+
+- Fixed the remaining Windows packaged-check failure by binding policy-approved `python` and `python3` commands to the exact active Python interpreter before process creation instead of relying on Windows executable search order.
+- Kept command-policy validation against the original logical argv while recording deterministic active-interpreter execution binding in check evidence.
+- Changed the isolated Windows packaged-regression CI gate to launch the exact Marketplace runner under Python isolated mode, matching the clean-install reproduction that exposed the v4.3.3 gap.
+- Revalidated the existing sanitization and persistent-repository-mutation checks through that exact isolated venv boundary.
+- Preserved source/distribution identity separation, deterministic archive validation, full packaged regressions, post-publication verification, v4.3 routing and approval invariants, and the Sol `HIGH` reasoning ceiling.
+- Preserved v4.3.3 and all prior releases as immutable historical records.
+
 ## 4.3.3 — 2026-08-13
 
 - Fixed the Windows packaged regression helper so it preserves the active virtual-environment interpreter directory instead of resolving the venv launcher to the base Python runtime.
