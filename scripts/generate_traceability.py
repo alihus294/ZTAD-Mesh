@@ -9,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "references/MASTER_PLAN.md"
 OUT_DIR = ROOT / "traceability"
+VERSION_FILE = ROOT / "VERSION"
+SEMVER = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-.+][0-9A-Za-z.-]+)?$")
 NORM = re.compile(r"\b(MUST(?:\s+NOT)?|SHALL(?:\s+NOT)?|SHOULD(?:\s+NOT)?|MAY(?:\s+NOT)?)\b", re.IGNORECASE)
 SECTION = re.compile(r"^##\s+(\d+)\.\s+(.+)$")
 
@@ -42,12 +44,24 @@ SECTION_MAP: dict[int, tuple[str, str, str]] = {
 }
 
 
+def load_release_version(root: Path = ROOT) -> str:
+    path = root / "VERSION"
+    if not path.is_file() or path.is_symlink():
+        raise ValueError(f"VERSION must be a regular file: {path}")
+    version = path.read_text(encoding="utf-8").strip()
+    if not SEMVER.fullmatch(version):
+        raise ValueError(f"invalid VERSION: {version!r}")
+    return version
+
+
 def normalize(text: str) -> str:
     text = re.sub(r"^\s*(?:[-*+]\s+|\d+\.\s+)", "", text.strip())
     return re.sub(r"\s+", " ", text)
 
 
 def main() -> int:
+    version = load_release_version()
+    version_family = ".".join(version.split(".")[:2])
     lines = SOURCE.read_text(encoding="utf-8").splitlines()
     section_num = 0
     section_title = "Document Control"
@@ -88,9 +102,9 @@ def main() -> int:
     by_class = Counter(row["enforcement_class"] for row in rows)
     by_section = Counter(row["section"] for row in rows)
     md = [
-        "# ZTAD Mesh 4.2.0 Traceability Matrix", "",
+        f"# ZTAD Mesh {version} Traceability Matrix", "",
         f"Active normative requirements: **{len(rows)}**.", "",
-        "This matrix maps active 4.2.0 requirements to implementation and verification. External controls are not considered active until target-platform evidence verifies them.", "",
+        f"This matrix maps the retained normative control catalogue to implementation and verification. Version {version_family} uses risk-proportional orchestration and model routing without weakening the existing authority, scope, evidence, recovery, and platform-boundary requirements. External controls are not considered active until target-platform evidence verifies them.", "",
         "## Coverage by enforcement class", "", "| Class | Count |", "|---|---:|",
     ]
     md.extend(f"| {name} | {count} |" for name, count in sorted(by_class.items()))
@@ -108,7 +122,7 @@ def main() -> int:
         "", "The row-level source of truth is `requirements.csv`.",
     ]
     (OUT_DIR / "TRACEABILITY_MATRIX.md").write_text("\n".join(md) + "\n", encoding="utf-8")
-    print(f"generated {len(rows)} active requirements")
+    print(f"generated {len(rows)} active requirements for ZTAD Mesh {version}")
     return 0
 
 
