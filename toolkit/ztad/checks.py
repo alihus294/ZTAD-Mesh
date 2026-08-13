@@ -69,6 +69,27 @@ def _safe_environment(config: dict[str, Any]) -> tuple[dict[str, str], list[str]
     return env, sorted(env), isolated_home
 
 
+def _bind_execution_argv(argv: list[str]) -> list[str]:
+    """Bind policy-approved Python commands to this process's exact interpreter.
+
+    Windows process lookup can select the base-runtime executable before PATH even
+    when an isolated venv directory is prepended. Validation remains against the
+    logical policy argv (``python``/``python3``); execution is pinned to the
+    already-running trusted interpreter without resolving a venv launcher to its
+    base runtime.
+    """
+    executable = Path(argv[0]).name.lower().removesuffix(".exe")
+    if executable not in {"python", "python3"}:
+        return list(argv)
+    active_python = os.path.abspath(sys.executable)
+    if not active_python or "\x00" in active_python:
+        raise ValueError("Active Python interpreter path is unavailable")
+    active_path = Path(active_python)
+    if not active_path.is_file():
+        raise ValueError(f"Active Python interpreter is not a regular file: {active_python}")
+    return [active_python, *argv[1:]]
+
+
 def _safe_cwd(repo: Path, relative: str) -> Path:
     target = (repo / relative).resolve()
     try:
@@ -172,6 +193,7 @@ def run_checks(
             if not validation["allowed"]:
                 results.append({"check_id": check_id, "status": "POLICY_BLOCKED", "validation": validation})
                 continue
+            execution_argv = _bind_execution_argv(argv)
             cwd = _safe_cwd(repo.root, str(item["cwd"]))
             timeout = int(item.get("timeout_seconds", 300))
             if dry_run:
@@ -181,13 +203,14 @@ def run_checks(
                     "argv": argv,
                     "cwd": str(cwd),
                     "command_id": validation["command_id"],
+                    "executable_binding": "ACTIVE_PYTHON_INTERPRETER" if execution_argv[0] != argv[0] else "POLICY_ARGV",
                 })
                 continue
 
             before_state = _worktree_state(repo)
             started = utc_now()
             monotonic_start = time.monotonic()
-            proc = run_command(argv, cwd=cwd, timeout=timeout, env=env, inherit_env=False, check=False)
+            proc = run_command(execution_argv, cwd=cwd, timeout=timeout, env=env, inherit_env=False, check=False)
             ended = utc_now()
             duration_ms = int((time.monotonic() - monotonic_start) * 1000)
             after_state = _worktree_state(repo)
@@ -242,6 +265,7 @@ def run_checks(
                     "timeout_seconds": timeout,
                     "output_truncated": truncated,
                     "environment_names_included": env_names,
+                    "executable_binding": "ACTIVE_PYTHON_INTERPRETER" if execution_argv[0] != argv[0] else "POLICY_ARGV",
                     "stdout_stderr_tail": encoded.decode("utf-8", errors="replace")[-4000:],
                     "repository_mutated": repository_mutated,
                     "worktree_before_hash": before_state["sha256"],
@@ -289,6 +313,7 @@ def run_checks(
                 "credentials_inherited": False,
                 "network_isolation": "EXTERNAL_SANDBOX_REQUIRED",
                 "repository_mutation_detection": "GIT_STATE_DELTA",
+                "python_commands_bound_to_active_interpreter": True,
             },
             "claim_boundary": "ZTAD isolates HOME and credential configuration and detects persistent Git-state mutation, but network/process/filesystem isolation and disposable checkout enforcement must be provided by the external sandbox or protected CI runner.",
         }
