@@ -67,9 +67,9 @@ def verify(root: Path = ROOT) -> dict[str, object]:
             f"zero-trust-agentic-delivery-plugin-{version}.zip",
             f"plugin version `{version}`",
         ],
-        "references/MASTER_PLAN.md": [f"# ZTAD Mesh {version} — Normative Master Plan"],
         "traceability/TRACEABILITY_MATRIX.md": [f"# ZTAD Mesh {version} Traceability Matrix"],
         ".github/ISSUE_TEMPLATE/bug_report.yml": [f"placeholder: {version}"],
+        "CHANGELOG.md": [f"## {version} — "],
     }
     for relative, markers in required_markers.items():
         text = (root / relative).read_text(encoding="utf-8")
@@ -82,6 +82,18 @@ def verify(root: Path = ROOT) -> dict[str, object]:
         errors.append("scripts/generate_traceability.py must derive release identity from VERSION")
     if re.search(r"ZTAD Mesh [0-9]+\.[0-9]+\.[0-9]+ Traceability Matrix", generator):
         errors.append("scripts/generate_traceability.py contains a hard-coded release identity")
+
+    for relative in (
+        "toolkit/ztad/__init__.py",
+        "scripts/generate_traceability.py",
+        "docs/THREAT_MODEL.md",
+        "docs/SECURITY_CONTROLS.md",
+        "docs/SOURCE_MAPPING.md",
+        ".github/ISSUE_TEMPLATE/bug_report.yml",
+    ):
+        text = (root / relative).read_text(encoding="utf-8")
+        if "4.2.0" in text:
+            errors.append(f"{relative}: stale 4.2.0 live identity remains")
 
     return {
         "valid": not errors,
