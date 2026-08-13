@@ -1,8 +1,8 @@
-# ZTAD Mesh 4.3.0 Traceability Matrix
+# ZTAD Mesh 4.3.1 Traceability Matrix
 
 Active normative requirements: **96**.
 
-This matrix maps the retained normative control catalogue to implementation and verification. Version 4.3 changes risk-proportional orchestration and model routing without weakening the 96 existing authority, scope, evidence, recovery, and platform-boundary requirements. External controls are not considered active until target-platform evidence verifies them.
+This matrix maps the retained normative control catalogue to implementation and verification. Version 4.3 uses risk-proportional orchestration and model routing without weakening the 96 existing authority, scope, evidence, recovery, and platform-boundary requirements. External controls are not considered active until target-platform evidence verifies them.
 
 ## Coverage by enforcement class
 

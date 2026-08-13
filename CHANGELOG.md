@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.3.1 — 2026-08-13
+
+- Fixed the toolkit runtime identity that still reported `4.2.0` even though the canonical release metadata was `4.3.0`.
+- Changed traceability generation to derive its release identity from the canonical `VERSION` file instead of embedding a stale patch version.
+- Added a canonical release-identity verifier covering `VERSION`, plugin metadata, Python package metadata, runtime `__version__`, generated traceability, current installation documentation, and the issue-template version hint.
+- Extended regression coverage so a runtime/manifests/version mismatch fails repository CI before a release can be published.
+- Made CI distribution archive validation derive filenames from `VERSION` rather than hard-coding the previous release filename.
+- Updated current installation and release-facing documentation for the clean `4.3.1` patch release without changing the v4.3 risk-proportional routing or authority model.
+- Preserved `v4.3.0` and older validation/provenance artifacts as historical records; they are not rewritten.
+
 ## 4.3.0 — 2026-08-12
 
 - Added guarded R0/R1 fast paths: deterministic index, Luna implementation, deterministic integration/checks with actual-diff risk reclassification, and exactly one Sol final guard.

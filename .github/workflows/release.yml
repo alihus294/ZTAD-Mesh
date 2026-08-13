@@ -99,17 +99,7 @@ jobs:
             echo "Invalid VERSION: $version" >&2
             exit 1
           }
-          python - <<'PY'
-          import json
-          import pathlib
-          import tomllib
-
-          version = pathlib.Path("VERSION").read_text(encoding="utf-8").strip()
-          plugin = json.loads(pathlib.Path(".codex-plugin/plugin.json").read_text(encoding="utf-8"))["version"]
-          pyproject = tomllib.loads(pathlib.Path("toolkit/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-          if not (version == plugin == pyproject):
-              raise SystemExit(f"Version mismatch: VERSION={version}, plugin={plugin}, pyproject={pyproject}")
-          PY
+          python -B scripts/verify_version_identity.py
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
@@ -142,6 +132,7 @@ jobs:
           PYTHONPATH: toolkit
         run: >-
           python -B -m pytest -q -W error::ResourceWarning
+          tests/test_v4_cli_and_bundle.py
           tests/test_cli_dispatch_regression.py
           tests/test_v43_guarded_fast_path.py
           tests/test_v43_runtime_controls.py
@@ -240,6 +231,7 @@ jobs:
           - Actual-diff risk escalation invalidates weaker paths and submits stronger replans.
           - Blocking P0/P1 findings cannot silently pass.
           - Routing performance is context-bound and downstream deterministic results influence writer quality.
+          - Canonical release identity is verified across runtime and distribution metadata before publication.
           - Plugin and Marketplace archives are deterministic, independently validated, and covered by \`CHECKSUMS.sha256\`.
 
           CI source: ${CI_RUN_URL:-manual-dispatch}

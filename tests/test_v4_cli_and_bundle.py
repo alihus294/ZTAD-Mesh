@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
+import ztad
 from ztad.bundle import validate_bundle
 from ztad.cli import build_parser, execute
 from ztad.policy_registry import audit_policy_wiring
@@ -17,6 +20,21 @@ def test_v4_version_and_manifest_are_consistent():
     pyproject = tomllib.loads((ROOT / "toolkit/pyproject.toml").read_text())
     assert plugin["version"] == version
     assert pyproject["project"]["version"] == version
+    assert ztad.__version__ == version
+
+
+def test_release_version_identity_verifier_covers_live_surfaces():
+    completed = subprocess.run(
+        [sys.executable, "scripts/verify_version_identity.py"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["valid"] is True
+    assert len(set(result["identities"].values())) == 1
 
 
 def test_new_cli_commands_parse():

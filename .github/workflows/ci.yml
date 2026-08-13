@@ -77,6 +77,15 @@ jobs:
       - name: Verify policy wiring
         run: python -B scripts/ztad.py --output "${{ runner.temp }}/policy-wiring.json" policy-wiring --root .
 
+      - name: Resolve distribution version
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]
+          echo "ZTAD_VERSION=$version" >> "$GITHUB_ENV"
+
       - name: Set commit-derived reproducible build timestamp
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         shell: bash
@@ -97,11 +106,13 @@ jobs:
 
       - name: Validate built Plugin archive
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-plugin-4.3.0.zip" --kind plugin
+        shell: bash
+        run: python -B scripts/ztad.py validate-distribution --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${ZTAD_VERSION}.zip" --kind plugin
 
       - name: Validate built Marketplace archive
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        run: python -B scripts/ztad.py validate-distribution --archive "${{ runner.temp }}/dist-a/zero-trust-agentic-delivery-marketplace-4.3.0.zip" --kind marketplace
+        shell: bash
+        run: python -B scripts/ztad.py validate-distribution --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${ZTAD_VERSION}.zip" --kind marketplace
 
       - name: Prove repository remained unchanged
         shell: bash
