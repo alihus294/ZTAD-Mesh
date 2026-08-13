@@ -90,6 +90,22 @@ jobs:
           --kind marketplace
           --scope install-critical
 
+      - name: Re-run packaged regressions from isolated Windows venv
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $venv = Join-Path $env:RUNNER_TEMP 'ztad-packaged-venv'
+          python -m venv $venv
+          $venvPython = Join-Path $venv 'Scripts\python.exe'
+          & $venvPython -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $venvPython -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $archive = Join-Path $env:RUNNER_TEMP "install-dist\zero-trust-agentic-delivery-marketplace-$env:ZTAD_VERSION.zip"
+          & $venvPython -B scripts/run_packaged_regressions.py --archive $archive --kind marketplace --scope install-critical
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Set commit-derived reproducible build timestamp
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         shell: bash
