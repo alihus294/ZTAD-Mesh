@@ -1,9 +1,9 @@
-# Codex Plugin Installation — 4.3.2
+# Codex Plugin Installation — 4.3.3
 
 Published release artifacts:
 
-- `zero-trust-agentic-delivery-marketplace-4.3.2.zip` — recommended local Codex Marketplace archive;
-- `zero-trust-agentic-delivery-plugin-4.3.2.zip` — standalone plugin archive;
+- `zero-trust-agentic-delivery-marketplace-4.3.3.zip` — recommended local Codex Marketplace archive;
+- `zero-trust-agentic-delivery-plugin-4.3.3.zip` — standalone plugin archive;
 - `CHECKSUMS.sha256` — SHA-256 list covering both archives.
 
 Verify the downloaded release directory before installation:
@@ -23,11 +23,11 @@ python -B scripts/verify_version_identity.py --profile distribution
 python -B -m pytest -q
 ```
 
-The release pipeline runs packaged regressions from the exact Plugin and Marketplace archives before publication; the Marketplace package is also exercised across Windows/Linux CI for installation-critical regressions.
+The release pipeline runs packaged regressions from the exact Plugin and Marketplace archives before publication; the Marketplace package is also exercised across Windows/Linux CI for installation-critical regressions. In v4.3.3 the Windows check helper preserves the active virtual-environment interpreter directory and does not resolve the venv launcher to a base Python runtime.
 
 After installation:
 
-1. confirm plugin version `4.3.2` is enabled;
+1. confirm plugin version `4.3.3` is enabled;
 2. confirm thirteen explicit-only skills are present;
 3. confirm hook discovery/trust;
 4. invoke `$zero-trust-delivery` explicitly;
