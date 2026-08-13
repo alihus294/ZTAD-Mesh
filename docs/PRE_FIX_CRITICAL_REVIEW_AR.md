@@ -42,6 +42,8 @@
 
 ## قرار ما قبل الإصلاح
 
+> لقطة تاريخية قبل الإصلاح. يوثق هذا الملف حالة وملاحظات الإصدار المسجل فيه، ولا يمثل دليلاً حاليًا للإصدار v4.3.5.
+
 ```text
 NO-GO for autonomous production authority
 CONDITIONAL-GO for local audit and controlled dry-run

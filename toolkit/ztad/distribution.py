@@ -24,6 +24,7 @@ MANIFEST_NAME = "MANIFEST.sha256"
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 MAX_ARCHIVE_FILES = 10_000
 MAX_ARCHIVE_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
+MAX_ARCHIVE_COMPRESSED_BYTES = 512 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 1_000
 
 _EXCLUDED_DIRECTORY_NAMES = {
@@ -250,6 +251,8 @@ def _safe_member_path(name: str) -> PurePosixPath:
 def safe_extract_archive(archive: Path, destination: Path, *, expected_top_level: str) -> Path:
     if not archive.is_file() or archive.is_symlink():
         raise ConfigurationError(f"Archive must be a regular file: {archive}")
+    if archive.stat().st_size > MAX_ARCHIVE_COMPRESSED_BYTES:
+        raise ConfigurationError("Archive exceeds the compressed size limit")
     destination.mkdir(parents=True, exist_ok=False)
     seen: set[str] = set()
     seen_portable: set[str] = set()

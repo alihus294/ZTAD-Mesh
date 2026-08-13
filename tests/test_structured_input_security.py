@@ -31,7 +31,10 @@ def test_structured_input_symlink_is_rejected(tmp_path: Path):
     target = tmp_path / "real.json"
     target.write_text("{}", encoding="utf-8")
     link = tmp_path / "link.json"
-    link.symlink_to(target)
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is unavailable on this host")
     with pytest.raises(ConfigurationError, match="non-symlink"):
         load_data(link)
 

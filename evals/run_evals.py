@@ -69,8 +69,8 @@ def _contract(requested_risk: str) -> dict[str, Any]:
     }
 
 
-def _case(case_id: str, passed: bool, detail: Any, *, category: str) -> dict[str, Any]:
-    return {"id": case_id, "category": category, "passed": bool(passed), "detail": detail}
+def _case(case_id: str, passed: bool, detail: Any, *, category: str, skipped: bool = False) -> dict[str, Any]:
+    return {"id": case_id, "category": category, "passed": bool(passed), "skipped": bool(skipped), "detail": detail}
 
 
 def evaluate_skill_routing() -> list[dict[str, Any]]:
@@ -241,13 +241,22 @@ def evaluate_security_boundaries() -> list[dict[str, Any]]:
         results.append(_case("S06-duplicate-json-rejected", rejected, detail, category="security-boundary"))
 
         real = root / "real.json"; real.write_text("{}", encoding="utf-8")
-        link = root / "link.json"; link.symlink_to(real)
-        rejected = False; detail = None
+        link = root / "link.json"
         try:
-            load_data(link)
-        except ConfigurationError as exc:
-            rejected = True; detail = str(exc)
-        results.append(_case("S07-symlink-structured-input-rejected", rejected, detail, category="security-boundary"))
+            link.symlink_to(real)
+        except (OSError, NotImplementedError) as exc:
+            results.append(_case(
+                "S07-symlink-structured-input-rejected", True,
+                {"skipped": True, "reason": f"symlink_creation_unavailable:{type(exc).__name__}:{exc}"},
+                category="security-boundary", skipped=True,
+            ))
+        else:
+            rejected = False; detail = None
+            try:
+                load_data(link)
+            except ConfigurationError as exc:
+                rejected = True; detail = str(exc)
+            results.append(_case("S07-symlink-structured-input-rejected", rejected, detail, category="security-boundary"))
 
     return results
 
@@ -256,7 +265,8 @@ def main() -> int:
     parser.add_argument("--output", default=str(ROOT / "validation/eval-results.json"))
     args = parser.parse_args()
     results = evaluate_skill_routing() + evaluate_fixtures() + evaluate_adversarial() + evaluate_security_boundaries()
-    failed = [item for item in results if not item["passed"]]
+    failed = [item for item in results if not item["passed"] and not item["skipped"]]
+    skipped = [item for item in results if item["skipped"]]
     report = {
         "schema_version": 1,
         "generated_at": utc_now(),
@@ -264,8 +274,9 @@ def main() -> int:
         "model_routing_executed": False,
         "model_routing_claim_boundary": "Run submission cases against each pinned target model before governed use; this offline runner does not prove hosted-model routing behavior.",
         "total": len(results),
-        "passed": len(results) - len(failed),
+        "passed": len(results) - len(failed) - len(skipped),
         "failed": len(failed),
+        "skipped": len(skipped),
         "results": results,
     }
     output = Path(args.output)

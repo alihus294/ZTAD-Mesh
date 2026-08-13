@@ -1,6 +1,6 @@
-# ZTAD Mesh 4.3.4 Quick Start
+# ZTAD Mesh 4.3.5 Quick Start
 
-1. Download the versioned Marketplace archive from the `v4.3.4` GitHub Release.
+1. Download the versioned Marketplace archive from the `v4.3.5` GitHub Release.
 2. Download `CHECKSUMS.sha256` and verify the release files before installation.
 3. Extract the Marketplace archive to a stable local path and install `zero-trust-agentic-delivery@ztad-local` through the official Codex plugin flow.
 4. Close the installation session and start a fresh Codex session.
@@ -27,7 +27,7 @@ python -B scripts/ztad.py policy-wiring --root .
 python -B -m pytest -q
 ```
 
-On Windows, packaged install-critical validation must also pass from a fresh isolated virtual environment under Python isolated mode. In v4.3.4, policy-approved `python` and `python3` checks are bound to the exact active interpreter before process creation, avoiding ambiguous base-runtime selection.
+On Windows, packaged install-critical validation must also pass from a fresh isolated virtual environment under Python isolated mode. In v4.3.5, policy-approved `python` and `python3` checks are bound to the exact active interpreter before process creation, avoiding ambiguous base-runtime selection.
 
 Source-checkout validation uses the stricter source profile:
 

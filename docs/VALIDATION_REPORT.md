@@ -1,4 +1,4 @@
-# Validation Report — ZTAD Mesh 4.3.0
+# Validation Report — ZTAD Mesh 4.3.5
 
 ## Decision
 
@@ -6,11 +6,35 @@
 OFFLINE_DISTRIBUTION_ACCEPTED_WITH_TARGET_HOST_ACCEPTANCE_REQUIRED
 ```
 
-## Dedicated v4.3 final validation
+## Current v4.3.5 evidence semantics
 
-A clean candidate was validated on GitHub Actions across Ubuntu and Windows with Python 3.11 and 3.13. All four matrix jobs completed successfully.
+The current release identity is `4.3.5`, derived from `VERSION` and checked
+against every current package, runtime, release-facing, operational, and
+normative identity surface. Identity is not validation evidence by itself.
 
-| Gate | Result |
+Historical measurements are not automatically evidence for v4.3.5. A result is
+current-release evidence only when it is rerun against the exact v4.3.5 commit
+and its subject is recorded and bound to that commit. This report intentionally
+does not invent new test counts, fuzz counts, coverage percentages, mutation
+results, or commit SHAs.
+
+Evidence classes remain separate:
+
+| Evidence source | What it can establish |
+|---|---|
+| `VERSION` and identity verification | Current release naming consistency |
+| Historical validation artifacts | Only the exact checks and release recorded by each artifact |
+| Protected GitHub Actions bound to an exact commit | Authoritative repository CI evidence for that commit |
+| Immutable tag, release assets, and checksums bound to an exact SHA | Release and artifact evidence for that SHA |
+| Hosted providers, credentials, deployment, canary, rollback, and target host | External acceptance evidence only |
+
+## Historical v4.3.0 validation baseline — not v4.3.5 evidence
+
+The measurements below are retained from the earlier v4.3 validation record.
+They describe the checks recorded at that time and must not be read as proof of
+the current v4.3.5 commit.
+
+| Gate | Historical result |
 |---|---:|
 | Unit/integration tests | 263/263 passed |
 | Cross-platform matrix | Ubuntu 3.11, Ubuntu 3.13, Windows 3.11, Windows 3.13 — all passed |
@@ -29,9 +53,14 @@ A clean candidate was validated on GitHub Actions across Ubuntu and Windows with
 | Plugin and Marketplace archives | both validated successfully |
 | Source preservation | clean after validation, fuzz, mutation, and distribution work |
 
-The dedicated validation run was executed on the code candidate before the final documentation synchronization. A test-owned SQLite connection produced one `ResourceWarning` during the coverage pass despite all gates succeeding. The final branch closes that connection deterministically and adds a CI gate that treats `ResourceWarning` in the critical v4.3 control paths as an error.
+The historical validation run was executed on its recorded candidate before
+the prior documentation synchronization. A test-owned SQLite connection
+produced one `ResourceWarning` during the coverage pass despite all gates
+succeeding; the subsequent v4.3.4 patch added deterministic closure and the
+critical warning gate. That historical note does not upgrade the result into
+v4.3.5 evidence.
 
-## v4.3 behaviors explicitly covered
+## Historical control scope recorded
 
 - R0/R1 normal execution uses Luna implementation plus exactly one independent Sol final guard.
 - Sol reasoning never exceeds HIGH.
@@ -41,14 +70,17 @@ The dedicated validation run was executed on the code candidate before the final
 - Blocking P0/P1 findings cannot silently pass.
 - Schema-valid output does not become perfect implementation quality by itself.
 - Benchmark abstention/refusal cannot receive a perfect capability score.
-- Performance overrides are context-bound and require the configured minimum observation count.
+- Performance overrides are context-bound and require repeated observations before routing influence.
 - Exhausted repair budget quarantines rather than leaving an orphan repair state.
 - Continuity reaches supervisor review without auto-granting `MERGE_READY`.
 - CLI import-shadowing regression is guarded structurally.
 
-## What the numbers do not prove
+These statements summarize the historical test scope; they are not substitutes
+for rerunning the checks against the exact current commit.
 
-- The mutation score covers the 14 selected critical mutations, not every possible mutation.
+## What the measurements do not prove
+
+- The mutation score covers the selected critical mutations, not every possible mutation.
 - Fuzzing is bounded generated testing, not proof of absence of defects.
 - Offline evals do not execute or rank hosted models.
 - GitHub-hosted runners do not prove a target workstation's Codex, credentials, hooks, endpoint controls, or provider authentication.
@@ -56,8 +88,13 @@ The dedicated validation run was executed on the code candidate before the final
 
 ## Runtime dependency boundary
 
-CI installs the exact reviewed dependency locks and runs `pip check` on every matrix job. Governed signing and all target-host capabilities remain subject to host acceptance rather than inference from source configuration.
+CI installs the exact reviewed dependency locks and runs `pip check` on every
+matrix job. Governed signing and all target-host capabilities remain subject
+to host acceptance rather than inference from source configuration.
 
 ## Release condition
 
-Do not grant merge/deployment authority inside ZTAD itself until `docs/HOST_ACCEPTANCE.md` and target-platform gates emit exact-subject protected evidence. Repository CI proves the source/test state for its exact commit; it does not grant production authority.
+Do not grant merge or deployment authority inside ZTAD itself until
+`docs/HOST_ACCEPTANCE.md` and target-platform gates emit exact-subject protected
+evidence. Repository CI proves the source and test state for its exact commit;
+it does not grant production authority.

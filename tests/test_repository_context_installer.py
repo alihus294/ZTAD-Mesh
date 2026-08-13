@@ -191,7 +191,10 @@ def test_patch_broker_rejects_symlink_patch_file(tmp_path):
     real = tmp_path / "real.patch"
     real.write_text("not a patch\n", encoding="utf-8")
     link = tmp_path / "link.patch"
-    link.symlink_to(real)
+    try:
+        link.symlink_to(real)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is unavailable on this host")
     result = validate_patch(GitRepository(repo_path), link, expected_base=base, path_policy=load_data(ROOT / "policies/path-policy.yaml"))
     assert not result["valid"]
     assert result["findings"][0]["code"] == "PATCH_NOT_REGULAR_FILE"

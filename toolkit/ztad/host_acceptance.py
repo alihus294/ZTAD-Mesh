@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from .bundle import validate_bundle
+from .providers import _command_argv
 from .util import utc_now
 
 
 def _command(argv: list[str], *, timeout: int = 30) -> dict[str, Any]:
+    argv = _command_argv(argv)
     try:
         proc = subprocess.run(argv, text=True, capture_output=True, timeout=timeout, check=False, shell=False)
         return {

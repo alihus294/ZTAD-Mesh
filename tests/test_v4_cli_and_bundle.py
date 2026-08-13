@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -50,6 +52,55 @@ def test_source_version_identity_verifier_covers_repository_only_surfaces():
     if not (ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml").is_file():
         pytest.skip("source-only GitHub metadata is intentionally omitted from distributions")
     _run_identity_verifier("source")
+
+
+def test_release_version_identity_verifier_covers_all_current_surfaces():
+    profile = "source" if (ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml").is_file() else "distribution"
+    result = _run_identity_verifier(profile)
+    assert {
+        "README.md", "QUICKSTART.md", "docs/PLUGIN_INSTALLATION.md",
+        "traceability/TRACEABILITY_MATRIX.md", "CHANGELOG.md",
+        "docs/ARCHITECTURE.md", "docs/EVALS.md", "docs/LIMITATIONS.md",
+        "docs/CONTROL_COVERAGE.md", "docs/HOST_ACCEPTANCE.md",
+        "docs/CAPABILITY_MATRIX.md", "docs/FINAL_OPERATING_POLICY.md",
+        "docs/MODEL_SELECTION.md", "docs/OPERATING_GUIDE.md",
+        "docs/VALIDATION_REPORT.md", "references/MASTER_PLAN.md",
+        "docs/SECURITY_CONTROLS.md", "docs/THREAT_MODEL.md",
+    } <= set(result["checked_packaged_surfaces"])
+    expected_source_surfaces = [".github/ISSUE_TEMPLATE/bug_report.yml"] if profile == "source" else []
+    assert result["checked_source_only_surfaces"] == expected_source_surfaces
+
+
+def test_release_version_identity_verifier_fails_closed_on_malformed_metadata(tmp_path):
+    verifier_path = ROOT / "scripts/verify_version_identity.py"
+    spec = importlib.util.spec_from_file_location("verify_version_identity_under_test", verifier_path)
+    assert spec and spec.loader
+    verifier = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verifier)
+
+    relative_files = {
+        "VERSION", ".codex-plugin/plugin.json", "toolkit/pyproject.toml", "toolkit/ztad/__init__.py",
+        "scripts/generate_traceability.py", "docs/SOURCE_MAPPING.md", *verifier.PACKAGED_MARKERS,
+        *verifier.CURRENT_HEADING_PREFIXES, *verifier.SOURCE_ONLY_MARKERS,
+    }
+    for relative in relative_files:
+        source = ROOT / relative
+        if not source.is_file():
+            continue
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+
+    distribution_result = verifier.verify(tmp_path, profile="distribution")
+    assert distribution_result["valid"], distribution_result["errors"]
+
+    plugin_path = tmp_path / ".codex-plugin/plugin.json"
+    plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
+    plugin["version"] = {"not": "a string"}
+    plugin_path.write_text(json.dumps(plugin), encoding="utf-8")
+    malformed_result = verifier.verify(tmp_path, profile="distribution")
+    assert malformed_result["valid"] is False
+    assert any("invalid version metadata" in error for error in malformed_result["errors"])
 
 
 def test_new_cli_commands_parse():

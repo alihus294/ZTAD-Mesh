@@ -1,4 +1,4 @@
-# Capability Matrix — ZTAD Mesh 4.3.0
+# Capability Matrix — ZTAD Mesh 4.3.5
 
 | Capability | Implemented locally | Requires target acceptance | Claim boundary |
 |---|---:|---:|---|

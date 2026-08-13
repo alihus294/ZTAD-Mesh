@@ -3,12 +3,14 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from ztad.ledger import append_record, create_checkpoint, verify_ledger
 from ztad.models import (
+    ModelRole,
     ModelRoutingPolicy,
     build_codex_exec_argv,
     execute_role_with_fallback,
@@ -245,6 +247,22 @@ def test_model_routing_builds_role_isolated_commands(tmp_path):
     assert "read-only" in supervisor_argv
     assert "--ephemeral" in worker_argv and "--ephemeral" in supervisor_argv
     assert routing.role("worker").model != routing.role("supervisor").model
+
+
+def test_sol_command_builder_rejects_reasoning_above_high(tmp_path):
+    prompt = tmp_path / "prompt.md"
+    schema = tmp_path / "schema.json"
+    prompt.write_text("work", encoding="utf-8")
+    schema.write_text('{"type":"object"}', encoding="utf-8")
+    spec = make_run_spec(
+        task_id="t", role=ModelRole(
+            role="supervisor", model="gpt-5.6-sol", reasoning_effort="high",
+            sandbox="read-only", max_attempts=1, fallback_models=(),
+        ), prompt_path=prompt, output_schema=schema, output_dir=tmp_path / "out",
+    )
+    unsafe = replace(spec, reasoning_effort="ultra")
+    with pytest.raises(ValueError, match="Sol reasoning effort"):
+        build_codex_exec_argv(unsafe)
 
 
 def test_worker_model_fallback_changes_model_and_continues(tmp_path):
