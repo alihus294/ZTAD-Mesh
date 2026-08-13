@@ -103,7 +103,7 @@ jobs:
           & $venvPython -m pip check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $archive = Join-Path $env:RUNNER_TEMP "install-dist\zero-trust-agentic-delivery-marketplace-$env:ZTAD_VERSION.zip"
-          & $venvPython -B scripts/run_packaged_regressions.py --archive $archive --kind marketplace --scope install-critical
+          & $venvPython -I -B scripts/run_packaged_regressions.py --archive $archive --kind marketplace --scope install-critical
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Set commit-derived reproducible build timestamp
