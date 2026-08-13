@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.3.2 — 2026-08-13
+
+- Fixed the published Marketplace regression suite so release-identity verification distinguishes packaged runtime/install surfaces from repository-only `.github` metadata.
+- Added explicit `source` and `distribution` profiles to the canonical version-identity verifier; repository CI remains strict while extracted release packages no longer require files intentionally excluded from distributions.
+- Removed Windows PATH dependence from checks-runtime regressions by resolving an approved launcher from the active test interpreter environment rather than assuming `python3` exists.
+- Added an exact packaged-regression runner that validates and safely extracts Plugin/Marketplace archives before running installation-critical or full tests from the packaged tree.
+- Extended cross-platform CI to execute installation-critical regressions from the built Marketplace archive on Ubuntu/Windows with Python 3.11/3.13.
+- Hardened the release pipeline to run the full packaged regression suite from both exact archives before tag creation/publication and to re-run install-critical regressions against the re-downloaded published Marketplace asset.
+- Preserved all v4.3 routing, approval, actual-risk escalation, and hard Sol `HIGH` reasoning-ceiling invariants.
+- Preserved `v4.3.1`, `v4.3.0`, and older releases as immutable historical records; no prior release is rewritten.
+
 ## 4.3.1 — 2026-08-13
 
 - Fixed the toolkit runtime identity that still reported `4.2.0` even though the canonical release metadata was `4.3.0`.
