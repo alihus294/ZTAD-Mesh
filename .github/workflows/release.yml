@@ -89,7 +89,7 @@ jobs:
       - name: Verify installed dependency consistency
         run: python -m pip check
 
-      - name: Resolve and validate version identity
+      - name: Resolve and validate source version identity
         id: version
         shell: bash
         run: |
@@ -99,7 +99,7 @@ jobs:
             echo "Invalid VERSION: $version" >&2
             exit 1
           }
-          python -B scripts/verify_version_identity.py
+          python -B scripts/verify_version_identity.py --profile source
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
@@ -126,13 +126,14 @@ jobs:
         if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
         run: python -m compileall -q toolkit scripts evals tests
 
-      - name: Re-run release-critical regressions
+      - name: Re-run release-critical source regressions
         if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
         env:
           PYTHONPATH: toolkit
         run: >-
           python -B -m pytest -q -W error::ResourceWarning
           tests/test_v4_cli_and_bundle.py
+          tests/test_checks_runtime.py
           tests/test_cli_dispatch_regression.py
           tests/test_v43_guarded_fast_path.py
           tests/test_v43_runtime_controls.py
@@ -174,6 +175,20 @@ jobs:
           test -f "$marketplace"
           python -B scripts/ztad.py validate-distribution --archive "$plugin" --kind plugin
           python -B scripts/ztad.py validate-distribution --archive "$marketplace" --kind marketplace
+
+      - name: Run full regressions from exact packaged archives
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          python -B scripts/run_packaged_regressions.py \
+            --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
+            --kind plugin --scope full
+          python -B scripts/run_packaged_regressions.py \
+            --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
+            --kind marketplace --scope full
 
       - name: Materialize checksummed release assets
         if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
@@ -231,7 +246,8 @@ jobs:
           - Actual-diff risk escalation invalidates weaker paths and submits stronger replans.
           - Blocking P0/P1 findings cannot silently pass.
           - Routing performance is context-bound and downstream deterministic results influence writer quality.
-          - Canonical release identity is verified across runtime and distribution metadata before publication.
+          - Canonical release identity is verified separately for source-only and packaged runtime/install surfaces.
+          - Full regression suites run from both exact Plugin and Marketplace archives before tag creation/publication.
           - Plugin and Marketplace archives are deterministic, independently validated, and covered by \`CHECKSUMS.sha256\`.
 
           CI source: ${CI_RUN_URL:-manual-dispatch}
@@ -279,6 +295,9 @@ jobs:
             --archive "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-plugin-${VERSION}.zip" --kind plugin
           python -B scripts/ztad.py validate-distribution \
             --archive "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" --kind marketplace
+          python -B scripts/run_packaged_regressions.py \
+            --archive "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
+            --kind marketplace --scope install-critical
           tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
           test "$tag_sha" = "$SOURCE_SHA"
           release_state="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '[.isDraft,.isPrerelease] | @tsv')"
