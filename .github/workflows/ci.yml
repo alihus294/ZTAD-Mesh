@@ -78,13 +78,17 @@ jobs:
         run: python -B scripts/ztad.py --output "${{ runner.temp }}/policy-wiring.json" policy-wiring --root .
 
       - name: Resolve distribution version
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(tr -d '\r\n' < VERSION)"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]
-          echo "ZTAD_VERSION=$version" >> "$GITHUB_ENV"
+        run: python -c "import os,pathlib,re; v=pathlib.Path('VERSION').read_text(encoding='utf-8').strip(); assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:[-.+][0-9A-Za-z.-]+)?', v), v; open(os.environ['GITHUB_ENV'],'a',encoding='utf-8').write('ZTAD_VERSION='+v+'\n')"
+
+      - name: Build Marketplace for packaged install regression
+        run: python -B scripts/ztad.py --output "${{ runner.temp }}/install-distribution.json" build-distribution --root . --output-dir "${{ runner.temp }}/install-dist"
+
+      - name: Run packaged install-critical regressions
+        run: >-
+          python -B scripts/run_packaged_regressions.py
+          --archive "${{ runner.temp }}/install-dist/zero-trust-agentic-delivery-marketplace-${{ env.ZTAD_VERSION }}.zip"
+          --kind marketplace
+          --scope install-critical
 
       - name: Set commit-derived reproducible build timestamp
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'

@@ -6,12 +6,29 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
 import ztad
 from ztad.bundle import validate_bundle
 from ztad.cli import build_parser, execute
 from ztad.policy_registry import audit_policy_wiring
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _run_identity_verifier(profile: str) -> dict[str, object]:
+    completed = subprocess.run(
+        [sys.executable, "scripts/verify_version_identity.py", "--profile", profile],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["valid"] is True
+    assert result["profile"] == profile
+    assert len(set(result["identities"].values())) == 1
+    return result
 
 
 def test_v4_version_and_manifest_are_consistent():
@@ -24,17 +41,15 @@ def test_v4_version_and_manifest_are_consistent():
 
 
 def test_release_version_identity_verifier_covers_live_surfaces():
-    completed = subprocess.run(
-        [sys.executable, "scripts/verify_version_identity.py"],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    result = json.loads(completed.stdout)
-    assert result["valid"] is True
-    assert len(set(result["identities"].values())) == 1
+    # This profile is required to pass inside the published Plugin/Marketplace,
+    # where repository-only .github metadata is intentionally absent.
+    _run_identity_verifier("distribution")
+
+
+def test_source_version_identity_verifier_covers_repository_only_surfaces():
+    if not (ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml").is_file():
+        pytest.skip("source-only GitHub metadata is intentionally omitted from distributions")
+    _run_identity_verifier("source")
 
 
 def test_new_cli_commands_parse():

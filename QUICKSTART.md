@@ -1,6 +1,6 @@
-# ZTAD Mesh 4.3.1 Quick Start
+# ZTAD Mesh 4.3.2 Quick Start
 
-1. Download the versioned Marketplace archive from the `v4.3.1` GitHub Release.
+1. Download the versioned Marketplace archive from the `v4.3.2` GitHub Release.
 2. Download `CHECKSUMS.sha256` and verify the release files before installation.
 3. Extract the Marketplace archive to a stable local path and install `zero-trust-agentic-delivery@ztad-local` through the official Codex plugin flow.
 4. Close the installation session and start a fresh Codex session.
@@ -18,13 +18,19 @@ Release verification:
 python scripts/verify_release.py CHECKSUMS.sha256
 ```
 
-Local source validation:
+Extracted package validation:
 
 ```bash
-python -B scripts/verify_version_identity.py
+python -B scripts/verify_version_identity.py --profile distribution
 python -B scripts/ztad.py validate-bundle --root .
 python -B scripts/ztad.py policy-wiring --root .
 python -B -m pytest -q
+```
+
+Source-checkout validation uses the stricter source profile:
+
+```bash
+python -B scripts/verify_version_identity.py --profile source
 python -B evals/run_evals.py --output validation/eval-results.json
 ```
 
