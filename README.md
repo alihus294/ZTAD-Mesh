@@ -1,4 +1,4 @@
-# Zero-Trust Agentic Delivery Mesh 4.3.1
+# Zero-Trust Agentic Delivery Mesh 4.3.2
 
 ZTAD Mesh is a Codex plugin and deterministic control toolkit for bounded software delivery. Version 4.3 makes orchestration proportional to verified risk: trivial and low-risk work uses a guarded fast path, normal feature work uses a bounded mesh, and sensitive/high-risk work retains the full independent mesh.
 
@@ -16,7 +16,7 @@ ZTAD targets **never idle while safe runnable work exists** without turning mode
 
 The low-risk path is deliberately small. It does not run redundant scout, plan-adjudication, test-oracle, review-fan-out, synthesis, or release-advisor model calls. If the actual candidate diff raises risk, the lower-risk topology is invalidated and a stronger child plan must complete before approval can continue.
 
-## What 4.3.1 implements
+## What 4.3.2 implements
 
 - deterministic repository indexing before model calls;
 - Luna as the preferred low/medium-risk implementation worker when it remains eligible;
@@ -36,7 +36,8 @@ The low-risk path is deliberately small. It does not run redundant scout, plan-a
 - no automatic transition to `MERGE_READY` from model success;
 - loop fingerprints, measurable-progress requirements, bounded repair budgets, quarantine, and explicit reactivation;
 - deterministic Plugin/Marketplace builds with post-publication checksum verification;
-- canonical release-version verification across source, runtime, manifests, generated traceability, and installation documentation;
+- canonical release-version verification split correctly between repository-only and packaged runtime/install surfaces;
+- packaged regression execution from the exact release archives before publication, including cross-platform installation-critical checks;
 - conservative host-acceptance and platform-readiness reporting.
 
 ## Thirteen explicit-only skills
@@ -74,18 +75,25 @@ A model response is never CI evidence, approval evidence, deployment evidence, o
 The release workflow is CI-gated. After a successful `main` CI run it:
 
 1. checks out the exact CI-approved commit and refuses stale-main publication;
-2. validates canonical version identity before distribution publication;
+2. validates canonical source version identity before distribution publication;
 3. re-runs release-critical regressions with `ResourceWarning` treated as an error;
 4. builds Plugin and Marketplace distributions twice and compares them byte-for-byte;
 5. validates both archives and their internal manifests;
-6. creates `CHECKSUMS.sha256`;
-7. creates an exact commit-bound version tag and publishes without overwriting an existing release;
-8. re-downloads the public assets and verifies checksums and archive validity again.
+6. executes regressions from the exact packaged archives before any tag or release is created;
+7. creates `CHECKSUMS.sha256`;
+8. creates an exact commit-bound version tag and publishes without overwriting an existing release;
+9. re-downloads the public assets and verifies checksums, archive validity, and packaged install-critical regressions again.
 
 After downloading the release files, verify them before installation:
 
 ```bash
 python scripts/verify_release.py CHECKSUMS.sha256
+```
+
+For an extracted Plugin/Marketplace package, use the distribution profile rather than requiring repository-only `.github` metadata:
+
+```bash
+python -B scripts/verify_version_identity.py --profile distribution
 ```
 
 ## Safe first run
