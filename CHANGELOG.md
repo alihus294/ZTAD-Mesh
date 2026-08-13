@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.3.3 — 2026-08-13
+
+- Fixed the Windows packaged regression helper so it preserves the active virtual-environment interpreter directory instead of resolving the venv launcher to the base Python runtime.
+- Added a regression that simulates a distinct active-venv launcher path and proves the helper prepends that exact environment directory to `PATH` without dereferencing it.
+- Closed the failure where nested `python -m pytest` checks could run under the base runtime and fail with `No module named pytest` even though the active test environment contained pytest.
+- Kept the v4.3.2 source/distribution version-identity split and exact packaged regression gates unchanged.
+- Preserved all v4.3 routing, approval, actual-risk escalation, and hard Sol `HIGH` reasoning-ceiling invariants.
+- Preserved `v4.3.2`, `v4.3.1`, `v4.3.0`, and older releases as immutable historical records; no prior release is rewritten.
+
 ## 4.3.2 — 2026-08-13
 
 - Fixed the published Marketplace regression suite so release-identity verification distinguishes packaged runtime/install surfaces from repository-only `.github` metadata.
