@@ -55,8 +55,26 @@ def test_cli_problem_init_is_read_only():
 
 
 def test_cli_problem_contract_dispatches_to_canonical_validator(tmp_path):
-    case = initialize_problem_case(ROOT, report="X produces Y", expected_behavior="X produces Z")
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    commands = (
+        ("init", "-b", "main"),
+        ("config", "user.email", "test@example.invalid"),
+        ("config", "user.name", "ZTAD Test"),
+    )
+    for command in commands:
+        subprocess.run(["git", "-C", str(repo), *command], check=True, text=True, capture_output=True)
+    (repo / "src").mkdir()
+    (repo / "src/example.py").write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "src/example.py"], check=True, text=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "base"], check=True, text=True, capture_output=True)
+
+    case = initialize_problem_case(repo, report="X produces Y", expected_behavior="X produces Z")
     base = case["base_sha"]
+    assert case["protected_ref_resolved"] is True
+    assert base
     case["worktree_status"].update({
         "diverged_from_protected_base": False,
         "user_worktree_preserved": True,
