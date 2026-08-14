@@ -43,10 +43,12 @@ jobs:
           set -euo pipefail
           git show origin/fix/autonomous-delivery-4.3.6:toolkit/ztad/schema_validation.py > toolkit/ztad/schema_validation.py
           git show origin/fix/autonomous-delivery-4.3.6:schemas/agent-result.schema.json > schemas/agent-result.schema.json
+          python -B scripts/_v436_format_fix.py
           python -B scripts/_v436_upgrade.py
           python -B scripts/_v436_finalize.py
           python -B scripts/_v436_governance_finalize.py
           python -B scripts/generate_traceability.py
+          test ! -e scripts/_v436_format_fix.py
           test ! -e scripts/_v436_upgrade.py
           test ! -e scripts/_v436_finalize.py
           test ! -e scripts/_v436_governance_finalize.py
