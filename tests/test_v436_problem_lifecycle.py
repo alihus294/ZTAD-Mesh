@@ -9,6 +9,7 @@ from ztad.problem import (
     problem_case_to_change_contract,
     validate_problem_case,
 )
+from ztad.problem_isolation import isolate_problem_case
 from ztad.schema_validation import validate_instance
 from ztad.util import load_data
 
@@ -20,6 +21,13 @@ CONTRACT_SCHEMA = load_data(ROOT / "schemas/change-contract.schema.json")
 def _git(repo: Path, *args: str) -> None:
     import subprocess
     subprocess.run(["git", "-C", str(repo), *args], check=True, text=True, capture_output=True)
+
+
+def _git_output(repo: Path, *args: str) -> str:
+    import subprocess
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, text=True, capture_output=True
+    ).stdout.strip()
 
 
 def _repo(tmp_path: Path) -> Path:
@@ -85,18 +93,63 @@ def test_initialize_problem_case_is_read_only_and_marks_local_evidence(tmp_path)
 
 def test_divergent_local_branch_binds_case_to_protected_main(tmp_path):
     repo = _repo(tmp_path)
-    import subprocess
-    protected = subprocess.run(["git", "-C", str(repo), "rev-parse", "main"], check=True, text=True, capture_output=True).stdout.strip()
+    protected = _git_output(repo, "rev-parse", "main")
     _git(repo, "switch", "-c", "work-in-progress")
     (repo / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
     _git(repo, "add", "app.py")
     _git(repo, "commit", "-m", "local work")
-    local = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, text=True, capture_output=True).stdout.strip()
+    local = _git_output(repo, "rev-parse", "HEAD")
     case = initialize_problem_case(repo, report="Reported from a divergent branch", protected_ref="main")
     assert case["base_sha"] == protected
     assert case["local_head_sha"] == local
     assert case["base_sha"] != case["local_head_sha"]
     assert case["worktree_status"]["diverged_from_protected_base"] is True
+
+
+def test_problem_isolation_preserves_divergent_dirty_user_worktree(tmp_path):
+    import shutil
+    import subprocess
+
+    repo = _repo(tmp_path)
+    protected = _git_output(repo, "rev-parse", "main")
+    _git(repo, "switch", "-c", "owner-local-work")
+    (repo / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+    _git(repo, "add", "app.py")
+    _git(repo, "commit", "-m", "owner local commit")
+    (repo / "owner-notes.txt").write_text("uncommitted owner scratch\n", encoding="utf-8")
+    original_head = _git_output(repo, "rev-parse", "HEAD")
+    original_status = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        check=True, capture_output=True,
+    ).stdout
+    original_app = (repo / "app.py").read_bytes()
+    original_notes = (repo / "owner-notes.txt").read_bytes()
+
+    case = initialize_problem_case(repo, report="Reported while owner has local work", protected_ref="main")
+    assert case["base_sha"] == protected
+    assert case["worktree_status"]["dirty"] is True
+    assert case["worktree_status"]["diverged_from_protected_base"] is True
+
+    isolated = isolate_problem_case(case)
+    try:
+        worktree = Path(isolated["worktree"])
+        assert not worktree.is_relative_to(repo.resolve())
+        assert _git_output(worktree, "rev-parse", "HEAD") == protected
+        assert _git_output(repo, "rev-parse", "HEAD") == original_head
+        after_status = subprocess.run(
+            ["git", "-C", str(repo), "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+            check=True, capture_output=True,
+        ).stdout
+        assert after_status == original_status
+        assert (repo / "app.py").read_bytes() == original_app
+        assert (repo / "owner-notes.txt").read_bytes() == original_notes
+        assert isolated["problem_case"]["worktree_status"]["user_worktree_preserved"] is True
+        assert isolated["problem_case"]["worktree_status"]["isolated_clean_worktree"] is True
+        assert isolated["evidence"]["original_status_unchanged"] is True
+    finally:
+        _git(repo, "worktree", "remove", "--force", isolated["worktree"])
+        _git(repo, "worktree", "prune")
+        shutil.rmtree(isolated["managed_root"], ignore_errors=True)
 
 
 def test_schema_rejects_unexpected_properties(tmp_path):
