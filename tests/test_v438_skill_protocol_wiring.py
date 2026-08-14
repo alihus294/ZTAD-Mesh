@@ -29,7 +29,8 @@ def test_supervisor_recommendation_is_not_protected_authority() -> None:
     text = _skill("supervisor-governance")
     assert "`APPROVE` is only a structured recommendation" in text
     assert "cannot itself satisfy `PROTECTED_SUPERVISOR_APPROVAL`" in text
-    assert "cannot be mechanically translated into E6" in text
+    assert "mechanically translated into E6" in text
+    assert "protected non-model controller" in text
     assert "Production release authorization remains an external protected-authority action" in text
 
 
