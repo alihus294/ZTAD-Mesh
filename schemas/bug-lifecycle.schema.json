@@ -1,0 +1,96 @@
+{
+  "$id": "https://example.invalid/ztad/bug-lifecycle.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "base_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": ["string", "null"]
+    },
+    "blocked_target": {
+      "enum": [null, "UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "RESOLVED_NO_CODE"],
+      "type": ["string", "null"]
+    },
+    "blockers": {
+      "items": {"type": "string"},
+      "type": "array",
+      "uniqueItems": true
+    },
+    "canonical_deployment_chain": {
+      "items": {"type": "string"},
+      "type": "array",
+      "uniqueItems": true
+    },
+    "case_id": {
+      "pattern": "^CASE-[A-Za-z0-9._-]{3,80}$",
+      "type": "string"
+    },
+    "change_contract_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "diff_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "domains": {
+      "items": {
+        "enum": ["GENERAL", "DATABASE", "AUTH_TENANT", "FINANCIAL", "ZATCA", "PROVIDER", "CONCURRENCY", "SECURITY"]
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "evidence_refs": {
+      "additionalProperties": {
+        "items": {"type": "string"},
+        "type": "array",
+        "uniqueItems": true
+      },
+      "type": "object"
+    },
+    "final_state": {
+      "enum": [null, "CLOSED", "RESOLVED_NO_CODE"],
+      "type": ["string", "null"]
+    },
+    "head_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": ["string", "null"]
+    },
+    "last_completed_state": {
+      "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "RESOLVED_NO_CODE"]
+    },
+    "mode": {"enum": ["NORMAL", "HOTFIX"]},
+    "policy_bundle_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "problem_case_fingerprint": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "profile": {"enum": ["generic", "workshopos"]},
+    "protocol_version": {"const": "WorkshopOS-Fail-Closed-Bug-to-Production-v1"},
+    "remote_repository": {"type": ["string", "null"]},
+    "repository": {"minLength": 1, "type": "string"},
+    "resume_state": {
+      "enum": [null, "UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED"],
+      "type": ["string", "null"]
+    },
+    "risk": {"enum": [null, "R0", "R1", "R2", "R3", "R4"], "type": ["string", "null"]},
+    "schema_version": {"const": 1},
+    "state": {
+      "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "BLOCKED", "ROLLBACK_REQUIRED", "RESOLVED_NO_CODE"]
+    },
+    "toolchain_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    }
+  },
+  "required": ["schema_version", "protocol_version", "profile", "mode", "case_id", "state", "last_completed_state", "resume_state", "blocked_target", "blockers", "repository", "remote_repository", "problem_case_fingerprint", "base_sha", "head_sha", "diff_hash", "artifact_digest", "risk", "domains", "canonical_deployment_chain", "change_contract_hash", "policy_bundle_hash", "toolchain_hash", "evidence_refs", "final_state"],
+  "title": "ZTAD Bug-to-Production Lifecycle",
+  "type": "object"
+}
