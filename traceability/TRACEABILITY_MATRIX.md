@@ -1,10 +1,8 @@
 # ZTAD Mesh 4.3.7 Traceability Matrix
 
-Active normative requirements: **119**.
+Active normative requirements: **134**.
 
 This matrix maps the retained normative control catalogue to implementation and verification. Version 4.3 uses risk-proportional orchestration and model routing without weakening the existing authority, scope, evidence, recovery, and platform-boundary requirements. External controls are not considered active until target-platform evidence verifies them.
-
-The WorkshopOS Fail-Closed Bug-to-Production Protocol v1 is mapped state-by-state in `traceability/BUG_TO_PRODUCTION_MAPPING.md`. That mapping is an explicit composition/refinement of the existing problem-intake, test-integrity, evidence, approval, release, and production controls; it does not relabel historical requirement counts or validation artifacts.
 
 ## Coverage by enforcement class
 
@@ -13,7 +11,7 @@ The WorkshopOS Fail-Closed Bug-to-Production Protocol v1 is mapped state-by-stat
 | CONTROL_SPECIFIC | 87 |
 | DETERMINISTIC | 5 |
 | DETERMINISTIC_AND_EXTERNAL | 1 |
-| DETERMINISTIC_AND_PLATFORM | 25 |
+| DETERMINISTIC_AND_PLATFORM | 40 |
 | HOST_AND_DETERMINISTIC | 1 |
 
 ## Coverage by section
@@ -30,6 +28,7 @@ The WorkshopOS Fail-Closed Bug-to-Production Protocol v1 is mapped state-by-stat
 | 24. Validation and release | 1 |
 | 26. Normative control catalogue | 87 |
 | 27. Autonomous problem-to-production intake | 23 |
+| 28. Exact fail-closed bug-to-production lifecycle | 15 |
 
 ## Interpretation
 
@@ -40,4 +39,4 @@ The WorkshopOS Fail-Closed Bug-to-Production Protocol v1 is mapped state-by-stat
 - `CAPABILITY_GATED`: autonomy is capped until the capability is independently verified.
 - `OPERATIONAL` / `DOCUMENTED_*`: governed by runbook, architecture, or scenario testing.
 
-The row-level source of truth is `requirements.csv`; the state-to-control composition for the WorkshopOS protocol is `BUG_TO_PRODUCTION_MAPPING.md`.
+The row-level source of truth is `requirements.csv`.
