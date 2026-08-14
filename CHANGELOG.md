@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.3.8 — 2026-08-15
+
+- Removed the remaining skill-level exception language that could treat controller-reviewed “equivalent evidence” as a substitute for exact protected bad-base/exact-candidate same-oracle RED→GREEN proof.
+- Made finding repair fail closed on the same exact RED→GREEN requirement rather than treating a failing regression as merely “when feasible”.
+- Clarified that strong-model/supervisor `APPROVE` is an advisory recommendation only and cannot itself satisfy `PROTECTED_SUPERVISOR_APPROVAL`, create E6, or be mechanically translated into protected merge/release/production authority.
+- Required independent review to emit a distinct-session lifecycle verdict and permitted `INDEPENDENT_REVIEW_COMPLETED` only when that verdict is exactly `PASS`.
+- Clarified that release-readiness `PRODUCTION_VERIFIED` is evidence for `POST_DEPLOY_VERIFIED` only and cannot substitute for the separate deterministic `POST_DEPLOY_VERIFIED → CLOSED` transition.
+- Added regression coverage that locks these skill-level protocol semantics so prompt drift fails CI.
+- Preserved v4.3.7 and all earlier releases as immutable historical evidence; the deterministic v4.3.7 lifecycle gates remain unchanged and v4.3.8 tightens skill instructions to match them exactly.
+
 ## 4.3.7 — 2026-08-15
 
 - Added a dedicated authoritative bug-to-production lifecycle that mirrors the WorkshopOS protocol state-for-state from `UNVERIFIED_REPORT` through `CLOSED`.

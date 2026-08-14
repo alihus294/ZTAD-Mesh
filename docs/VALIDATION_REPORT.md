@@ -1,4 +1,4 @@
-# Validation Report — ZTAD Mesh 4.3.7
+# Validation Report — ZTAD Mesh 4.3.8
 
 ## Decision
 
@@ -10,9 +10,9 @@ CANDIDATE_REQUIRES_EXACT_COMMIT_VALIDATION_AND_TARGET_HOST_ACCEPTANCE
 
 Release identity is derived from `VERSION` and checked against every current package, runtime, release-facing, operational, and normative identity surface. Identity is not validation evidence by itself.
 
-This source document does not self-attest the 4.3.7 release. Current-release repository evidence becomes authoritative only when protected GitHub CI succeeds on the exact final commit. Artifact/release evidence becomes authoritative only when the immutable release workflow binds the exact commit and exact archive digests. Target-host/provider/deployment/runtime claims remain external evidence classes.
+This source document does not self-attest the 4.3.8 release. Current-release repository evidence becomes authoritative only when protected GitHub CI succeeds on the exact final commit. Artifact/release evidence becomes authoritative only when the immutable release workflow binds the exact commit and exact archive digests. Target-host/provider/deployment/runtime claims remain external evidence classes.
 
-Historical measurements are never silently re-attributed to 4.3.7.
+Historical measurements are never silently re-attributed to 4.3.8.
 
 | Evidence source | What it can establish |
 |---|---|
@@ -23,9 +23,17 @@ Historical measurements are never silently re-attributed to 4.3.7.
 | Immutable tag, release assets, checksums/provenance bound to an exact SHA | Release/artifact evidence for that SHA |
 | Protected deployment/runtime controllers | Staging, release, rollback, health, synthetic, and observation evidence only |
 
-## 4.3.7 protocol acceptance targets
+## 4.3.8 protocol acceptance targets
 
-The candidate adds deterministic enforcement for the exact reported-defect lifecycle:
+The deterministic lifecycle introduced in v4.3.7 remains unchanged. The 4.3.8 candidate must prove that all packaged skill instructions match those deterministic gates without a softer prompt-level escape hatch:
+
+- problem investigation and finding repair cannot replace exact protected bad-base/exact-candidate same-oracle RED→GREEN with model judgment, “equivalent evidence”, feasibility wording, or controller-reviewed exception;
+- strong-model/supervisor `APPROVE` is advisory only and cannot itself satisfy `PROTECTED_SUPERVISOR_APPROVAL`, create E6, or be mechanically translated into protected merge/release/production authority;
+- independent review must identify distinct implementation/review sessions and emit exact lifecycle verdict `PASS` before `INDEPENDENT_REVIEW_PASS`;
+- `PRODUCTION_VERIFIED` readiness is evidence toward `POST_DEPLOY_VERIFIED` only and cannot substitute for the separate deterministic `POST_DEPLOY_VERIFIED → CLOSED` transition;
+- all v4.3.7 lifecycle, high-risk domain, E6 protected approval, packaging, CI, and release controls remain intact.
+
+The authoritative reported-defect lifecycle remains:
 
 ```text
 UNVERIFIED_REPORT
@@ -49,23 +57,11 @@ UNVERIFIED_REPORT
 → CLOSED
 ```
 
-The candidate must prove through its exact tests and protected CI that:
-
-- `DONE` is not a bug-lifecycle state and cannot close a reported code defect;
-- patch creation and RED→GREEN proof are separate gates;
-- RED→GREEN binds the exact protected bad base, exact candidate, and same oracle;
-- targeted validation can add database/auth-tenant/financial/ZATCA/provider/concurrency requirements;
-- independent review requires a distinct implementation/review context and `PASS` verdict;
-- protected CI, staging, owner-release readiness, production release, and post-deploy verification remain separate claims;
-- missing mandatory post-production evidence results in `ROLLBACK_REQUIRED` rather than optimistic closure;
-- WorkshopOS profile preserves the canonical chain `DEPLOYMENT.md → infra/docs/runbook.md → .github/workflows/deploy.yml`;
-- prior v4.3.6 autonomous-isolation, strict-provider-schema, release-evidence, dependency/migration, blocker-request, and never-idle controls remain intact.
-
 ## Historical evidence boundary
 
-The immutable predecessor `v4.3.6` is historical evidence for its exact source SHA and published assets. Earlier v4.3.x and v4.2 validation records likewise retain only their original subjects. Their numeric test, coverage, fuzz, mutation, package, and concurrency results are not copied here as 4.3.7 claims.
+The immutable predecessor `v4.3.7` is historical evidence for its exact source SHA and published assets. Earlier v4.3.x and v4.2 validation records likewise retain only their original subjects. Their numeric test, coverage, fuzz, mutation, package, and concurrency results are not copied here as 4.3.8 claims.
 
-The 4.3.7 candidate must pass the repository's current source identity gate, compile gate, full unit/integration suite, ResourceWarning/unraisable protections, offline evals, bundle validation, policy wiring, traceability validation, deterministic distribution builds, exact Plugin and Marketplace archive validation, and packaged regressions. Protected PR CI must run on the final PR head; post-merge CI must run on the exact merged main SHA before release publication can be treated as current evidence.
+The 4.3.8 candidate must pass the repository's current source identity gate, compile gate, full unit/integration suite, ResourceWarning/unraisable protections, offline evals, bundle validation, policy wiring, traceability validation, deterministic distribution builds, exact Plugin and Marketplace archive validation, and packaged regressions. Protected PR CI must run on the final PR head; post-merge CI must run on the exact merged main SHA before release publication can be treated as current evidence.
 
 ## What repository validation cannot prove
 

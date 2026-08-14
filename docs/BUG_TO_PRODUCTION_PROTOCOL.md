@@ -1,4 +1,4 @@
-# Autonomous Fail-Closed Bug-to-Production Protocol — ZTAD Mesh 4.3.7
+# Autonomous Fail-Closed Bug-to-Production Protocol — ZTAD Mesh 4.3.8
 
 ## Purpose
 
@@ -100,14 +100,14 @@ Protected refs such as `main` are not development worktrees. Dirty/divergent own
 
 `PATCH_IMPLEMENTED` proves only that the bounded candidate exists and is bound to an exact head SHA, diff hash, Change Contract hash, policy bundle hash, and toolchain hash.
 
-`REGRESSION_TEST_PROVEN` is a separate mandatory state. Preferred proof is:
+`REGRESSION_TEST_PROVEN` is a separate mandatory state. Required proof is:
 
 ```text
 exact known-bad protected base + regression oracle → FAIL
 exact candidate + same regression oracle → PASS
 ```
 
-The RED→GREEN evidence must name the exact bad base and candidate SHA and prove the same oracle. Same-SHA/configuration FAIL→PASS is flaky/environment-dependent and remains blocking.
+The RED→GREEN evidence must name the exact bad base and candidate SHA and prove the same oracle. Same-SHA/configuration FAIL→PASS is flaky/environment-dependent and remains blocking. No model judgment, feasibility exception, controller-reviewed waiver, or “equivalent evidence” may replace this code-fix gate. If the exact RED cannot be obtained safely, the lifecycle remains `BLOCKED` until the testability or source-of-truth problem is resolved.
 
 Never loosen assertions, delete tests, add skip/xfail/focus/retry to hide failure, reduce coverage, change discovery/exclusion, mock away the real boundary, make CI non-blocking, swallow errors, or alter a guard merely to obtain green status.
 
@@ -132,7 +132,7 @@ A required failing check cannot be ignored as “pre-existing” unless failure 
 
 `DIFF_FORENSICS_PASS` requires every changed file and line to be justified by the proven root cause and plan. Unexpected dependency/lockfile/config/permission/API/migration/generated changes, PII/secrets, debug output, tenant-scope changes, fail-open handling, and test weakening block progression.
 
-`INDEPENDENT_REVIEW_PASS` requires a review session/context different from implementation. The reviewer attempts to disprove diagnosis, root cause, regression-test validity, minimality, preservation of unrelated behavior, security/data safety, concurrency/idempotency, and deployment assumptions. Verdict is `PASS` or block; “looks good overall” is not a passing verdict.
+`INDEPENDENT_REVIEW_PASS` requires a review session/context different from implementation. The reviewer attempts to disprove diagnosis, root cause, regression-test validity, minimality, preservation of unrelated behavior, security/data safety, concurrency/idempotency, and deployment assumptions. The review evidence must identify both session IDs and verdict exactly `PASS`; any blocker or material missing evidence prevents the transition. A model review verdict is not E6 approval or protected release authority.
 
 ## PR and protected CI
 
@@ -160,11 +160,11 @@ Hotfix mode may reduce breadth but does not skip lifecycle states. Database, aut
 - synthetic transaction definition;
 - staged restore/recovery evidence where required by risk.
 
-Local files/templates are not substitutes for protected evidence. When an external gate is unavailable, create the request/template/local preparation and mark it `LOCAL_EVIDENCE_IS_NON_AUTHORITATIVE_UNTIL_PROMOTED_BY_A_PROTECTED_CONTROLLER`.
+Local files/templates are not substitutes for protected evidence. A strong-model or supervisor `APPROVE` is advisory only and cannot itself satisfy `PROTECTED_SUPERVISOR_APPROVAL`, create E6, or be mechanically translated into protected authority. A protected non-model controller must independently validate the configured protected authority and exact evidence subject before emitting E6. When an external gate is unavailable, create the request/template/local preparation and mark it `LOCAL_EVIDENCE_IS_NON_AUTHORITATIVE_UNTIL_PROMOTED_BY_A_PROTECTED_CONTROLLER`.
 
 ## Protected production release
 
-`PRODUCTION_RELEASED` is separate from post-deployment correctness. It requires protected release authorization, exact reviewed main revision, exact validated artifact digest, and protected evidence that the release completed.
+`PRODUCTION_RELEASED` is separate from post-deployment correctness. It requires protected release authorization, exact reviewed main revision, exact validated artifact digest, and protected evidence that the release completed. `PROTECTED_RELEASE_AUTHORIZATION` must reflect an authorized protected production action; it cannot be self-issued by a model or created by merely wrapping a model recommendation in a signature.
 
 ZTAD must never use direct production SQL, direct production SSH/VPS mutation, local production migrations, ad-hoc production service-role credentials, alternate deployment paths, mutable tags, or rebuilt unverified bytes.
 
@@ -173,6 +173,8 @@ For high/critical risk, use supported containment such as feature flags, blue/gr
 ## Post-deployment proof and rollback
 
 `POST_DEPLOY_VERIFIED` requires production-safe proof that the original symptom no longer occurs and expected behavior now occurs. Separately verify exact running digest, application health, error rate/logs/metrics, latency, queues/backlog, database/provider errors, authorization/tenant anomalies, financial anomalies, ZATCA anomalies, duplicate side effects, synthetic transaction, and observation window as applicable.
+
+A release-readiness result such as `PRODUCTION_VERIFIED` is evidence toward the `POST_DEPLOY_VERIFIED` claim only; it is not `CLOSED` and cannot skip the deterministic closure transition.
 
 If the original problem remains, a new regression appears, health degrades without explanation, or security/data/tenant/financial/ZATCA safety cannot be proven, transition to `ROLLBACK_REQUIRED`.
 

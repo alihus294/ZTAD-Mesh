@@ -1,4 +1,4 @@
-# Model Selection and Work Distribution — ZTAD Mesh 4.3.7
+# Model Selection and Work Distribution — ZTAD Mesh 4.3.8
 
 ## Principle
 
@@ -17,7 +17,7 @@ ZTAD selects the smallest eligible model topology that clears the exact task/rol
 | R3/R4 planning, sensitive review, diagnosis, takeover, closure, release consultation | eligible frontier resource, normally `codex-sol` | **high** | bounded proposal/worktree according to role |
 | deterministic integration/checks | local deterministic tools | none | fact generation |
 
-No Sol route may request a reasoning effort above HIGH. This ceiling applies to every Sol role, including planning, adjudication, security/data review, diagnosis, takeover, closure, and release advice.
+No Sol route may request a reasoning effort above HIGH. This ceiling applies to every Sol role, including planning, adjudication, security/data review, diagnosis, takeover, closure, and release advice. A model/supervisor `APPROVE` remains advisory and cannot itself become E6 or protected release authority.
 
 ## Risk topology
 
@@ -66,4 +66,4 @@ A preferred registry is a preference, not a pin that bypasses safety. Provider/m
 - The mandatory R0/R1 Sol guard is independent of the Luna writer.
 - Supervisor takeover requires fresh independent closure before approval.
 - Provider diversity is useful when eligible alternatives exist, but model agreement is never evidence.
-- Every model result remains a proposal until exact subject, SHA, diff, schema, and evidence checks pass.
+- Every model result remains a proposal until exact subject, SHA, diff, schema, and evidence checks pass; even then it does not create protected E6 authority by itself.

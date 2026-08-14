@@ -1,4 +1,4 @@
-# Security Controls — ZTAD Mesh 4.3.7
+# Security Controls — ZTAD Mesh 4.3.8
 
 ## Model distrust
 
@@ -18,11 +18,11 @@ A deterministic index precedes model work. Writers run in dedicated Git worktree
 
 ## Test integrity
 
-`PATCH_IMPLEMENTED` and `REGRESSION_TEST_PROVEN` are separate. RED→GREEN must bind the same oracle to the exact known-bad base and exact candidate. The detector covers skip/xfail/only/todo/retry/no-tests, CI bypass, failure masking, discovery changes, assertion loss, test deletion/move, collection reduction, snapshot changes, and unconditional-success scripts. Protected control-plane changes require separate review.
+`PATCH_IMPLEMENTED` and `REGRESSION_TEST_PROVEN` are separate. RED→GREEN must bind the same oracle to the exact known-bad base and exact candidate. No skill-level feasibility exception, equivalent evidence, model judgment, or controller-reviewed waiver can replace this code-fix gate. The detector covers skip/xfail/only/todo/retry/no-tests, CI bypass, failure masking, discovery changes, assertion loss, test deletion/move, collection reduction, snapshot changes, and unconditional-success scripts. Protected control-plane changes require separate review.
 
 ## Approval and independence
 
-The supervisor emits a proposal. The Approval Controller looks up the stored model run, validates independent identity, exact task/contract/SHA/diff/risk/evidence bindings, and signs only after all predicates pass. Independent bug review must identify a review context distinct from the implementation context and return `PASS`. Takeover requires a fresh Closure Reviewer.
+The supervisor emits an advisory proposal only. A model `APPROVE` cannot itself become protected approval evidence or E6 and cannot be mechanically translated into authority by signing/wrapping it. The Approval Controller must independently validate configured protected authority, stored subject/run identity, exact task/contract/SHA/diff/risk/evidence bindings, and policy predicates before any protected approval record is emitted. Independent bug review must identify a review context distinct from implementation and return exact verdict `PASS`. Takeover requires a fresh Closure Reviewer. Production authorization remains an external protected-authority action.
 
 ## Evidence/state
 
@@ -30,7 +30,7 @@ SQLite transactions, constraints, leases, idempotency, hash chains, and external
 
 ## Production boundary
 
-Production release is separate from post-deploy correctness. `PRODUCTION_RELEASED` requires protected authority and exact revision/digest evidence; `POST_DEPLOY_VERIFIED` separately requires original-problem proof plus runtime health, synthetic transaction, and observation window. Unresolved critical uncertainty routes to `ROLLBACK_REQUIRED`.
+Production release is separate from post-deploy correctness. `PRODUCTION_RELEASED` requires protected authority and exact revision/digest evidence; `POST_DEPLOY_VERIFIED` separately requires original-problem proof plus runtime health, synthetic transaction, and observation window. A readiness result such as `PRODUCTION_VERIFIED` is not bug closure. Unresolved critical uncertainty routes to `ROLLBACK_REQUIRED`.
 
 ## Secret/network boundary
 

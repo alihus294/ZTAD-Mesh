@@ -1,4 +1,4 @@
-# Threat Model — ZTAD Mesh 4.3.7
+# Threat Model — ZTAD Mesh 4.3.8
 
 ## Assets
 
@@ -12,8 +12,10 @@ Model output, repository text, issues/comments, initial bug reports, logs, exter
 
 - **Premature bug assumption:** every report begins `UNVERIFIED_REPORT`; read-only source-truth resolution, classification, reproduction, and root-cause proof precede patching.
 - **False completion:** authoritative bug lifecycle excludes scheduler `DONE`; a code-fix case closes only after protected release and `POST_DEPLOY_VERIFIED` evidence.
-- **Deployment/fix conflation:** `PRODUCTION_RELEASED` and `POST_DEPLOY_VERIFIED` are distinct mandatory states.
-- **Fake RED→GREEN:** exact bad-base SHA, exact candidate SHA, same oracle, FAIL then PASS semantics are required.
+- **Deployment/fix conflation:** `PRODUCTION_RELEASED` and `POST_DEPLOY_VERIFIED` are distinct mandatory states; readiness output cannot substitute for closure.
+- **Fake RED→GREEN:** exact bad-base SHA, exact candidate SHA, same oracle, FAIL then PASS semantics are required, with no skill-level equivalent-evidence exception.
+- **Model self-authorization:** supervisor/model `APPROVE` is advisory only; it cannot itself become E6 or be mechanically translated into protected merge/release/production authority.
+- **False independent review:** `INDEPENDENT_REVIEW_PASS` requires distinct implementation/review sessions and exact reviewer verdict `PASS`.
 - **Prompt injection:** repository/external text remains data; command/network authority is external to prompts.
 - **Excessive agency:** role-specific sandboxes, no model merge/deploy authority, scope locks, worktrees, owner-work preservation, and platform gates.
 - **Fabricated evidence:** evidence registry, exact subjects, trust levels, signatures, and controller validation.

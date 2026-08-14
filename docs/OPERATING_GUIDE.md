@@ -1,4 +1,4 @@
-# Operating Guide — ZTAD Mesh 4.3.7
+# Operating Guide — ZTAD Mesh 4.3.8
 
 ## Modes
 
@@ -47,7 +47,7 @@ UNVERIFIED_REPORT
 → CLOSED
 ```
 
-A failed mandatory gate becomes `BLOCKED` before production and `ROLLBACK_REQUIRED` after production exposure. Internal scheduler `DONE` is not bug closure.
+A failed mandatory gate becomes `BLOCKED` before production and `ROLLBACK_REQUIRED` after production exposure. Internal scheduler `DONE` is not bug closure. Exact RED→GREEN has no equivalent-evidence exception; a reviewer must emit distinct-session `PASS`; model/supervisor `APPROVE` is advisory only and cannot become E6 by translation; and production readiness never substitutes for `POST_DEPLOY_VERIFIED → CLOSED`.
 
 ## Normal autonomous flow
 

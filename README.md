@@ -1,4 +1,4 @@
-# Zero-Trust Agentic Delivery Mesh 4.3.7
+# Zero-Trust Agentic Delivery Mesh 4.3.8
 
 ZTAD Mesh is a Codex plugin and deterministic control toolkit for bounded software delivery. Version 4.3 makes orchestration proportional to verified risk: trivial and low-risk work uses a guarded fast path, normal feature work uses a bounded mesh, and sensitive/high-risk work retains the full independent mesh.
 
@@ -16,10 +16,11 @@ ZTAD targets **never idle while safe runnable work exists** without turning mode
 
 The low-risk path is deliberately small. It does not run redundant scout, plan-adjudication, test-oracle, review-fan-out, synthesis, or release-advisor model calls. If the actual candidate diff raises risk, the lower-risk topology is invalidated and a stronger child plan must complete before approval can continue.
 
-## What 4.3.7 implements
+## What 4.3.8 implements
 
-- fail-closed problem investigation before patching, with source-of-truth resolution, classification, reproduction/root-cause proof, blast-radius mapping, clean isolation, and RED→GREEN regression evidence;
+- fail-closed problem investigation before patching, with source-of-truth resolution, classification, reproduction/root-cause proof, blast-radius mapping, clean isolation, and mandatory exact bad-base/exact-candidate same-oracle RED→GREEN regression evidence for code-fix closure;
 - an explicit authoritative bug-to-production lifecycle from `UNVERIFIED_REPORT` through `CLOSED`, with separate `PATCH_IMPLEMENTED`, `REGRESSION_TEST_PROVEN`, validation, review, CI, staging, owner-release, production-release, and post-deploy states;
+- explicit skill-level authority separation: supervisor/model `APPROVE` is advisory only, cannot be converted mechanically into E6, independent review must bind a distinct-session `PASS`, and `PRODUCTION_VERIFIED` cannot substitute for `POST_DEPLOY_VERIFIED → CLOSED`;
 - `DONE` is not a bug-lifecycle state; a code-fix case cannot close before `POST_DEPLOY_VERIFIED`;
 - deterministic repository indexing before model calls;
 - Luna as the preferred low/medium-risk implementation worker when it remains eligible;

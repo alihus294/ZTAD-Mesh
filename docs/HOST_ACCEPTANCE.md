@@ -1,4 +1,4 @@
-# Target Host Acceptance — ZTAD Mesh 4.3.7
+# Target Host Acceptance — ZTAD Mesh 4.3.8
 
 The package is not production-authoritative merely because it installs or because repository CI is green. Run these gates on the target Codex/GitHub/deployment environment.
 
@@ -8,19 +8,20 @@ The package is not production-authoritative merely because it installs or becaus
 2. Verify Python 3.11+ and the exact reviewed dependency locks. Governed signing requires the reviewed `cryptography` range.
 3. Validate the installed bundle and all 14 explicit-only skills.
 4. Verify `policies/bug-to-production-policy.yaml`, `schemas/bug-lifecycle.schema.json`, and `scripts/ztad_bug_lifecycle.py`; a reported code defect must not be closable through internal scheduler `DONE`.
-5. Trust and exercise the installed Codex hooks; verify their exact hash.
-6. Probe every configured provider without exposing credentials.
-7. Run the version/context-bound model benchmark suite when live provider access exists. Benchmark results are routing evidence, not authority.
-8. Run repository `AUDIT`, then `DRY_RUN`; require structured output and zero unexpected repository mutation.
-9. Inspect `mesh-autopilot --dry-run`: risk, route preview, model-call count, scopes, checks, and escalation path must match policy.
-10. Exercise disposable fixtures for the v4.3 risk paths:
+5. Verify installed skill prompt wiring: exact bad-base/exact-candidate same-oracle RED→GREEN has no exception path; supervisor/model `APPROVE` cannot become E6 by translation; independent review requires a distinct-session `PASS`; and release readiness cannot equate `PRODUCTION_VERIFIED` with bug closure.
+6. Trust and exercise the installed Codex hooks; verify their exact hash.
+7. Probe every configured provider without exposing credentials.
+8. Run the version/context-bound model benchmark suite when live provider access exists. Benchmark results are routing evidence, not authority.
+9. Run repository `AUDIT`, then `DRY_RUN`; require structured output and zero unexpected repository mutation.
+10. Inspect `mesh-autopilot --dry-run`: risk, route preview, model-call count, scopes, checks, and escalation path must match policy.
+11. Exercise disposable fixtures for the v4.3 risk paths:
    - R0/R1 normal path: Luna implementation → deterministic integration/checks → one Sol final guard;
    - R2 bounded path: Luna preferred worker with Terra support/fallback;
    - R3/R4 full Mesh;
    - upward actual-diff risk must invalidate the weaker path and create the stronger replan.
-11. Verify every Sol request is capped at `HIGH` reasoning or lower.
-12. Kill and restart the mesh service; verify lease recovery and no duplicate execution.
-13. Verify all model/provider artifacts remain outside application worktrees and that stale artifacts are rejected.
+12. Verify every Sol request is capped at `HIGH` reasoning or lower.
+13. Kill and restart the mesh service; verify lease recovery and no duplicate execution.
+14. Verify all model/provider artifacts remain outside application worktrees and that stale artifacts are rejected.
 
 ## GitHub/CI gates
 

@@ -1,4 +1,4 @@
-# WorkshopOS Bug-to-Production Protocol Mapping — ZTAD Mesh 4.3.7
+# WorkshopOS Bug-to-Production Protocol Mapping — ZTAD Mesh 4.3.8
 
 This mapping makes the WorkshopOS Fail-Closed Bug-to-Production Protocol v1 directly traceable without relabeling historical validation evidence. The existing `requirements.csv` control catalogue remains intact; the exact lifecycle is an implementation refinement and composition of the problem-intake, evidence, test-integrity, approval, release, and production controls already catalogued there.
 
