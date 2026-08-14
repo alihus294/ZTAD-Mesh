@@ -5,7 +5,7 @@ description: Assess whether an exact revision and artifact satisfy merge, stagin
 
 # Authority
 
-This is read-only and advisory. Eligibility is decided by deterministic policy. A strong supervisor may issue a structured, SHA-bound recommendation, but the deployment controller executes transitions only after evidence validation.
+This is read-only and advisory. Eligibility is decided by deterministic policy. A strong supervisor may issue a structured, SHA-bound recommendation, but the recommendation is not approval evidence and the deployment controller executes transitions only after independent protected evidence validation.
 
 # Procedure
 
@@ -14,8 +14,8 @@ This is read-only and advisory. Eligibility is decided by deterministic policy. 
 3. Reject stale, expired, duplicated, invalidated, weak-trust, wrong-producer, wrong-artifact, non-affirmative, or malformed evidence. A valid signature over `FAILED` or `REJECTED` evidence is still a failure.
 4. Verify build-once/promote-by-digest, SBOM, provenance, attestation verification, rollback target, staging, feature flags, observability, and stop conditions as applicable.
 5. Require platform-control evidence for branch protection, required checks, merge queue, environment protection, and OIDC at the relevant gate.
-6. Accept strong-supervisor merge/technical/release decisions only when a trusted approval controller converts the structured decision into signed E6 evidence bound to the exact task, SHA, diff hash, artifact, and evidence set. A model response alone is never E6 evidence.
-7. Never claim Production success without signed `E5` health, synthetic-transaction, and observation-window evidence for the deployed digest.
+6. Treat every model/supervisor `APPROVE` as advisory input only. A protected non-model approval controller must independently evaluate the exact subject, deterministic/protected evidence, policy, and configured protected authority before emitting E6. It must never create E6 by merely signing, wrapping, or translating a model recommendation. `PROTECTED_RELEASE_AUTHORIZATION` must reflect an authorized protected production action, not model consensus or self-approval.
+7. Never claim production success without signed `E5` health, synthetic-transaction, and observation-window evidence for the deployed digest. `PRODUCTION_VERIFIED` means the exact production runtime evidence is sufficient for the `POST_DEPLOY_VERIFIED` claim only; it is not `CLOSED`. The authoritative bug lifecycle still requires the separate deterministic transition `POST_DEPLOY_VERIFIED → CLOSED`.
 
 # Command
 
@@ -30,4 +30,4 @@ python3 <PLUGIN_ROOT>/scripts/ztad.py release-readiness \
 
 # Output
 
-Return one of `MERGE_ELIGIBLE`, `STAGING_ELIGIBLE`, `RELEASE_ELIGIBLE`, `PRODUCTION_VERIFIED`, `AUTO_GENERATE_EVIDENCE`, `AUTO_REPLAN`, `ROLLBACK`, `WAITING_EXTERNAL_DEPENDENCY`, or `QUARANTINE_AND_CONTINUE`, with exact missing and invalid controls. Never return a global stop while runnable work exists.
+Return one of `MERGE_ELIGIBLE`, `STAGING_ELIGIBLE`, `RELEASE_ELIGIBLE`, `PRODUCTION_VERIFIED`, `AUTO_GENERATE_EVIDENCE`, `AUTO_REPLAN`, `ROLLBACK`, `WAITING_EXTERNAL_DEPENDENCY`, or `QUARANTINE_AND_CONTINUE`, with exact missing and invalid controls. Never return a global stop while runnable work exists. Never equate any readiness result with bug-lifecycle `CLOSED`.
