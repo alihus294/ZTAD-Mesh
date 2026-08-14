@@ -34,6 +34,7 @@ PROBLEM_CASE_EQUIVALENTS = {
     "HANDOFF_READY": 6,
 }
 POST_PRODUCTION_STATES = {"PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "ROLLBACK_REQUIRED"}
+PROTECTED_APPROVAL_PRODUCER_PREFIXES = ("controller:", "platform:")
 
 
 def initialize_bug_lifecycle(
@@ -216,15 +217,30 @@ def _independent_review_errors(evidence_records: list[dict[str, Any]]) -> list[s
     return sorted(set(errors))
 
 
-def _protected_release_errors(evidence_records: list[dict[str, Any]]) -> list[str]:
+def _protected_approval_errors(
+    evidence_records: list[dict[str, Any]],
+    valid_evidence_ids: Iterable[str],
+    *,
+    evidence_type: str,
+    label: str,
+) -> list[str]:
+    valid_ids = set(valid_evidence_ids)
+    records = [
+        item
+        for item in evidence_records
+        if item.get("type") == evidence_type and item.get("evidence_id") in valid_ids
+    ]
+    if not records:
+        return []
     errors: list[str] = []
-    for item in evidence_records:
-        if item.get("type") != "PROTECTED_RELEASE_AUTHORIZATION":
-            continue
-        if not str(item.get("producer", "")).startswith("platform:"):
-            errors.append("Production release authorization must be produced by a protected platform/controller")
-        if item.get("status") != "APPROVED":
-            errors.append("Production release authorization must be explicitly APPROVED")
+    for item in records:
+        if item.get("trust_level") != "E6":
+            errors.append(f"{label} must be E6 protected-controller evidence")
+        producer = str(item.get("producer", ""))
+        if not producer.startswith(PROTECTED_APPROVAL_PRODUCER_PREFIXES):
+            errors.append(f"{label} must be produced by a protected platform/controller")
+        if str(item.get("status", "")).upper() != "APPROVED":
+            errors.append(f"{label} must be explicitly APPROVED")
     return sorted(set(errors))
 
 
@@ -312,8 +328,24 @@ def evaluate_bug_transition(
                 reasons.extend(_red_green_errors(record, records))
             if target_state == "INDEPENDENT_REVIEW_PASS" and not missing:
                 reasons.extend(_independent_review_errors(records))
+            if target_state == "READY_FOR_OWNER_RELEASE" and not missing:
+                reasons.extend(
+                    _protected_approval_errors(
+                        records,
+                        valid_evidence.get("PROTECTED_SUPERVISOR_APPROVAL", []),
+                        evidence_type="PROTECTED_SUPERVISOR_APPROVAL",
+                        label="Protected supervisor approval",
+                    )
+                )
             if target_state == "PRODUCTION_RELEASED" and not missing:
-                reasons.extend(_protected_release_errors(records))
+                reasons.extend(
+                    _protected_approval_errors(
+                        records,
+                        valid_evidence.get("PROTECTED_RELEASE_AUTHORIZATION", []),
+                        evidence_type="PROTECTED_RELEASE_AUTHORIZATION",
+                        label="Production release authorization",
+                    )
+                )
 
     if target_state in {
         "PATCH_IMPLEMENTED",
