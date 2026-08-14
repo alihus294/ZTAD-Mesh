@@ -37,16 +37,22 @@ jobs:
       - name: Install exact test environment
         run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
 
-      - name: Apply deterministic source transformations
+      - name: Apply fingerprinted deterministic source transformations
         shell: bash
         run: |
           set -euo pipefail
+          echo "72291e63f847e5a7d1ffbbbcf97ca6d4b4bf0e793405dbfca547b77a4b6e2aa2  .ztad-upgrade/patch_existing_436_v2.py.gz.b64" | sha256sum -c -
+          echo "94185aaa6ac620683738e5c4c7b511ec9cfdddd8dbac766ed4c6d88196ce19c4  .ztad-upgrade/provider_patch_436.py.gz.b64" | sha256sum -c -
           python - <<'PY'
           import base64, gzip
           from pathlib import Path
           for name in ("patch_existing_436_v2", "provider_patch_436"):
-              payload = Path(f".ztad-upgrade/{name}.py.gz.b64").read_text(encoding="utf-8").strip()
-              Path(f"/tmp/{name}.py").write_bytes(gzip.decompress(base64.b64decode(payload)))
+              source = Path(f".ztad-upgrade/{name}.py.gz.b64")
+              print(f"decoding {name}: {source.stat().st_size} bytes")
+              payload = source.read_text(encoding="utf-8").strip()
+              raw = gzip.decompress(base64.b64decode(payload, validate=True))
+              Path(f"/tmp/{name}.py").write_bytes(raw)
+              compile(raw.decode("utf-8"), name, "exec")
           PY
           python /tmp/patch_existing_436_v2.py
           python /tmp/provider_patch_436.py
