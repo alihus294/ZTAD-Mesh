@@ -1,0 +1,111 @@
+name: ZTAD v4.3.6 isolated repair
+
+on:
+  push:
+    branches: [fix/autonomous-delivery-4.3.6]
+    paths:
+      - .github/ztad-v436-autofix.py
+      - .github/workflows/ztad-v436-autofix.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ztad-v436-isolated-repair
+  cancel-in-progress: false
+
+jobs:
+  repair-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/autonomous-delivery-4.3.6
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: toolkit/requirements-dev.lock.txt
+
+      - name: Install exact test environment
+        run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+
+      - name: Verify dependencies
+        run: python -m pip check
+
+      - name: Apply deterministic source repair
+        run: python -B .github/ztad-v436-autofix.py
+
+      - name: Verify release identity
+        run: python -B scripts/verify_version_identity.py --profile source
+
+      - name: Compile sources
+        run: python -m compileall -q toolkit scripts evals tests
+
+      - name: Run focused v4.3.6 regressions
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest -q tests/test_v436_autonomous_delivery.py
+
+      - name: Run full unit and integration suite
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest -q
+
+      - name: Reject resource leaks in critical controls
+        env:
+          PYTHONPATH: toolkit
+        run: >-
+          python -B -m pytest -q -W error::ResourceWarning
+          tests/test_v43_last_gaps.py
+          tests/test_v43_final_hardening.py
+          tests/test_v43_runtime_controls.py
+          tests/test_v43_guarded_fast_path.py
+          tests/test_v436_autonomous_delivery.py
+
+      - name: Run offline evals
+        run: python -B evals/run_evals.py --output "${RUNNER_TEMP}/eval-summary.json"
+
+      - name: Validate bundle and policy wiring
+        run: |
+          python -B scripts/ztad.py --output "${RUNNER_TEMP}/bundle.json" validate-bundle --root .
+          python -B scripts/ztad.py --output "${RUNNER_TEMP}/policy.json" policy-wiring --root .
+
+      - name: Build deterministic distributions twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          python -B scripts/ztad.py build-distribution --root . --output-dir "${RUNNER_TEMP}/dist-a"
+          python -B scripts/ztad.py build-distribution --root . --output-dir "${RUNNER_TEMP}/dist-b"
+          diff -qr "${RUNNER_TEMP}/dist-a" "${RUNNER_TEMP}/dist-b"
+
+      - name: Validate exact archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cat VERSION)"
+          python -B scripts/ztad.py validate-distribution --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${version}.zip" --kind plugin
+          python -B scripts/ztad.py validate-distribution --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${version}.zip" --kind marketplace
+          python -B scripts/run_packaged_regressions.py --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${version}.zip" --kind plugin --scope full
+          python -B scripts/run_packaged_regressions.py --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${version}.zip" --kind marketplace --scope full
+
+      - name: Remove temporary repair machinery
+        run: rm -f .github/ztad-v436-autofix.py .github/workflows/ztad-v436-autofix.yml
+
+      - name: Commit only verified repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git status --short
+          git commit -m "fix: make autonomous delivery fail-closed in v4.3.6"
+          git push origin HEAD:fix/autonomous-delivery-4.3.6
