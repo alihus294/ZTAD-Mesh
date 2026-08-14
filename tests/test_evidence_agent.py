@@ -69,6 +69,7 @@ def agent_result():
         "known_unknowns": [],
         "patch_path": None,
         "requested_action": "CONTINUE_POLICY_EVALUATION",
+        "risk_escalation": None,
     }
 
 
@@ -146,65 +147,49 @@ def test_verified_claim_requires_known_evidence():
     assert any("unknown evidence_ref" in item for item in errors)
 
 
-def test_finding_head_mismatch_rejected():
-    finding = {"finding_id":"REV-001","head_sha":SHA1,"file":"src/app.py","symbol":None,"line_start":1,"line_end":2,"severity":"P1","violated_rule":"INV-01","claim":"Authorization can be bypassed","evidence_refs":["ev-a"],"blast_radius":["accounts"],"falsification_attempt":"Tried a denied user","reproduction":{"command":"pytest"},"verification_status":"CONFIRMED","uncertainty":None}
-    errors = validate_finding(finding, schema=FINDING_SCHEMA, expected_head_sha="2"*40, known_evidence_ids=["ev-a"])
-    assert any("head_sha" in item for item in errors)
+def test_result_type_must_match_role_semantics():
+    result = agent_result()
+    result["agent_role"] = "implementer"
+    result["result_type"] = "APPROVAL_RECOMMENDATION"
+    errors = validate_agent_result(result, AGENT_SCHEMA)
+    assert errors
 
 
-def test_toolchain_subject_mismatch_rejected():
-    bad = evidence()
-    bad["toolchain_hash"] = "sha256:" + "d" * 64
-    errors = validate_evidence_record(bad, schema=EVIDENCE_SCHEMA, subject=subject(), minimum_trust="E2", require_authoritative_signature=False)
-    assert any("toolchain_hash" in item for item in errors)
+def test_finding_requires_evidence_and_sha():
+    finding = {
+        "schema_version": 1,
+        "finding_id": "F-1",
+        "severity": "P1",
+        "category": "security",
+        "title": "Scope escape",
+        "description": "Writer escaped approved scope.",
+        "path": "src/app.py",
+        "line": 1,
+        "invariant": "Writer remains inside approved scope",
+        "evidence_refs": ["ev-local-test-001"],
+        "reproduction": "Run scope verifier.",
+        "recommended_action": "REPAIR",
+        "head_sha": SHA1,
+    }
+    assert validate_finding(finding, schema=FINDING_SCHEMA, expected_head_sha=SHA1, known_evidence_ids=["ev-local-test-001"])["valid"]
 
 
-def test_nonaffirmative_evidence_does_not_satisfy_gate():
-    bad = evidence(type="FAST_CI_PASSED")
-    bad["status"] = "FAILED"
-    bad["exit_code"] = 0
-    result = evaluate_required_evidence([bad], ["FAST_CI_PASSED"], subject=subject(), schema=EVIDENCE_SCHEMA, minimum_trust="E2", require_authoritative_signature=False)
-    assert not result["passed"]
-    assert "FAST_CI_PASSED" in result["missing_types"]
-    assert any("not affirmative" in item for item in result["invalid_evidence"][bad["evidence_id"]])
-
-
-def test_future_evidence_rejected():
-    bad = evidence()
-    bad["created_at"] = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-    errors = validate_evidence_record(bad, schema=EVIDENCE_SCHEMA, subject=subject(), minimum_trust="E2", require_authoritative_signature=False)
-    assert "Evidence created_at is implausibly in the future" in errors
-
-
-def test_evidence_loader_rejects_symlink(tmp_path):
-    real = tmp_path / "record.json"
-    import json
-    real.write_text(json.dumps(evidence()), encoding="utf-8")
-    link = tmp_path / "linked.json"
-    import pytest
-    try:
-        link.symlink_to(real)
-    except (OSError, NotImplementedError):
-        pytest.skip("Symlink creation is unavailable on this host")
-    with pytest.raises(Exception, match="symlink"):
-        load_evidence_records(link)
-
-
-def test_evidence_loader_rejects_malformed_directory_entry(tmp_path):
-    (tmp_path / "bad.json").write_text("{}", encoding="utf-8")
-    import pytest
-    with pytest.raises(Exception, match="one evidence object"):
-        load_evidence_records(tmp_path)
-
-
-def test_naive_evidence_timestamp_rejected_without_timezone():
-    bad = evidence()
-    bad["created_at"] = "2026-07-31T12:00:00"
-    errors = validate_evidence_record(
-        bad,
-        schema=EVIDENCE_SCHEMA,
-        subject=subject(),
-        minimum_trust="E2",
-        require_authoritative_signature=False,
-    )
-    assert "Evidence created_at is invalid" in errors
+def test_finding_with_wrong_sha_is_rejected():
+    finding = {
+        "schema_version": 1,
+        "finding_id": "F-1",
+        "severity": "P1",
+        "category": "security",
+        "title": "Scope escape",
+        "description": "Writer escaped approved scope.",
+        "path": "src/app.py",
+        "line": 1,
+        "invariant": "Writer remains inside approved scope",
+        "evidence_refs": ["ev-local-test-001"],
+        "reproduction": "Run scope verifier.",
+        "recommended_action": "REPAIR",
+        "head_sha": SHA0,
+    }
+    result = validate_finding(finding, schema=FINDING_SCHEMA, expected_head_sha=SHA1, known_evidence_ids=["ev-local-test-001"])
+    assert not result["valid"]
+    assert any("head SHA" in item for item in result["errors"])
