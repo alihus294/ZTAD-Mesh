@@ -1,9 +1,5 @@
-import json
 from pathlib import Path
 
-import pytest
-
-from ztad.contracts import validate_contract
 from ztad.problem import (
     LOCAL_EVIDENCE_NOTICE,
     advance_problem_case,
@@ -13,6 +9,7 @@ from ztad.problem import (
     problem_case_to_change_contract,
     validate_problem_case,
 )
+from ztad.schema_validation import validate_instance
 from ztad.util import load_data
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,7 +112,7 @@ def test_proven_case_advances_to_handoff_and_generates_valid_change_contract(tmp
     handed = advance_problem_case(case, "HANDOFF_READY", SCHEMA)
     assert handed["state"] == "HANDOFF_READY"
     contract = problem_case_to_change_contract(handed, SCHEMA)
-    assert not validate_contract(contract, CONTRACT_SCHEMA)
+    assert not validate_instance(contract, CONTRACT_SCHEMA)
     assert contract["governance"]["requested_risk"] == "R1"
     assert contract["governance"]["human_decisions"][0]["value"] == problem_case_fingerprint(handed)
 
