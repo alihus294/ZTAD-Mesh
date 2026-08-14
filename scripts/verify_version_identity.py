@@ -51,6 +51,7 @@ CURRENT_HEADING_PREFIXES: dict[str, str] = {
     "references/MASTER_PLAN.md": "# ZTAD Mesh",
     "docs/SECURITY_CONTROLS.md": "# Security Controls",
     "docs/THREAT_MODEL.md": "# Threat Model",
+    "docs/BUG_TO_PRODUCTION_PROTOCOL.md": "# Autonomous Fail-Closed Bug-to-Production Protocol",
 }
 
 SOURCE_ONLY_MARKERS: dict[str, tuple[str, ...]] = {

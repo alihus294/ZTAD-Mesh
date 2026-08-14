@@ -29,6 +29,10 @@ from .mesh_store import MeshNodeSpec, MeshStore
 from .model_router import AdaptiveModelRouter, TaskProfile
 from .model_benchmark import ModelBenchmarkRunner, benchmark_suite_hash, load_benchmark_cases
 from .providers import CodexExecProvider, GenericStructuredCommandProvider, ProviderRegistry
+from .problem import initialize_problem_case, validate_problem_case, advance_problem_case, problem_case_to_change_contract
+from .problem_isolation import isolate_problem_case
+from .release_fingerprint import compute_release_fingerprint
+from .blocker_requests import prepare_blocker_request
 from .repository_index import assess_context_sufficiency, build_repository_index
 from .scope_guard import ScopeEnvelope
 from .injection import scan_documents
@@ -159,6 +163,33 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("validate-contract", help="Validate a Change Contract")
     p.add_argument("--contract", required=True)
     p.add_argument("--schema", default=str(_root_file("schemas/change-contract.schema.json")))
+
+    p = sub.add_parser("problem-init", help="Capture an unverified problem read-only")
+    _repo_args(p)
+    p.add_argument("--report", required=True)
+    p.add_argument("--expected")
+    p.add_argument("--protected-ref", default="main")
+
+    p = sub.add_parser("problem-validate", help="Validate a structured problem case")
+    p.add_argument("--case", required=True)
+
+    p = sub.add_parser("problem-isolate", help="Create a managed clean worktree from the exact protected problem base")
+    p.add_argument("--case", required=True)
+
+    p = sub.add_parser("problem-transition", help="Apply one evidence-gated local problem-case transition")
+    p.add_argument("--case", required=True)
+    p.add_argument("--state", required=True)
+
+    p = sub.add_parser("problem-contract", help="Generate a Change Contract only from HANDOFF_READY problem evidence")
+    p.add_argument("--case", required=True)
+
+    p = sub.add_parser("release-fingerprint", help="Compute a deterministic non-authoritative candidate release fingerprint")
+    p.add_argument("--release-manifest", required=True)
+
+    p = sub.add_parser("prepare-blocker-request", help="Prepare an exact local remediation or protected evidence request without fabricating success")
+    p.add_argument("--blocker", required=True)
+    p.add_argument("--subject", required=True)
+    p.add_argument("--reason", required=True)
 
     p = sub.add_parser("classify-risk", help="Classify contract-only, intended-path, or actual-diff risk")
     _repo_args(p)
@@ -570,6 +601,40 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
     if command == "validate-contract":
         errors = validate_file(Path(args.contract), Path(args.schema))
         return {"valid": not errors, "errors": errors}, 0 if not errors else 2
+    if command == "problem-init":
+        case = initialize_problem_case(Path(args.repo), report=args.report, expected_behavior=args.expected, protected_ref=args.protected_ref)
+        schema = _data(_root_file("schemas/problem-case.schema.json"))
+        errors = validate_problem_case(case, schema)
+        return {"problem_case": case, "errors": errors, "claim_boundary": "Local E2 intake only; no patch/release authority."}, 0 if not errors else 2
+    if command == "problem-validate":
+        case = _data(args.case)
+        schema = _data(_root_file("schemas/problem-case.schema.json"))
+        errors = validate_problem_case(case, schema)
+        return {"valid": not errors, "problem_case": case, "errors": errors}, 0 if not errors else 2
+    if command == "problem-isolate":
+        case = _data(args.case)
+        result = isolate_problem_case(case)
+        return result, 0
+    if command == "problem-transition":
+        case = _data(args.case)
+        schema = _data(_root_file("schemas/problem-case.schema.json"))
+        updated = advance_problem_case(case, args.state, schema)
+        return {"problem_case": updated, "claim_boundary": "Local E2 progression only; protected authority is unchanged."}, 0
+    if command == "problem-contract":
+        case = _data(args.case)
+        schema = _data(_root_file("schemas/problem-case.schema.json"))
+        contract = problem_case_to_change_contract(case, schema)
+        errors = validate_instance(contract, _data(_root_file("schemas/change-contract.schema.json")))
+        return {"contract": contract, "errors": errors}, 0 if not errors else 2
+    if command == "release-fingerprint":
+        manifest = _data(args.release_manifest)
+        result = compute_release_fingerprint(manifest, _data(_root_file("schemas/release-manifest.schema.json")))
+        return result, 0
+    if command == "prepare-blocker-request":
+        subject = _data(args.subject)
+        schema = _data(_root_file("schemas/blocker-request.schema.json"))
+        request = prepare_blocker_request(args.blocker, subject=subject, reason=args.reason, schema=schema)
+        return request, 0
     if command == "classify-risk":
         if bool(args.base) != bool(args.head):
             raise ValueError("--base and --head must be supplied together")

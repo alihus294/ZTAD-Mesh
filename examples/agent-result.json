@@ -17,6 +17,7 @@
   "known_unknowns": [],
   "patch_path": null,
   "requested_action": "CONTINUE_POLICY_EVALUATION",
+  "risk_escalation": null,
   "uncertainties": [],
   "tested_scope": [
     "src/example.py"

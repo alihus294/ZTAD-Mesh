@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ztad/blocker-request.schema.json",
+  "title": "ZTAD Blocker Evidence or Remediation Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "blocker",
+    "request_kind",
+    "required_evidence_type",
+    "minimum_trust",
+    "expected_producer_prefixes",
+    "subject",
+    "reason",
+    "next_protected_or_local_action",
+    "prepared_at",
+    "authority",
+    "can_satisfy_gate",
+    "local_evidence_notice"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "request_id": {"type": "string", "pattern": "^REQ-[0-9a-f]{16}$"},
+    "blocker": {
+      "enum": [
+        "missing_release_fingerprint",
+        "missing_signed_release_manifest",
+        "missing_artifact_attestation_and_sbom",
+        "missing_staged_restore_rehearsal",
+        "missing_rollback_rehearsal",
+        "missing_observation_and_synthetic_transaction",
+        "missing_production_runtime_health",
+        "missing_protected_supervisor_approval",
+        "migration_ledger_history_guard_failure",
+        "remote_main_dependency_fix_not_applied",
+        "provider_output_missing",
+        "invalid_json_schema",
+        "local_branch_differs_from_protected_main",
+        "dirty_worktree"
+      ]
+    },
+    "request_kind": {"enum": ["LOCAL_REMEDIATION", "PROTECTED_EVIDENCE"]},
+    "required_evidence_type": {"type": "string", "minLength": 1},
+    "minimum_trust": {"enum": ["E0", "E1", "E2", "E3", "E4", "E5", "E6"]},
+    "expected_producer_prefixes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "base_sha", "head_sha", "artifact_digest", "change_contract_hash", "policy_bundle_hash", "toolchain_hash"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "base_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "head_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "artifact_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+        "change_contract_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+        "policy_bundle_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+        "toolchain_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "reason": {"type": "string", "minLength": 1},
+    "next_protected_or_local_action": {"type": "string", "minLength": 1},
+    "prepared_at": {"type": "string", "format": "date-time"},
+    "authority": {"const": "LOCAL_NON_AUTHORITATIVE"},
+    "can_satisfy_gate": {"const": false},
+    "local_evidence_notice": {"const": "LOCAL_EVIDENCE_IS_NON_AUTHORITATIVE_UNTIL_PROMOTED_BY_A_PROTECTED_CONTROLLER"}
+  }
+}

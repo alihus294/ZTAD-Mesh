@@ -25,6 +25,11 @@ ALLOWED_REQUESTED_ACTIONS = {
     "REQUEST_STRONG_SUPERVISOR", "AUTO_REPLAN", "AUTO_GENERATE_EVIDENCE",
     "QUARANTINE_TASK", "CONTINUE_NEXT_TASK", "RECORD_RETROSPECTIVE_PROPOSAL",
 }
+AGENT_ROLE_ALIASES = {"test_designer": "planner", "test_oracle": "planner", "reviewer": "independent_reviewer", "worker": "implementer"}
+
+def normalize_agent_role(value: str | None) -> str | None:
+    return None if value is None else AGENT_ROLE_ALIASES.get(value, value)
+
 SHA_RE = re.compile(r"^[0-9a-f]{40,64}$")
 
 
@@ -35,6 +40,12 @@ def validate_agent_result(
     expected: dict[str, str] | None = None,
     known_evidence_ids: Iterable[str] = (),
 ) -> list[str]:
+    normalized = dict(result)
+    normalized["agent_role"] = normalize_agent_role(result.get("agent_role"))
+    result = normalized
+    if expected and expected.get("agent_role") is not None:
+        expected = dict(expected)
+        expected["agent_role"] = normalize_agent_role(expected.get("agent_role"))
     errors = validate_instance(result, schema)
     if result.get("result_type") not in ALLOWED_RESULT_TYPES:
         errors.append(f"Unsupported or authoritative result_type: {result.get('result_type')}")

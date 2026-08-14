@@ -1,4 +1,4 @@
-# ZTAD Mesh 4.3.5 — Normative Master Plan
+# ZTAD Mesh 4.3.6 — Normative Master Plan
 
 ## 1. Mission
 
@@ -550,3 +550,29 @@ Full governed delivery is available only when target-platform evidence validates
 - Source tests and extracted-distribution tests MUST both pass before distribution acceptance.
 - Checksums and manifests MUST be regenerated after every source change.
 - Distribution archives MUST pass safe extraction and reproducibility checks.
+
+## 27. Autonomous problem-to-production intake
+
+- Every reported defect MUST begin as an unverified report rather than an assumed bug.
+- Investigation MUST resolve the current source of truth read-only before implementation begins.
+- A code-affecting report MUST be classified, reproduced or equivalently proven, causally explained, blast-radius mapped, and planned before a Change Contract is created.
+- A known-bad regression baseline SHOULD use the same oracle that later validates the candidate.
+- A same-SHA or same-configuration fail-then-pass rerun MUST NOT be represented as RED-to-GREEN regression proof.
+- A dirty or protected-base-divergent user worktree MUST be preserved untouched while task work proceeds in an isolated clean worktree from the exact protected base.
+- Routine technical choices MUST NOT be delegated to a non-programmer owner when the controller can safely derive and execute them.
+- Missing local evidence files SHOULD be created as explicitly non-authoritative local evidence rather than stopping all progress.
+- An identical no-progress provider, test, or repair attempt MUST NOT be repeated.
+- Missing external authority MUST block only the affected protected transition while unrelated safe runnable work continues.
+- A model MUST NOT convert its own text, confidence, review, or agreement into merge, release, deployment, signing, attestation, or production evidence.
+- Strict model-output schemas MUST be validated before provider execution; an invalid schema MUST NOT be misreported as missing structured output.
+- Test/orchestration role aliases MUST be normalized only at the provider/validation boundary and MUST NOT weaken the canonical structured-output schema.
+- Every candidate release MUST have a deterministic fingerprint bound to its exact manifest subject before protected promotion.
+- A local release fingerprint or blocker request MUST NOT be represented as a protected signature, attestation, approval, staging result, runtime health result, or production success.
+- Missing protected evidence SHOULD produce a subject-bound protected evidence request naming the required evidence type, trust level, expected producer, and next action.
+- Artifact promotion MUST require the applicable signed manifest, SBOM, provenance/attestation, exact digest, protected CI/review evidence, and rollback material.
+- High-risk release MUST require applicable staged restore and rollback rehearsal evidence before production progression.
+- Production verification MUST bind runtime health, a production-safe synthetic transaction, and the observation window to the exact deployed digest.
+- Migration ledger/history guard failures MUST be repaired at the migration/history root cause and MUST NOT be bypassed by weakening the guard.
+- Dependency-audit failures MUST be repaired on a clean protected-base candidate with regenerated lock state and exact-head protected CI.
+- Production database mutation MUST NOT be performed from a normal coding-agent shell or ad-hoc direct database session.
+- Production release MUST use only the repository's canonical protected release path and exact validated artifact.

@@ -84,6 +84,8 @@ class ProviderRunResult:
     output_tokens: int | None
     errors: tuple[str, ...]
     argv: tuple[str, ...]
+    request_fingerprint: str | None = None
+    receipt_hash: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -106,6 +108,8 @@ class ProviderRunResult:
             "output_tokens": self.output_tokens,
             "errors": list(self.errors),
             "argv": list(self.argv),
+            "request_fingerprint": self.request_fingerprint,
+            "receipt_hash": self.receipt_hash,
         }
 
 
@@ -520,3 +524,7 @@ class ProviderRegistry:
 
     def probe_all(self) -> dict[str, Any]:
         return {name: provider.probe() for name, provider in sorted(self._providers.items())}
+
+# Strict structured-output/provider evidence contract is installed after provider classes exist.
+from .provider_contract import install_provider_contracts as _install_provider_contracts
+_install_provider_contracts(__import__(__name__, fromlist=["*"]))

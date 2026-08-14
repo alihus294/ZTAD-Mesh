@@ -18,6 +18,7 @@ FULL_SHA_USE = re.compile(r"^\s*uses:\s*[^\s@]+@([0-9a-fA-F]{40})\s*(?:#.*)?$", 
 ANY_USE = re.compile(r"^\s*uses:\s*[^\s@]+@([^\s#]+)", re.MULTILINE)
 REQUIRED_SKILLS = {
     "zero-trust-delivery",
+    "problem-investigation",
     "multi-model-mesh",
     "delivery-bootstrap",
     "change-intake-risk",
@@ -40,6 +41,9 @@ REQUIRED_FILES = {
     "VERSION",
     "scripts/ztad.py",
     "scripts/verify_release.py",
+    "docs/BUG_TO_PRODUCTION_PROTOCOL.md",
+    "schemas/problem-case.schema.json",
+    "schemas/blocker-request.schema.json",
     "toolkit/pyproject.toml",
     "toolkit/ztad/distribution.py",
     "toolkit/requirements.lock.txt",

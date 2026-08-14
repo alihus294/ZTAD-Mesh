@@ -41,6 +41,7 @@ SECTION_MAP: dict[int, tuple[str, str, str]] = {
     24: ("DETERMINISTIC_AND_EXTERNAL", "tests/; evals/; validation/; toolkit/ztad/distribution.py", "source/extracted tests, fuzz, concurrency, mutation, and reproducibility"),
     25: ("CAPABILITY_GATED", "docs/CAPABILITY_MATRIX.md; docs/LIMITATIONS.md; toolkit/ztad/host_acceptance.py", "release-status and target-host review"),
     26: ("CONTROL_SPECIFIC", "toolkit/ztad/; policies/; hooks/; tests/; docs/GITHUB_ENFORCEMENT.md", "requirement-specific local tests and target-platform evidence"),
+    27: ("DETERMINISTIC_AND_PLATFORM", "schemas/problem-case.schema.json; schemas/blocker-request.schema.json; toolkit/ztad/problem.py; toolkit/ztad/problem_isolation.py; toolkit/ztad/blocker_requests.py; toolkit/ztad/provider_contract.py; skills/problem-investigation; docs/BUG_TO_PRODUCTION_PROTOCOL.md", "problem-lifecycle, isolation, provider-contract, release-evidence, and protected-platform tests"),
 }
 
 

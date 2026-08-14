@@ -1,7 +1,12 @@
-# Control Coverage — ZTAD Mesh 4.3.5
+# Control Coverage — ZTAD Mesh 4.3.6
 
 ## Deterministically enforced locally
 
+- fail-closed problem intake, source-of-truth/classification/root-cause/blast-radius gates before Change Contract creation;
+- protected-base resolution and autonomous clean-worktree isolation without mutating dirty/divergent user work;
+- RED→GREEN base/candidate oracle semantics distinct from same-SHA flakiness;
+- strict provider-schema preflight, request fingerprints, stderr/event/receipt preservation, and boundary-only role normalization;
+- deterministic non-authoritative release fingerprints and exact blocker evidence/remediation requests;
 - strict structured input and schema validation;
 - safe archive inspection/extraction and reproducible distribution;
 - protected-path and mixed control-plane detection;

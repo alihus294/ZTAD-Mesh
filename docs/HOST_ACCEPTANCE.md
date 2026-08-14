@@ -1,4 +1,4 @@
-# Target Host Acceptance — ZTAD Mesh 4.3.5
+# Target Host Acceptance — ZTAD Mesh 4.3.6
 
 The package is not production-authoritative merely because it installs or because repository CI is green. Run these gates on the target Codex/GitHub/deployment environment.
 
@@ -6,7 +6,7 @@ The package is not production-authoritative merely because it installs or becaus
 
 1. Verify the published release with `CHECKSUMS.sha256`, then validate the extracted internal manifests.
 2. Verify Python 3.11+ and the exact reviewed dependency locks. Governed signing requires the reviewed `cryptography` range.
-3. Validate the installed bundle and all 13 explicit-only skills.
+3. Validate the installed bundle and all 14 explicit-only skills.
 4. Trust and exercise the installed Codex hooks; verify their exact hash.
 5. Probe every configured provider without exposing credentials.
 6. Run the version/context-bound model benchmark suite when live provider access exists. Benchmark results are routing evidence, not authority.

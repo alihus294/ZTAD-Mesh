@@ -69,6 +69,7 @@ def agent_result():
         "known_unknowns": [],
         "patch_path": None,
         "requested_action": "CONTINUE_POLICY_EVALUATION",
+        "risk_escalation": None,
     }
 
 

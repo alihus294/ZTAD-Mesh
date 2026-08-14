@@ -11,7 +11,8 @@ def test_context_measurement_keeps_master_plan_outside_operational_skills(tmp_pa
     assert proc.returncode == 0, proc.stderr
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["passed"]
-    assert report["skill_count"] == 13
+    assert report["skill_count"] == 14
+    assert any(item["path"] == "skills/problem-investigation/SKILL.md" for item in report["skills"])
     assert all(item["words"] <= report["max_skill_words"] for item in report["skills"])
     assert any(item["path"] == "references/MASTER_PLAN.md" for item in report["references"])
     assert all(item["path"] != "references/MASTER_PLAN.md" for item in report["skills"])

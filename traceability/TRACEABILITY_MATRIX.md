@@ -1,8 +1,8 @@
-# ZTAD Mesh 4.3.5 Traceability Matrix
+# ZTAD Mesh 4.3.6 Traceability Matrix
 
-Active normative requirements: **96**.
+Active normative requirements: **119**.
 
-This matrix maps the retained normative control catalogue to implementation and verification. Version 4.3 uses risk-proportional orchestration and model routing without weakening the 96 existing authority, scope, evidence, recovery, and platform-boundary requirements. External controls are not considered active until target-platform evidence verifies them.
+This matrix maps the retained normative control catalogue to implementation and verification. Version 4.3 uses risk-proportional orchestration and model routing without weakening the existing authority, scope, evidence, recovery, and platform-boundary requirements. External controls are not considered active until target-platform evidence verifies them.
 
 ## Coverage by enforcement class
 
@@ -11,7 +11,7 @@ This matrix maps the retained normative control catalogue to implementation and 
 | CONTROL_SPECIFIC | 87 |
 | DETERMINISTIC | 5 |
 | DETERMINISTIC_AND_EXTERNAL | 1 |
-| DETERMINISTIC_AND_PLATFORM | 2 |
+| DETERMINISTIC_AND_PLATFORM | 25 |
 | HOST_AND_DETERMINISTIC | 1 |
 
 ## Coverage by section
@@ -27,15 +27,7 @@ This matrix maps the retained normative control catalogue to implementation and 
 | 18. Loop prevention and recovery | 1 |
 | 24. Validation and release | 1 |
 | 26. Normative control catalogue | 87 |
-
-## v4.3 orchestration invariants
-
-- R0/R1 guarded fast path preserves deterministic indexing, isolated writing, integration/checks, actual-risk classification, and independent review while removing redundant model fan-out.
-- R2 bounded mesh preserves the same authority boundaries with limited focused context/review.
-- R3/R4 retain the full independent mesh.
-- Upward actual-diff risk invalidates a weaker topology before approval.
-- The Sol reasoning ceiling is HIGH for every role.
-- Performance-learning changes affect routing only; they do not create evidence or authority.
+| 27. Autonomous problem-to-production intake | 23 |
 
 ## Interpretation
 
@@ -46,4 +38,4 @@ This matrix maps the retained normative control catalogue to implementation and 
 - `CAPABILITY_GATED`: autonomy is capped until the capability is independently verified.
 - `OPERATIONAL` / `DOCUMENTED_*`: governed by runbook, architecture, or scenario testing.
 
-The row-level retained normative source of truth is `requirements.csv`; v4.3 does not delete or weaken those requirements.
+The row-level source of truth is `requirements.csv`.
