@@ -295,7 +295,7 @@ The frontier supervisor can propose:
 
 ## 17. Approval controller
 
-A model or supervisor proposal remains advisory. The protected non-model controller may emit E6 only after it independently verifies:
+A model or supervisor proposal remains advisory. The protected non-model controller can emit E6 only after it independently verifies:
 
 - the configured protected authority for the requested action;
 - stored task/node/model run identity;
@@ -309,7 +309,7 @@ A model or supervisor proposal remains advisory. The protected non-model control
 - required closure after takeover;
 - permitted release strategy.
 
-The controller MUST NOT create E6 by merely signing, wrapping, or translating a model `APPROVE` recommendation. Production release authorization MUST represent an authorized protected production action outside model self-approval. Invented or stale evidence invalidates the proposal. An E6 decision cannot override failed E3 checks.
+The controller is prohibited from creating E6 by merely signing, wrapping, or translating a model `APPROVE` recommendation. Production release authorization represents an authorized protected production action outside model self-approval. Invented or stale evidence invalidates the proposal. An E6 decision cannot override failed E3 checks.
 
 ## 18. Loop prevention and recovery
 
