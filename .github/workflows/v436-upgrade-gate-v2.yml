@@ -137,10 +137,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check
-          ! git diff --name-only | grep -E '^validation/.*v42' || { echo 'Historical v4.2 validation evidence changed'; exit 1; }
-          ! git diff | grep -E '^\+.*(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]+)' || { echo 'Possible secret material in diff'; exit 1; }
-          test "$(cat VERSION)" = "4.3.6"
+          echo '--- candidate status ---'
+          git status --short
+          echo '--- candidate diff stat ---'
+          git diff --stat
+          echo '--- whitespace check ---'
+          if ! git diff --check; then
+            echo 'FAIL: git diff --check'
+            exit 1
+          fi
+          echo '--- historical validation protection ---'
+          historical="$(git diff --name-only | grep -E '^validation/.*v42' || true)"
+          if [ -n "$historical" ]; then
+            echo 'FAIL: historical v4.2 validation evidence changed'
+            printf '%s\n' "$historical"
+            exit 1
+          fi
+          echo '--- secret-pattern check ---'
+          secret_hits="$(git diff | grep -E '^\+.*(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]+)' || true)"
+          if [ -n "$secret_hits" ]; then
+            echo 'FAIL: possible secret material in diff'
+            printf '%s\n' "$secret_hits"
+            exit 1
+          fi
+          echo '--- version check ---'
+          actual_version="$(cat VERSION)"
+          echo "VERSION=$actual_version"
+          if [ "$actual_version" != '4.3.6' ]; then
+            echo 'FAIL: candidate version is not 4.3.6'
+            exit 1
+          fi
+          echo 'Diff forensics passed.'
 
       - name: Commit only the fully verified candidate
         shell: bash
