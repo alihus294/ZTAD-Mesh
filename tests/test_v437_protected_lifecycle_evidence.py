@@ -240,7 +240,9 @@ def test_ready_for_owner_release_accepts_e6_controller_approval(tmp_path: Path):
 
 
 def test_production_release_requires_e6_authorization_but_runtime_evidence_is_e5(tmp_path: Path):
-    lifecycle = _lifecycle("READY_FOR_OWNER_RELEASE")
+    # Use R2 to isolate the protected-production-authorization strength from
+    # unrelated high-risk domain classification requirements.
+    lifecycle = _lifecycle("READY_FOR_OWNER_RELEASE", risk="R2")
     required = POLICY["gates"]["PRODUCTION_RELEASED"]["required_evidence"]
 
     runtime_private, runtime_root = _key(
