@@ -1,4 +1,4 @@
-# Final Operating Policy — ZTAD Mesh 4.3.7
+# Final Operating Policy — ZTAD Mesh 4.3.8
 
 1. Models propose; deterministic tools, protected controllers, and protected platforms create evidence and authority.
 2. Every reported defect MUST begin as `UNVERIFIED_REPORT` and MUST use the authoritative bug-to-production lifecycle. Internal scheduler `DONE` MUST NOT close a bug case.
@@ -16,16 +16,17 @@
 14. Index the repository before model work and request targeted context expansion rather than guess.
 15. Every writer MUST use a dedicated worktree, immutable goal, bounded allowed scope, and must-not-touch scope. Overlapping writes MUST remain serialized.
 16. Integrate accepted patches into one candidate commit and bind exact SHA/diff/contract/toolchain/policy identity before `PATCH_IMPLEMENTED`.
-17. `REGRESSION_TEST_PROVEN` MUST use the same oracle failing on the exact bad base and passing on the exact candidate; same-SHA FAIL→PASS is flaky and blocking.
+17. `REGRESSION_TEST_PROVEN` MUST use the same oracle failing on the exact bad base and passing on the exact candidate; same-SHA FAIL→PASS is flaky and blocking. No model judgment, controller-reviewed exception, or “equivalent evidence” may replace this code-fix gate.
 18. P0/P1 findings and structured requests for context, repair, replan, risk escalation, quarantine, or stronger supervision MUST be handled as controller inputs and MUST NOT silently resolve to success.
-19. Never approve a candidate from the same implementing run/session. Independent review MUST identify distinct implementation/review contexts and return `PASS`.
-20. Never accept evidence absent from the registry or mismatched to task, SHA, diff, artifact, policy, toolchain, or environment subject.
-21. Every retry MUST demonstrate measurable progress or materially change strategy, context, resource, evidence, failure set, or clean baseline.
-22. Repair cycles MUST be bounded. Exhausted repair budget MUST contain/quarantine the parent rather than leave an orphan repair state.
-23. Dangerous or failed actions fail closed locally while unrelated safe runnable work continues globally.
-24. Failed checks cannot be overridden by model consensus, frontier confidence, or an unrelated E6 decision.
-25. `READY_FOR_OWNER_RELEASE` MUST require exact release fingerprint, protected signed manifest, SBOM, attestation/provenance, rollback readiness/rehearsal, observability, synthetic transaction definition, and risk-required restore evidence.
-26. `PRODUCTION_RELEASED` MUST require protected production authority and evidence for the exact reviewed revision/digest. Deployment-command success is not fix success.
-27. `POST_DEPLOY_VERIFIED` MUST separately prove the original problem fixed and production health/synthetic/observation evidence before `CLOSED`.
-28. Promote only the exact tested artifact and roll back/contain on verified regression or unresolved critical uncertainty.
-29. Do not claim governed delivery, hosted-model quality, GitHub enforcement, deployment success, production health, or bug closure from local files, hooks, adapters, scheduler state, model prose, or offline tests alone.
+19. Never approve a candidate from the same implementing run/session. Independent review MUST identify distinct implementation/review contexts and return an exact lifecycle verdict `PASS` before `INDEPENDENT_REVIEW_PASS`.
+20. A model/supervisor `APPROVE` MUST remain advisory and MUST NOT itself become E6, protected supervisor approval, merge authority, release authority, or production authorization. A protected non-model controller MUST independently validate the configured protected authority before emitting E6.
+21. Never accept evidence absent from the registry or mismatched to task, SHA, diff, artifact, policy, toolchain, or environment subject.
+22. Every retry MUST demonstrate measurable progress or materially change strategy, context, resource, evidence, failure set, or clean baseline.
+23. Repair cycles MUST be bounded. Exhausted repair budget MUST contain/quarantine the parent rather than leave an orphan repair state.
+24. Dangerous or failed actions fail closed locally while unrelated safe runnable work continues globally.
+25. Failed checks cannot be overridden by model consensus, frontier confidence, or an unrelated E6 decision.
+26. `READY_FOR_OWNER_RELEASE` MUST require exact release fingerprint, protected signed manifest, SBOM, attestation/provenance, rollback readiness/rehearsal, observability, synthetic transaction definition, and risk-required restore evidence.
+27. `PRODUCTION_RELEASED` MUST require protected production authority and evidence for the exact reviewed revision/digest. Deployment-command success is not fix success.
+28. `POST_DEPLOY_VERIFIED` MUST separately prove the original problem fixed and production health/synthetic/observation evidence before `CLOSED`; any `PRODUCTION_VERIFIED` readiness result is not itself closure.
+29. Promote only the exact tested artifact and roll back/contain on verified regression or unresolved critical uncertainty.
+30. Do not claim governed delivery, hosted-model quality, GitHub enforcement, deployment success, production health, or bug closure from local files, hooks, adapters, scheduler state, model prose, or offline tests alone.
