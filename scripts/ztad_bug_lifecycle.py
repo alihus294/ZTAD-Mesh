@@ -3,8 +3,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+HERE = Path(__file__).resolve()
+ROOT = HERE.parents[1]
+TOOLKIT = ROOT / "toolkit"
+if not TOOLKIT.is_dir():
+    raise SystemExit(f"ZTAD toolkit not found at {TOOLKIT}")
+sys.path.insert(0, str(TOOLKIT))
 
 from ztad.bug_lifecycle import (
     advance_bug_lifecycle,
@@ -17,7 +25,6 @@ from ztad.evidence import load_evidence_records
 from ztad.schema_validation import validate_instance
 from ztad.util import atomic_write, load_data
 
-ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "policies/bug-to-production-policy.yaml"
 LIFECYCLE_SCHEMA = ROOT / "schemas/bug-lifecycle.schema.json"
 EVIDENCE_SCHEMA = ROOT / "schemas/evidence.schema.json"
