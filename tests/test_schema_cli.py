@@ -40,7 +40,6 @@ def test_cli_contract_only_risk():
     parser = build_parser()
     args = parser.parse_args(["classify-risk","--contract",str(ROOT/"templates/repository/.delivery/change-contract.example.yaml")])
     result, code = execute(args)
-    # Template intentionally contains an unverified assumption and therefore fails closed.
     assert code == 3
     assert result["mode"] == "CONTRACT_ONLY"
     assert result["blocked"]
@@ -58,6 +57,12 @@ def test_cli_problem_init_is_read_only():
 def test_cli_problem_contract_dispatches_to_canonical_validator(tmp_path):
     case = initialize_problem_case(ROOT, report="X produces Y", expected_behavior="X produces Z")
     base = case["base_sha"]
+    case["worktree_status"].update({
+        "diverged_from_protected_base": False,
+        "user_worktree_preserved": True,
+        "isolated_clean_worktree": True,
+        "evidence_refs": ["ev-isolated-clean-worktree"],
+    })
     case.update({
         "state": "HANDOFF_READY",
         "authoritative_sources": [{"source": "src", "authority": "EXECUTABLE_SOURCE", "evidence_ref": "ev-source"}],
