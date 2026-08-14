@@ -17,7 +17,7 @@ env:
 jobs:
   upgrade-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - name: Check out isolated feature branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,27 +37,142 @@ jobs:
       - name: Install exact test environment
         run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
 
-      - name: Apply fingerprinted deterministic source transformations
+      - name: Apply direct deterministic source upgrade
         shell: bash
         run: |
           set -euo pipefail
-          echo "72291e63f847e5a7d1ffbbbcf97ca6d4b4bf0e793405dbfca547b77a4b6e2aa2  .ztad-upgrade/patch_existing_436_v2.py.gz.b64" | sha256sum -c -
-          echo "94185aaa6ac620683738e5c4c7b511ec9cfdddd8dbac766ed4c6d88196ce19c4  .ztad-upgrade/provider_patch_436.py.gz.b64" | sha256sum -c -
+          # Reuse only the already-reviewed strict schema validator/schema bytes from the isolated experimental branch.
+          git show origin/fix/autonomous-delivery-4.3.6:toolkit/ztad/schema_validation.py > toolkit/ztad/schema_validation.py
+          git show origin/fix/autonomous-delivery-4.3.6:schemas/agent-result.schema.json > schemas/agent-result.schema.json
           python - <<'PY'
-          import base64, gzip
           from pathlib import Path
-          for name in ("patch_existing_436_v2", "provider_patch_436"):
-              source = Path(f".ztad-upgrade/{name}.py.gz.b64")
-              print(f"decoding {name}: {source.stat().st_size} bytes")
-              payload = source.read_text(encoding="utf-8").strip()
-              raw = gzip.decompress(base64.b64decode(payload, validate=True))
-              Path(f"/tmp/{name}.py").write_bytes(raw)
-              compile(raw.decode("utf-8"), name, "exec")
+          import json, re, yaml
+
+          R = Path('.')
+          OLD, NEW = '4.3.5', '4.3.6'
+          def read(path): return (R / path).read_text(encoding='utf-8')
+          def write(path, text): (R / path).write_text(text, encoding='utf-8', newline='\n')
+          def replace_once(path, old, new):
+              text = read(path)
+              if new in text and old not in text: return
+              if text.count(old) != 1: raise RuntimeError(f'{path}: expected one {old!r}, found {text.count(old)}')
+              write(path, text.replace(old, new, 1))
+
+          # Canonical release identity. v4.3.5 remains immutable.
+          write('VERSION', NEW + '\n')
+          replace_once('.codex-plugin/plugin.json', '"version": "4.3.5"', '"version": "4.3.6"')
+          replace_once('toolkit/pyproject.toml', 'version = "4.3.5"', 'version = "4.3.6"')
+          replace_once('toolkit/ztad/__init__.py', '__version__ = "4.3.5"', '__version__ = "4.3.6"')
+          replace_once('.github/ISSUE_TEMPLATE/bug_report.yml', 'placeholder: 4.3.5', 'placeholder: 4.3.6')
+          surfaces = [
+              ('README.md', '# Zero-Trust Agentic Delivery Mesh 4.3.5', '# Zero-Trust Agentic Delivery Mesh 4.3.6'),
+              ('README.md', '## What 4.3.5 implements', '## What 4.3.6 implements'),
+              ('QUICKSTART.md', '# ZTAD Mesh 4.3.5 Quick Start', '# ZTAD Mesh 4.3.6 Quick Start'),
+              ('QUICKSTART.md', '`v4.3.5` GitHub Release', '`v4.3.6` GitHub Release'),
+              ('docs/PLUGIN_INSTALLATION.md', '# Codex Plugin Installation — 4.3.5', '# Codex Plugin Installation — 4.3.6'),
+              ('docs/PLUGIN_INSTALLATION.md', 'zero-trust-agentic-delivery-marketplace-4.3.5.zip', 'zero-trust-agentic-delivery-marketplace-4.3.6.zip'),
+              ('docs/PLUGIN_INSTALLATION.md', 'zero-trust-agentic-delivery-plugin-4.3.5.zip', 'zero-trust-agentic-delivery-plugin-4.3.6.zip'),
+              ('docs/PLUGIN_INSTALLATION.md', 'plugin version `4.3.5`', 'plugin version `4.3.6`'),
+              ('traceability/TRACEABILITY_MATRIX.md', '# ZTAD Mesh 4.3.5 Traceability Matrix', '# ZTAD Mesh 4.3.6 Traceability Matrix'),
+          ]
+          for args in surfaces: replace_once(*args)
+          for path in [
+              'docs/ARCHITECTURE.md','docs/EVALS.md','docs/LIMITATIONS.md','docs/CONTROL_COVERAGE.md',
+              'docs/HOST_ACCEPTANCE.md','docs/CAPABILITY_MATRIX.md','docs/FINAL_OPERATING_POLICY.md',
+              'docs/MODEL_SELECTION.md','docs/OPERATING_GUIDE.md','docs/VALIDATION_REPORT.md',
+              'references/MASTER_PLAN.md','docs/SECURITY_CONTROLS.md','docs/THREAT_MODEL.md',
+          ]:
+              text = read(path); lines = text.splitlines(); lines[0] = re.sub(r'(?<![0-9])4\.3\.5(?![0-9])', NEW, lines[0])
+              write(path, '\n'.join(lines) + ('\n' if text.endswith('\n') else ''))
+
+          # Bundle now requires the diagnosis skill/schema.
+          text = read('toolkit/ztad/bundle.py')
+          if '"problem-investigation",' not in text:
+              text = text.replace('    "zero-trust-delivery",\n', '    "zero-trust-delivery",\n    "problem-investigation",\n', 1)
+          if '"schemas/problem-case.schema.json",' not in text:
+              text = text.replace('    "scripts/verify_release.py",\n', '    "scripts/verify_release.py",\n    "schemas/problem-case.schema.json",\n', 1)
+          write('toolkit/ztad/bundle.py', text)
+
+          # Problem case is an explicit durable local state contract.
+          path = R / 'schemas/problem-case.schema.json'; data = json.loads(path.read_text(encoding='utf-8'))
+          if 'state' not in data['required']: data['required'].insert(2, 'state')
+          data['properties']['state'] = {'enum': ['UNVERIFIED_REPORT','SOURCE_OF_TRUTH_RESOLVED','ISSUE_CLASSIFIED','BUG_REPRODUCED','ROOT_CAUSE_PROVEN','BLAST_RADIUS_MAPPED','CHANGE_PLANNED','REGRESSION_BASELINE_PROVEN','HANDOFF_READY','WAITING_EXTERNAL_DEPENDENCY','RESOLVED_NO_CODE','QUARANTINED']}
+          path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+
+          # Provider result carries local request/receipt bindings; strict runtime is installed after class definitions.
+          text = read('toolkit/ztad/providers.py')
+          old = '    errors: tuple[str, ...]\n    argv: tuple[str, ...]\n\n    def to_dict(self) -> dict[str, Any]:\n'
+          new = '    errors: tuple[str, ...]\n    argv: tuple[str, ...]\n    request_fingerprint: str | None = None\n    receipt_hash: str | None = None\n\n    def to_dict(self) -> dict[str, Any]:\n'
+          if 'request_fingerprint: str | None = None' not in text:
+              if old not in text: raise RuntimeError('ProviderRunResult anchor changed')
+              text = text.replace(old, new, 1)
+          if '"request_fingerprint": self.request_fingerprint' not in text:
+              text = text.replace('            "argv": list(self.argv),\n        }\n', '            "argv": list(self.argv),\n            "request_fingerprint": self.request_fingerprint,\n            "receipt_hash": self.receipt_hash,\n        }\n', 1)
+          install = '\n\n# Strict structured-output/provider evidence contract is installed after provider classes exist.\nfrom .provider_contract import install_provider_contracts as _install_provider_contracts\n_install_provider_contracts(__import__(__name__, fromlist=["*"]))\n'
+          if '_install_provider_contracts' not in text: text = text.rstrip() + install + '\n'
+          write('toolkit/ztad/providers.py', text)
+
+          # Role aliases are normalized only at the model boundary; the canonical schema remains narrow.
+          text = read('toolkit/ztad/agent_output.py')
+          if 'AGENT_ROLE_ALIASES' not in text:
+              text = text.replace('SHA_RE = re.compile', 'AGENT_ROLE_ALIASES = {"test_designer": "planner", "test_oracle": "planner", "reviewer": "independent_reviewer", "worker": "implementer"}\n\ndef normalize_agent_role(value: str | None) -> str | None:\n    return None if value is None else AGENT_ROLE_ALIASES.get(value, value)\n\nSHA_RE = re.compile', 1)
+              text = text.replace('    errors = validate_instance(result, schema)\n', '    normalized = dict(result)\n    normalized["agent_role"] = normalize_agent_role(result.get("agent_role"))\n    result = normalized\n    if expected and expected.get("agent_role") is not None:\n        expected = dict(expected)\n        expected["agent_role"] = normalize_agent_role(expected.get("agent_role"))\n    errors = validate_instance(result, schema)\n', 1)
+          write('toolkit/ztad/agent_output.py', text)
+
+          # Release evidence closes every prior artifact/restore/observability/approval blocker without fabricating evidence.
+          path = R / 'policies/release-policy.yaml'; policy = yaml.safe_load(path.read_text(encoding='utf-8')); policy['version'] = 3
+          gates = policy['gates']
+          staging = gates['STAGING']['required_evidence']
+          for item in ['RELEASE_FINGERPRINT_VERIFIED','SIGNED_RELEASE_MANIFEST','ARTIFACT_ATTESTATION_VERIFIED','SBOM_VERIFIED']:
+              if item not in staging: staging.append(item)
+          release = gates['RELEASE']['required_evidence']
+          for item in ['ROLLBACK_REHEARSAL_VERIFIED','OBSERVABILITY_READY']:
+              if item not in release: release.append(item)
+          r3 = gates['RELEASE']['by_risk'].setdefault('R3',{}).setdefault('required_evidence',[])
+          if 'STAGED_RESTORE_REHEARSAL' not in r3: r3.append('STAGED_RESTORE_REHEARSAL')
+          r4 = gates['RELEASE']['by_risk'].setdefault('R4',{}).setdefault('required_evidence',[])
+          for item in ['STAGED_RESTORE_REHEARSAL','BACKUP_RESTORE_EVIDENCE','REHEARSAL_EVIDENCE']:
+              if item not in r4: r4.append(item)
+          production = gates['PRODUCTION']['required_evidence']
+          if 'PROTECTED_RELEASE_AUTHORIZATION' not in production: production.insert(0, 'PROTECTED_RELEASE_AUTHORIZATION')
+          path.write_text(yaml.safe_dump(policy, sort_keys=False, allow_unicode=True), encoding='utf-8')
+
+          # RED→GREEN semantics: same-SHA retry is flaky; base-to-candidate same oracle is regression proof.
+          text = read('skills/code-change-verification/SKILL.md')
+          text = text.replace('7. A fail-then-pass history is `FLAKY_OR_ENVIRONMENT_DEPENDENT`, not a pass.', '7. A FAIL→PASS rerun on the same SHA/configuration is `FLAKY_OR_ENVIRONMENT_DEPENDENT`, not a pass. Valid RED→GREEN proof binds the same regression oracle to a failing known-bad base SHA and a passing candidate SHA.')
+          write('skills/code-change-verification/SKILL.md', text)
+          text = read('docs/HOST_ACCEPTANCE.md').replace('all 13 explicit-only skills', 'all 14 explicit-only skills'); write('docs/HOST_ACCEPTANCE.md', text)
+
+          # Main CLI entry points for non-programmer/agent use.
+          text = read('toolkit/ztad/cli.py')
+          if 'from .problem import ' not in text:
+              marker = 'from .providers import '
+              at = text.index(marker)
+              line_end = text.index('\n', at)
+              text = text[:line_end+1] + 'from .problem import initialize_problem_case, validate_problem_case, advance_problem_case, problem_case_to_change_contract\nfrom .release_fingerprint import compute_release_fingerprint\n' + text[line_end+1:]
+          parser_anchor = '    p = sub.add_parser("classify-risk", help="Classify contract-only, intended-path, or actual-diff risk")\n'
+          if 'sub.add_parser("problem-init"' not in text:
+              parser_block = '''    p = sub.add_parser("problem-init", help="Capture an unverified problem read-only")\n    _repo_args(p)\n    p.add_argument("--report", required=True)\n    p.add_argument("--expected")\n\n    p = sub.add_parser("problem-validate", help="Validate a structured problem case")\n    p.add_argument("--case", required=True)\n\n    p = sub.add_parser("problem-transition", help="Evaluate and apply one local problem-case transition")\n    p.add_argument("--case", required=True)\n    p.add_argument("--state", required=True)\n\n    p = sub.add_parser("problem-contract", help="Generate a Change Contract only from HANDOFF_READY problem evidence")\n    p.add_argument("--case", required=True)\n\n    p = sub.add_parser("release-fingerprint", help="Compute a deterministic non-authoritative candidate release fingerprint")\n    p.add_argument("--release-manifest", required=True)\n\n'''
+              if parser_anchor not in text: raise RuntimeError('CLI parser anchor changed')
+              text = text.replace(parser_anchor, parser_block + parser_anchor, 1)
+          execute_anchor = '    if command == "classify-risk":\n'
+          if 'if command == "problem-init":' not in text:
+              execute_block = '''    if command == "problem-init":\n        case = initialize_problem_case(Path(args.repo), report=args.report, expected_behavior=args.expected)\n        schema = _data(_root_file("schemas/problem-case.schema.json"))\n        errors = validate_problem_case(case, schema)\n        return {"problem_case": case, "errors": errors, "claim_boundary": "Local E2 intake only; no patch/release authority."}, 0 if not errors else 2\n    if command == "problem-validate":\n        case = _data(args.case); schema = _data(_root_file("schemas/problem-case.schema.json"))\n        errors = validate_problem_case(case, schema)\n        return {"valid": not errors, "problem_case": case, "errors": errors}, 0 if not errors else 2\n    if command == "problem-transition":\n        case = _data(args.case); schema = _data(_root_file("schemas/problem-case.schema.json"))\n        updated = advance_problem_case(case, args.state, schema)\n        return {"problem_case": updated, "claim_boundary": "Local E2 progression only; protected authority is unchanged."}, 0\n    if command == "problem-contract":\n        case = _data(args.case); schema = _data(_root_file("schemas/problem-case.schema.json"))\n        contract = problem_case_to_change_contract(case, schema)\n        errors = validate_contract(contract, _data(_root_file("schemas/change-contract.schema.json")))\n        return {"contract": contract, "errors": errors}, 0 if not errors else 2\n    if command == "release-fingerprint":\n        manifest = _data(args.release_manifest)\n        result = compute_release_fingerprint(manifest, _data(_root_file("schemas/release-manifest.schema.json")))\n        return result, 0\n'''
+              if execute_anchor not in text: raise RuntimeError('CLI execute anchor changed')
+              text = text.replace(execute_anchor, execute_block + execute_anchor, 1)
+          write('toolkit/ztad/cli.py', text)
+
+          # Changelog: exact claims only; no fake CI or production evidence.
+          changelog = read('CHANGELOG.md')
+          if '## 4.3.6 — 2026-08-14' not in changelog:
+              entry = '''## 4.3.6 — 2026-08-14\n\n- Added deterministic fail-closed problem investigation before Change Contract creation: source-of-truth resolution, classification, reproduction/proof, root cause, blast radius, minimal plan, clean isolation, and regression baseline.\n- Added autonomous owner-interaction rules so routine technical decisions remain agent/controller work while protected authority and irreducible business decisions remain external.\n- Added strict model-output schema preflight and provider request/receipt binding so invalid schemas fail before model execution and are not misreported as missing structured output.\n- Added deterministic local release fingerprints and strengthened protected gates for signed manifests, SBOM/attestation/provenance, restore/rollback rehearsal, observability, protected release authorization, runtime health, synthetic transactions, and observation windows.\n- Made the prior dependency-audit, migration-ledger, dirty/divergent worktree, provider-output, schema, and external-evidence blockers explicit workflow concerns.\n- Preserved v4.3.5 and all earlier releases/validation artifacts as immutable historical evidence.\n\n'''
+              write('CHANGELOG.md', changelog.replace('# Changelog\n\n', '# Changelog\n\n' + entry, 1))
+
+          # Remove failed transfer mechanism and this temporary workflow from the candidate.
+          import shutil
+          shutil.rmtree('.ztad-upgrade', ignore_errors=True)
+          Path('.github/workflows/v436-upgrade-gate.yml').unlink(missing_ok=True)
           PY
-          python /tmp/patch_existing_436_v2.py
-          python /tmp/provider_patch_436.py
-          rm -rf .ztad-upgrade
-          rm -f .github/workflows/v436-upgrade-gate.yml
 
       - name: Verify installed dependency consistency
         run: python -m pip check
@@ -67,6 +182,11 @@ jobs:
 
       - name: Compile Python sources
         run: python -m compileall -q toolkit scripts evals tests
+
+      - name: Run v4.3.6 targeted regressions first
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest -q tests/test_v436_problem_lifecycle.py tests/test_v436_provider_and_release_contracts.py
 
       - name: Run full unit and integration suite
         env:
@@ -86,11 +206,10 @@ jobs:
       - name: Run offline functional and adversarial evals
         run: python -B evals/run_evals.py --output "${{ runner.temp }}/eval-summary.json"
 
-      - name: Validate plugin bundle
-        run: python -B scripts/ztad.py --output "${{ runner.temp }}/bundle-validation.json" validate-bundle --root .
-
-      - name: Verify policy wiring
-        run: python -B scripts/ztad.py --output "${{ runner.temp }}/policy-wiring.json" policy-wiring --root .
+      - name: Validate plugin bundle and policy wiring
+        run: |
+          python -B scripts/ztad.py --output "${{ runner.temp }}/bundle-validation.json" validate-bundle --root .
+          python -B scripts/ztad.py --output "${{ runner.temp }}/policy-wiring.json" policy-wiring --root .
 
       - name: Set reproducible build timestamp
         shell: bash
@@ -101,13 +220,10 @@ jobs:
           python -B scripts/ztad.py build-distribution --root . --output-dir "${{ runner.temp }}/dist-a"
           python -B scripts/ztad.py build-distribution --root . --output-dir "${{ runner.temp }}/dist-b"
 
-      - name: Compare deterministic distribution trees
-        shell: bash
-        run: diff -qr "${{ runner.temp }}/dist-a" "${{ runner.temp }}/dist-b"
-
-      - name: Validate exact built archives
+      - name: Compare and validate exact distribution trees
         shell: bash
         run: |
+          diff -qr "${RUNNER_TEMP}/dist-a" "${RUNNER_TEMP}/dist-b"
           VERSION="$(cat VERSION)"
           python -B scripts/ztad.py validate-distribution --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${VERSION}.zip" --kind plugin
           python -B scripts/ztad.py validate-distribution --archive "${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" --kind marketplace
@@ -117,11 +233,9 @@ jobs:
         shell: bash
         run: |
           git diff --check
-          ! git diff --name-only | grep -E '^validation/.*v42' || {
-            echo 'Historical v4.2 validation evidence must not be relabeled or rewritten.'
-            exit 1
-          }
           test ! -d .ztad-upgrade
+          test ! -e .github/workflows/v436-upgrade-gate.yml
+          ! git diff --name-only | grep -E '^validation/.*v42' || { echo 'Historical validation evidence changed'; exit 1; }
 
       - name: Commit only verified source result
         shell: bash
