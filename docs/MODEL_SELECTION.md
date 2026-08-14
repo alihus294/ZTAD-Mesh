@@ -1,4 +1,4 @@
-# Model Selection and Work Distribution — ZTAD Mesh 4.3.6
+# Model Selection and Work Distribution — ZTAD Mesh 4.3.7
 
 ## Principle
 
@@ -62,6 +62,7 @@ A preferred registry is a preference, not a pin that bypasses safety. Provider/m
 ## Independence rules
 
 - An implementing session cannot approve the same candidate SHA.
+- Bug lifecycle `INDEPENDENT_REVIEW_PASS` requires explicit implementation and review session IDs that differ, plus verdict `PASS`.
 - The mandatory R0/R1 Sol guard is independent of the Luna writer.
 - Supervisor takeover requires fresh independent closure before approval.
 - Provider diversity is useful when eligible alternatives exist, but model agreement is never evidence.

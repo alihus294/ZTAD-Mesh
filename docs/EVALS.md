@@ -1,9 +1,11 @@
-# Evaluation Strategy — 4.3.6
+# Evaluation Strategy — 4.3.7
 
 Evaluation is divided into independently reported categories:
 
+- exact bug-to-production lifecycle ordering from `UNVERIFIED_REPORT` through `CLOSED`, including rejection of scheduler `DONE` as bug closure and rollback-required routing after production exposure;
 - unverified-report intake, protected-base resolution, classification, reproduction/root-cause/blast-radius gates, and clean worktree isolation;
-- RED→GREEN regression-baseline proof versus same-SHA flakiness;
+- separate `PATCH_IMPLEMENTED` and `REGRESSION_TEST_PROVEN` gates with exact-base/exact-candidate same-oracle RED→GREEN proof versus same-SHA flakiness;
+- targeted/full-regression/diff-forensics/independent-review/CI/staging/release/post-deploy gate separation;
 - strict provider-schema preflight, provider receipts, and role-alias normalization at the validation boundary;
 - release fingerprints and all prior blocker remediation/protected-evidence request mappings;
 - package, schema, policy, skill, and release-workflow validation;

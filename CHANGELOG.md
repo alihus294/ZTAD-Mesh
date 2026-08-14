@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.3.7 — 2026-08-15
+
+- Added a dedicated authoritative bug-to-production lifecycle that mirrors the WorkshopOS protocol state-for-state from `UNVERIFIED_REPORT` through `CLOSED`.
+- Separated `PATCH_IMPLEMENTED` from `REGRESSION_TEST_PROVEN` and required exact protected bad-base/exact-candidate same-oracle RED→GREEN evidence.
+- Added explicit targeted validation, full regression validation, diff forensics, independent review, protected CI, staging, owner-release readiness, production-release, and post-deploy verification states.
+- Prevented internal scheduler `DONE`, model prose, or deployment-command success from closing a reported code-defect case.
+- Added `BLOCKED` before production exposure and `ROLLBACK_REQUIRED` after production exposure, with protected rollback-closure evidence.
+- Added the WorkshopOS canonical deployment-chain profile and domain-specific database, auth/tenant, financial, ZATCA, provider, and concurrency evidence gates.
+- Added a strict bug-lifecycle schema, evidence-bound lifecycle controller, lifecycle CLI, policy-wiring registration, and regression tests for exact state semantics.
+- Preserved v4.3.6 and all earlier releases/validation artifacts as immutable historical evidence.
+
 ## 4.3.6 — 2026-08-14
 
 - Added deterministic fail-closed problem investigation before Change Contract creation: source-of-truth resolution, classification, reproduction/proof, root cause, blast radius, minimal plan, clean isolation, and regression baseline.

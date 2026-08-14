@@ -44,6 +44,7 @@ class PolicyStatus:
 POLICY_SPECS: dict[str, PolicySpec] = {
     "benchmark-policy.yaml": PolicySpec("DETERMINISTIC_RUNTIME", ("ztad.model_benchmark", "ztad.mesh_store", "ztad.cli"), "Routing benchmarks are locally validated and are never delivery evidence."),
     "budget-policy.yaml": PolicySpec("DETERMINISTIC_RUNTIME", ("ztad.budget", "ztad.cli", "ztad.mesh_plan"), "Contract budgets deterministically bound low/medium implementation, repair, and review topology; standalone policy defaults are evaluated by the CLI and cannot suppress mandatory high-risk safety gates."),
+    "bug-to-production-policy.yaml": PolicySpec("DETERMINISTIC_AND_PLATFORM_RUNTIME", ("ztad.bug_lifecycle",), "Reported-defect lifecycle transitions are deterministic and evidence-bound; protected CI, release, and runtime states remain authoritative only when platform evidence validates the exact subject."),
     "command-policy.yaml": PolicySpec("DETERMINISTIC_RUNTIME", ("ztad.commands", "ztad.hooks", "ztad.checks"), "Argv and active-hook command boundaries are evaluated locally."),
     "context-policy.yaml": PolicySpec("DETERMINISTIC_RUNTIME", ("ztad.context", "ztad.repository_index"), "Context size and selection limits are local inputs; static context is not runtime completeness proof."),
     "diff-limits.yaml": PolicySpec("DETERMINISTIC_RUNTIME", ("ztad.diff_limits",), "Diff-size limits are locally enforced."),

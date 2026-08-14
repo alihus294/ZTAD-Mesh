@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ztad-toolkit"
-version = "4.3.6"
+version = "4.3.7"
 description = "Adaptive multi-model controls for ZTAD Mesh autonomous delivery"
 requires-python = ">=3.11"
 dependencies = [

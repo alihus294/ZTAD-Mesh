@@ -1,9 +1,9 @@
-# Codex Plugin Installation — 4.3.6
+# Codex Plugin Installation — 4.3.7
 
 Published release artifacts:
 
-- `zero-trust-agentic-delivery-marketplace-4.3.6.zip` — recommended local Codex Marketplace archive;
-- `zero-trust-agentic-delivery-plugin-4.3.6.zip` — standalone plugin archive;
+- `zero-trust-agentic-delivery-marketplace-4.3.7.zip` — recommended local Codex Marketplace archive;
+- `zero-trust-agentic-delivery-plugin-4.3.7.zip` — standalone plugin archive;
 - `CHECKSUMS.sha256` — SHA-256 list covering both archives.
 
 Verify the downloaded release directory before installation:
@@ -23,17 +23,18 @@ python -B scripts/verify_version_identity.py --profile distribution
 python -B -m pytest -q
 ```
 
-The release pipeline runs packaged regressions from the exact Plugin and Marketplace archives before publication; the Marketplace package is also exercised across Windows/Linux CI for installation-critical regressions. In v4.3.5, policy-approved Python checks are bound to the exact active interpreter before process creation, and the Windows packaged regression gate is re-run from a fresh isolated venv under Python isolated mode.
+The release pipeline runs packaged regressions from the exact Plugin and Marketplace archives before publication; the Marketplace package is also exercised across Windows/Linux CI for installation-critical regressions. Since v4.3.5, policy-approved Python checks are bound to the exact active interpreter before process creation, and the Windows packaged regression gate is re-run from a fresh isolated venv under Python isolated mode.
 
 After installation:
 
-1. confirm plugin version `4.3.6` is enabled;
-2. confirm thirteen explicit-only skills are present;
+1. confirm plugin version `4.3.7` is enabled;
+2. confirm fourteen explicit-only skills are present, including `$problem-investigation`;
 3. confirm hook discovery/trust;
 4. invoke `$zero-trust-delivery` explicitly;
 5. run version-identity verification, bundle validation, host acceptance, provider probe, audit, and dry-run;
-6. inspect `mesh-autopilot --dry-run` and confirm the intended v4.3 topology and routes;
-7. confirm every Sol route is capped at `HIGH` reasoning;
-8. do not enable merge or production authority until external platform gates are verified.
+6. for reported defects, confirm the exact bug lifecycle policy/schema/controller is present and `DONE` is not a valid bug-lifecycle closure;
+7. inspect `mesh-autopilot --dry-run` and confirm the intended v4.3 topology and routes;
+8. confirm every Sol route is capped at `HIGH` reasoning;
+9. do not enable merge or production authority until external platform gates are verified.
 
 Normal v4.3 routing intent is Luna-first for R0/R1 and the R2 implementation worker when eligible, Terra as balanced support/fallback, and Sol as the independent frontier guard/consultant. Actual-diff risk escalation always overrides the cheaper topology.

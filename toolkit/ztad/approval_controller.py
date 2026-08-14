@@ -9,6 +9,7 @@ from .orchestrator import ContinuityStore
 from .util import sha256_bytes, canonical_json, utc_now
 
 APPROVAL_TYPES = {
+    "PROTECTED_SUPERVISOR_APPROVAL",
     "STRONG_SUPERVISOR_MERGE_APPROVAL",
     "STRONG_SUPERVISOR_TECHNICAL_APPROVAL",
     "STRONG_SUPERVISOR_RELEASE_APPROVAL",

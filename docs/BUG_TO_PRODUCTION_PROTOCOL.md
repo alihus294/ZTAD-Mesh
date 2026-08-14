@@ -1,10 +1,10 @@
-# Autonomous Fail-Closed Bug-to-Production Protocol — ZTAD Mesh 4.3.6
+# Autonomous Fail-Closed Bug-to-Production Protocol — ZTAD Mesh 4.3.7
 
 ## Purpose
 
-This protocol is the generic problem-to-production front end for ZTAD. It is designed for repository owners who may not be programmers and should not need to make routine implementation decisions. The agent/controller continues all safe work autonomously and asks the owner only for irreducible business intent or protected authority it does not possess.
+This document is the normative ZTAD implementation of the WorkshopOS Fail-Closed Bug-to-Production Protocol v1. It is optimized for a solo owner who may not be a programmer. Routine technical decisions belong to the agent/controller; owner involvement is limited to irreducible business intent, legal/compliance decisions, irreversible authorization, or protected production authority the agent does not possess.
 
-The governing rule is: **a claim does not advance because a model is confident; it advances only when the required evidence exists and is bound to the correct subject.** Missing or conflicting evidence fails closed for the affected transition while unrelated safe work may continue.
+The governing rule is: **no state advances because a model is confident. Every transition requires the exact evidence defined by policy and bound to the correct subject.** Missing, conflicting, incomplete, stale, or invalid evidence fails closed.
 
 ## Authority hierarchy
 
@@ -13,13 +13,23 @@ The governing rule is: **a claim does not advance because a model is confident; 
 3. authorized runtime observations for mutable external state;
 4. tests only for behavior they actually exercise;
 5. accepted architecture/specification for intent;
-6. reports, audits, plans, handoffs, and historical notes as non-authoritative context.
+6. reports, audits, plans, handoffs, roadmaps, summaries, and historical notes as non-authoritative context.
 
-A repository may define a narrower canonical deployment/migration chain. ZTAD must use that chain and must not create an alternate production path.
+A repository may define a narrower canonical deployment/migration chain. ZTAD must use that chain and must never create an alternative production path. The WorkshopOS profile requires:
 
-## Problem-investigation lifecycle
+```text
+DEPLOYMENT.md
+→ infra/docs/runbook.md
+→ .github/workflows/deploy.yml
+```
 
-Every reported problem starts as `UNVERIFIED_REPORT` and follows the deterministic `problem-case` contract:
+The executable protected workflow is the final enforcement layer.
+
+## Mandatory state machine
+
+`policies/bug-to-production-policy.yaml` and `schemas/bug-lifecycle.schema.json` define the authoritative case state. Internal scheduler states are implementation details and cannot close the case.
+
+Every code-fix case follows exactly:
 
 ```text
 UNVERIFIED_REPORT
@@ -29,158 +39,157 @@ UNVERIFIED_REPORT
 → ROOT_CAUSE_PROVEN
 → BLAST_RADIUS_MAPPED
 → CHANGE_PLANNED
-→ REGRESSION_BASELINE_PROVEN
-→ HANDOFF_READY
+→ PATCH_IMPLEMENTED
+→ REGRESSION_TEST_PROVEN
+→ TARGETED_VALIDATION_PASS
+→ REGRESSION_VALIDATION_PASS
+→ DIFF_FORENSICS_PASS
+→ INDEPENDENT_REVIEW_PASS
+→ CI_PASS
+→ STAGING_PASS
+→ READY_FOR_OWNER_RELEASE
+→ PRODUCTION_RELEASED
+→ POST_DEPLOY_VERIFIED
+→ CLOSED
 ```
 
-Non-code classifications may terminate as `RESOLVED_NO_CODE`. Missing protected facts/credentials/authority route to `WAITING_EXTERNAL_DEPENDENCY`. Unsafe or logically irrecoverable cases route to `QUARANTINED`.
+A mandatory-gate failure before production becomes `BLOCKED`. After production exposure it becomes `ROLLBACK_REQUIRED`. A report proven to require no code/configuration fix may end as `RESOLVED_NO_CODE`.
 
-### Intake and source truth
+`DONE` is intentionally not a bug-lifecycle state. Merge completion, an internal scheduler terminal state, successful deployment command, or model prose cannot substitute for `POST_DEPLOY_VERIFIED → CLOSED`.
 
-Preserve the original report without reinterpretation. Capture repository, exact base SHA, branch, worktree state, environment, timestamp, expected/observed behavior, and supplied evidence. Investigation is read-only until a code-affecting classification is proven.
+## Intake and read-only investigation
 
-Resolve authoritative sources and preserve conflicts. Do not invent a business decision when primary authorities conflict.
+Every report begins as `UNVERIFIED_REPORT`, never as `BUG`. Preserve the report verbatim and record repository, protected base SHA, local head SHA, branch, worktree state, environment, timestamp, claimed observed/expected behavior, and supplied evidence.
 
-### Classification
+Investigation is read-only by default. Before classification/reproduction, do not modify source, tests, migrations, configuration, documentation to fit an assumption, production state, or external provider state.
 
-Supported classifications are `CONFIRMED_BUG`, `EXPECTED_BEHAVIOR`, `ENVIRONMENT_ISSUE`, `CONFIGURATION_ISSUE`, `DATA_ISSUE`, `EXTERNAL_DEPENDENCY`, `USER_WORKFLOW_ISSUE`, `SPEC_CONFLICT`, `SECURITY_INCIDENT`, `PERFORMANCE_REGRESSION`, and `INCONCLUSIVE`.
+## Source of truth and classification
 
-Only a classification that actually requires a code/configuration change enters implementation.
+Resolve governing sources before diagnosis. If primary authorities conflict and the conflict cannot be safely resolved, keep the conflict open; do not invent business intent.
 
-### Reproduction and root cause
+Supported classifications include confirmed bug, expected behavior, environment issue, configuration issue, data issue, external dependency, user workflow issue, specification conflict, security incident, performance regression, and inconclusive. Only a classification that requires a code/configuration change continues through the implementation path.
 
-Prefer deterministic regression reproduction, then integration/E2E/API/local-runtime proof, then sanitized read-only runtime evidence when authorized. Record exact preconditions, action, input, expected result, actual result, environment, determinism/frequency, and evidence refs.
+## Reproduction and root cause
 
-Root cause must establish trigger → incorrect state/logic/assumption → propagation → observable failure and must account for material alternative hypotheses. “Changing this makes a test pass” is not root-cause proof.
+Prefer deterministic automated reproduction, then integration, browser/E2E, API, local runtime/database, sanitized logs/state evidence, and only bounded authorized production read-only evidence when necessary.
 
-### Blast radius and plan
+Record exact preconditions, action, input, expected result, actual result, environment, component, determinism/frequency, and evidence references.
 
-Map direct/indirect callers, schemas/types, data, authorization/tenant boundaries, side effects, queues/jobs, providers, concurrency, frontend consumers, deployment and migration surfaces as applicable. Record invariants and deterministic risk.
-
-Plan the smallest correct change. Material scope expansion, migrations, contract/permission/financial/deployment changes require reclassification/replanning rather than silent widening.
-
-### Clean isolation
-
-`main`/protected refs are not development worktrees. If the user worktree is dirty or divergent, preserve it untouched and build an isolated clean worktree from the protected/current base. Transfer only an explicit task-scoped file allowlist. Do not stash, reset, commit, discard, or push unrelated user work.
-
-### Regression proof
-
-Preferred proof is:
+Root cause must establish:
 
 ```text
-known-bad exact base + regression oracle → FAIL
-exact candidate + same oracle → PASS
+Trigger
+→ incorrect state / logic / assumption
+→ propagation path
+→ observable failure
 ```
 
-A same-SHA/configuration FAIL→PASS rerun is flaky/environment-dependent, not RED→GREEN evidence. Never weaken assertions, delete coverage, mock away the failing boundary, skip a required check, or modify a guard merely to make it green.
+Material competing hypotheses must be tested. “This file looks wrong”, “changing this makes the test pass”, or model confidence alone are not root-cause proof.
 
-## Governed ZTAD handoff
+## Blast radius, invariants, risk, and plan
 
-Only `HANDOFF_READY` problem evidence may generate a Change Contract for a code-affecting problem. The generated contract carries the problem-case fingerprint and enters the existing ZTAD risk-adaptive delivery engine:
+Before implementation, inspect direct/indirect callers, routes/controllers/services, schemas/types, data tables, RLS/tenant filters, auth/RBAC, caches, jobs, invoices/payments/ZATCA state, webhooks/providers, frontend consumers, migrations, deployment, and concurrency as applicable.
+
+Define explicit invariants and classify risk. Plan the smallest correct change with expected files, required tests, forbidden unrelated scope, database/external effects, rollback/containment, and release risk. Material scope expansion requires replanning and revalidation.
+
+## Clean isolation
+
+Protected refs such as `main` are not development worktrees. Dirty/divergent owner work must remain byte-for-byte preserved. ZTAD creates an isolated clean worktree from the protected/current base and transfers only an explicit task-scoped allowlist. It must not stash, reset, commit, discard, or push unrelated owner work.
+
+## Patch and regression proof
+
+`PATCH_IMPLEMENTED` proves only that the bounded candidate exists and is bound to an exact head SHA, diff hash, Change Contract hash, policy bundle hash, and toolchain hash.
+
+`REGRESSION_TEST_PROVEN` is a separate mandatory state. Preferred proof is:
 
 ```text
-Change Contract
-→ deterministic repository index
-→ risk-proportional isolated model topology
-→ deterministic integration/scope checks
-→ machine checks
-→ actual-diff risk reclassification
-→ independent adversarial review
-→ protected exact-SHA approval/CI
-→ exact artifact + release evidence
-→ staging/canary/rollback controls
-→ protected production release
-→ production health + synthetic transaction + observation window
-→ DONE or ROLLBACK
+exact known-bad protected base + regression oracle → FAIL
+exact candidate + same regression oracle → PASS
 ```
 
-R0/R1 use Luna writer + deterministic gates + one independent Sol guard. R2 remains bounded with Luna preferred writer and Terra support/fallback. R3/R4 use the full mesh. Every Sol invocation remains capped at HIGH reasoning. A model never grants merge/deploy/production authority.
+The RED→GREEN evidence must name the exact bad base and candidate SHA and prove the same oracle. Same-SHA/configuration FAIL→PASS is flaky/environment-dependent and remains blocking.
 
-## Validation layers
+Never loosen assertions, delete tests, add skip/xfail/focus/retry to hide failure, reduce coverage, change discovery/exclusion, mock away the real boundary, make CI non-blocking, swallow errors, or alter a guard merely to obtain green status.
 
-Run the applicable sequence without downgrading failures:
+## Targeted and regression validation
 
-1. regression/targeted tests;
-2. affected module/domain tests;
-3. adjacent-domain tests;
-4. integration/full suite;
-5. type/lint/build;
-6. dependency/security audit;
-7. migration/ledger/history/fresh-rebuild checks;
-8. documentation/i18n checks;
-9. browser/E2E using synthetic data only;
-10. concurrency tests where shared durable state is involved;
-11. diff forensics;
-12. independent adversarial review;
-13. protected CI on the exact final PR head.
+`TARGETED_VALIDATION_PASS` verifies the original reproduction, normal/boundary/invalid/error paths, retries, repeat actions, stale/partial state, role/tenant differences, provider failure/recovery, and concurrency where applicable.
 
-A purported pre-existing failure must be proven against the base commit and handled according to repository policy; it is never silently ignored.
+Domain-specific mandatory evidence is added by policy:
 
-## High-risk domain profiles
+- Database: migration necessity, canonical migration/ledger/history guard, fresh rebuild, RLS/tenant safety, indexes/constraints, bounded deterministic backfill, compatibility sequencing, and explicit recovery.
+- Auth/RBAC/tenant: unauthenticated behavior, allowed/denied roles, cross-tenant denial, identifier tampering, server-side enforcement, and non-leaking failures.
+- Financial/payments/invoices/tax: totals, VAT/tax, discounts, rounding, explicit zero, duplicate requests, retries, idempotency, concurrency, ledger consistency, refunds/returns where connected, legal transitions, and final-state immutability.
+- ZATCA: high/critical risk; legal state machine, accepted/warning responses, retry/duplicate rules, reporting vs clearance, signed-document persistence, certificate/EGS state, cutover gates, immutability, and no production provider mutation during tests.
+- Providers: local vs provider state, transport vs application failure, sandbox/mock, bounded idempotent retries, stale-output rejection, and safe reconciliation.
+- Concurrency: parallel sessions, transactions/locks/unique constraints, retries, no duplicate durable side effect, and valid final state.
 
-### Database
+`REGRESSION_VALIDATION_PASS` then runs changed-unit, affected-module, adjacent-domain, integration/full-suite, type, lint, build, security, dependency audit, migration, documentation, i18n, and E2E/browser checks as applicable.
 
-Prove migration necessity, canonical migration location/ledger/history guard, fresh rebuild, RLS/tenant boundaries, indexes/constraints, bounded deterministic backfill, retries, compatibility sequencing, and explicit recovery. Prefer expand → compatible deploy → migrate/backfill → verify → contract. Code rollback does not imply data rollback.
+A required failing check cannot be ignored as “pre-existing” unless failure on the exact base is proven and repository policy explicitly handles it. The candidate must not worsen it.
 
-### Authentication / authorization / tenant isolation
+## Diff forensics and independent adversarial review
 
-Prove unauthenticated behavior, allowed and denied roles, Tenant A vs Tenant B isolation, identifier tampering resistance, server-side enforcement, branch restrictions where applicable, and non-leaking failure responses. UI hiding is never the security boundary.
+`DIFF_FORENSICS_PASS` requires every changed file and line to be justified by the proven root cause and plan. Unexpected dependency/lockfile/config/permission/API/migration/generated changes, PII/secrets, debug output, tenant-scope changes, fail-open handling, and test weakening block progression.
 
-### Payments / invoices / tax / financial state
+`INDEPENDENT_REVIEW_PASS` requires a review session/context different from implementation. The reviewer attempts to disprove diagnosis, root cause, regression-test validity, minimality, preservation of unrelated behavior, security/data safety, concurrency/idempotency, and deployment assumptions. Verdict is `PASS` or block; “looks good overall” is not a passing verdict.
 
-Prove totals, VAT/tax, discounts, rounding, explicit zero semantics, duplicate requests, retry/idempotency, concurrent requests, ledger consistency, refunds/returns when connected, legal state transitions, final-state immutability, and no duplicate durable side effects.
+## PR and protected CI
 
-### ZATCA / legally significant provider state
+`CI_PASS` requires required platform checks on the exact final PR head. Local green does not replace protected CI, and green on an earlier SHA does not prove a later SHA. Branch/ruleset/review/environment protections must not be bypassed.
 
-Treat as R3+ and usually critical when persistent/legal state is affected. Prove state transitions, accepted/warning responses, retry/duplicate rules, reporting vs clearance, signed-document persistence, certificate/EGS state, cutover gates, immutability, and no accidental legacy resubmission. Tests must not mutate real production provider state.
+## Staging and release-candidate validation
 
-### External providers
+`STAGING_PASS` uses the exact validated candidate/artifact. Staging uses separate/synthetic data, avoids real customer PII and unintended financial/ZATCA/provider side effects, verifies health, reproduces the original scenario, proves the bug absent, runs affected and adjacent critical workflows, inspects logs/errors, and verifies invariants.
 
-Distinguish local from provider state and transport failures from application defects. Use sandbox/mock where possible, bound and make retries idempotent, reject stale output, reconcile safely, and never infer provider success from a local row/model statement.
+Hotfix mode may reduce breadth but does not skip lifecycle states. Database, auth/tenant, financial, ZATCA, and security changes retain full high-risk gates.
 
-### Concurrency
+## Ready for owner release
 
-Reproduce with parallel sessions where possible. Verify transactions/locks/unique constraints/retries, no duplicate durable side effect, and valid deterministic final state.
+`READY_FOR_OWNER_RELEASE` is the maximum state the coding agent may reach without protected production authority. It requires the applicable exact-subject evidence, including:
 
-## Independent review and diff forensics
-
-Every changed line must be justified by the proven root cause/plan. Investigate unexpected lockfile/dependency/config/permission/API/migration/generated-file changes, debug output, secrets/PII, fail-open error handling, tenant-scope changes, and test weakening.
-
-The independent reviewer must attempt to falsify diagnosis, root cause, regression-test validity, minimality, security/data invariants, concurrency/idempotency, and deployment assumptions. Same implementation session cannot approve the exact candidate. Protected approval binds task, base/head SHA, diff hash, contract, evidence IDs, policy/toolchain, artifact subject, and review identity.
-
-## Release evidence
-
-Before promotion, the exact candidate must have the applicable protected evidence. Local files/templates are not substitutes for protected evidence. Required release subjects include:
-
-- deterministic release fingerprint bound to exact manifest subject;
+- release fingerprint;
 - protected signed release manifest;
 - SBOM;
-- artifact provenance/attestation;
+- artifact attestation/provenance;
 - exact tested artifact digest;
 - protected CI/review evidence;
 - rollback artifact/strategy;
-- staged restore rehearsal for applicable high-risk work;
 - rollback rehearsal;
-- observability readiness and synthetic transaction definition;
-- protected release authorization;
-- production runtime health, synthetic transaction, and observation window after release.
+- observability readiness;
+- synthetic transaction definition;
+- staged restore/recovery evidence where required by risk.
 
-If an external gate is unavailable, create the request/template/local preparation and mark it `LOCAL_EVIDENCE_IS_NON_AUTHORITATIVE_UNTIL_PROMOTED_BY_A_PROTECTED_CONTROLLER`. Never fabricate completion.
+Local files/templates are not substitutes for protected evidence. When an external gate is unavailable, create the request/template/local preparation and mark it `LOCAL_EVIDENCE_IS_NON_AUTHORITATIVE_UNTIL_PROMOTED_BY_A_PROTECTED_CONTROLLER`.
 
-## Production boundary
+## Protected production release
 
-Production release uses only the repository’s canonical protected workflow from the exact reviewed main revision and exact validated digest. ZTAD must not use direct production SQL, direct production SSH mutation, local production migrations, ad-hoc service-role credentials, alternate deployment routes, mutable tags, or rebuilt unverified bytes.
+`PRODUCTION_RELEASED` is separate from post-deployment correctness. It requires protected release authorization, exact reviewed main revision, exact validated artifact digest, and protected evidence that the release completed.
 
-For high/critical risk prefer supported containment such as feature flags, blue/green, canary, tenant/branch-limited rollout, provider sandbox, read-only mode, or write gates.
+ZTAD must never use direct production SQL, direct production SSH/VPS mutation, local production migrations, ad-hoc production service-role credentials, alternate deployment paths, mutable tags, or rebuilt unverified bytes.
 
-After authorized deployment, prove the original symptom is gone and expected behavior occurs; separately verify adjacent health, errors, metrics, queues, DB/provider failures, authorization/tenant anomalies, financial/ZATCA anomalies, and duplicate side effects. Unresolved critical uncertainty routes to containment/rollback.
+For high/critical risk, use supported containment such as feature flags, blue/green, canary/rings, limited tenant/branch rollout, read-only mode, provider sandbox, or write gates.
 
-## Never-idle / owner interaction
+## Post-deployment proof and rollback
 
-Routine implementation choices belong to the agent/controller, not the owner. Missing local files are created as non-authoritative local evidence. Dirty worktrees are isolated, not presented to the owner for file selection. Provider/tool failures use bounded retry followed by materially different provider/resource/context/strategy or deterministic local verification. Exhausted repair budgets quarantine only the affected task while unrelated safe work continues.
+`POST_DEPLOY_VERIFIED` requires production-safe proof that the original symptom no longer occurs and expected behavior now occurs. Separately verify exact running digest, application health, error rate/logs/metrics, latency, queues/backlog, database/provider errors, authorization/tenant anomalies, financial anomalies, ZATCA anomalies, duplicate side effects, synthetic transaction, and observation window as applicable.
 
-Ask the owner only for contradictory/undefined business intent, unavailable protected credentials/authority, legal/compliance decisions, or explicit irreversible/destructive authorization. Prepare the evidence-bound request before asking.
+If the original problem remains, a new regression appears, health degrades without explanation, or security/data/tenant/financial/ZATCA safety cannot be proven, transition to `ROLLBACK_REQUIRED`.
+
+Rollback closure requires protected evidence that rollback completed and post-rollback health is acceptable. Code rollback is not assumed to reverse database/data changes; migrations require an explicit recovery strategy.
 
 ## Completion rule
 
-Repository-side work is not `DONE` merely because code/tests/CI are green. The maximum truthful state is capped by the strongest evidence actually present. Missing release fingerprint, signed manifest, SBOM/attestation, restore/rollback rehearsal, observability/synthetic evidence, runtime health, protected supervisor/release approval, migration-ledger proof, dependency-audit proof, provider structured output, clean protected-base isolation, or exact-subject evidence prevents any state that requires it.
+A code-fix case is `CLOSED` only after `POST_DEPLOY_VERIFIED`, or after required rollback has been proven complete and healthy. The evidence record preserves issue description, classification, base/final SHA, authoritative sources, reproduction, root cause, blast radius, risk, plan, changed files, RED proof, GREEN proof, targeted/full validation, security/domain evidence, independent review, CI, staging, migration/recovery evidence, release identifier/digest, production release evidence, post-deploy verification, and final state.
+
+If any applicable mandatory item is not proven, the case is **not closed**.
+
+## Owner responsibilities
+
+The owner should only need to describe the problem, clarify genuinely ambiguous business intent, authorize protected production release, and make explicit business/legal decisions that cannot be safely derived. The owner should not need to choose files, tests, providers, retries, branches, refactors, or routine implementation details.
+
+## Technical enforcement
+
+The prompt is not the security boundary. Use protected `main`, PR-only merge, required CI, no force-push, protected production environment, production secrets unavailable to normal coding agents, exact-commit/digest release, protected migration workflow, automated security/tenant/database tests, staging validation, rollback evidence, and deployment/runtime evidence tied to exact revisions.
+
+The platform must prevent bypass of critical rules.
