@@ -2,6 +2,7 @@ from pathlib import Path
 
 from ztad.bundle import validate_bundle
 from ztad.policy_registry import audit_policy_wiring
+from ztad.util import load_data
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,3 +30,16 @@ def test_v437_bug_lifecycle_policy_is_declared_and_wired():
     assert policy["mode"] == "DETERMINISTIC_AND_PLATFORM_RUNTIME"
     assert policy["consumers"] == ["ztad.bug_lifecycle"]
     assert policy["consumer_modules_available"] is True
+
+
+def test_v437_release_and_security_gates_match_protocol_and_traceability():
+    policy = load_data(ROOT / "policies/bug-to-production-policy.yaml")
+    targeted = policy["gates"]["TARGETED_VALIDATION_PASS"]["by_domain"]
+    assert targeted["SECURITY"] == ["SECURITY_VALIDATION_PASSED"]
+    assert policy["gates"]["STAGING_PASS"]["minimum_trust"] == "E5"
+    assert "PROTECTED_SUPERVISOR_APPROVAL" in policy["gates"]["READY_FOR_OWNER_RELEASE"]["required_evidence"]
+    assert "PROTECTED_RELEASE_AUTHORIZATION" in policy["gates"]["PRODUCTION_RELEASED"]["required_evidence"]
+
+    matrix = (ROOT / "traceability/TRACEABILITY_MATRIX.md").read_text(encoding="utf-8")
+    assert "Active normative requirements: **134**." in matrix
+    assert "28. Exact fail-closed bug-to-production lifecycle | 15" in matrix
