@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 import json
 import sqlite3
 import stat
@@ -72,7 +73,7 @@ def test_corrupt_performance_rows_are_ignored_by_routing(tmp_path):
         registry_id="codex-luna", task_family="implementation", success=True,
         quality=0.9, latency=0.3, cost=0.2,
     )
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         connection.execute("UPDATE model_performance SET runs=?", (1.5,))
         connection.commit()
     assert store.performance_overrides("implementation") == {}
