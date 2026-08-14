@@ -1,0 +1,6 @@
+interface:
+  display_name: "Problem Investigation"
+  short_description: "Prove reports before patching and preserve clean baselines"
+  default_prompt: "Use $problem-investigation to investigate this reported problem read-only first, prove classification/root cause/blast radius, preserve dirty user work, and hand off only a justified change to governed delivery."
+policy:
+  allow_implicit_invocation: false
