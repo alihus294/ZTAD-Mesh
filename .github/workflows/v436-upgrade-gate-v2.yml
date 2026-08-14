@@ -1,0 +1,131 @@
+name: Temporary v4.3.6 source gate v2
+
+on:
+  push:
+    branches: [feat/fail-closed-bug-to-production-4.3.6]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v436-source-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  verify-and-materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Check out exact isolated feature head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            toolkit/requirements.lock.txt
+            toolkit/requirements-dev.lock.txt
+
+      - name: Install exact locked test environment
+        run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+
+      - name: Materialize reviewed strict-schema baseline and v4.3.6 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show origin/fix/autonomous-delivery-4.3.6:toolkit/ztad/schema_validation.py > toolkit/ztad/schema_validation.py
+          git show origin/fix/autonomous-delivery-4.3.6:schemas/agent-result.schema.json > schemas/agent-result.schema.json
+          python -B scripts/_v436_upgrade.py
+          test ! -e scripts/_v436_upgrade.py
+          test ! -e .github/workflows/v436-upgrade-gate-v2.yml
+          test ! -d .ztad-upgrade
+
+      - name: Dependency and release identity gates
+        run: |
+          python -m pip check
+          python -B scripts/verify_version_identity.py --profile source
+          python -m compileall -q toolkit scripts evals tests
+
+      - name: Run v4.3.6 targeted and CLI regressions
+        env:
+          PYTHONPATH: toolkit
+        run: >-
+          python -B -m pytest -q
+          tests/test_v436_problem_lifecycle.py
+          tests/test_v436_provider_and_release_contracts.py
+          tests/test_schema_cli.py
+          tests/test_context_footprint.py
+          tests/test_evidence_agent.py
+
+      - name: Run complete repository tests
+        env:
+          PYTHONPATH: toolkit
+        run: python -B -m pytest -q
+
+      - name: Fail on ResourceWarning in critical control paths
+        env:
+          PYTHONPATH: toolkit
+        run: >-
+          python -B -m pytest -q -W error::ResourceWarning
+          tests/test_v43_last_gaps.py
+          tests/test_v43_final_hardening.py
+          tests/test_v43_runtime_controls.py
+          tests/test_v43_guarded_fast_path.py
+
+      - name: Run offline deterministic and adversarial evals
+        run: python -B evals/run_evals.py --output "${{ runner.temp }}/eval-summary.json"
+
+      - name: Validate bundle and policy wiring
+        run: |
+          python -B scripts/ztad.py --output "${{ runner.temp }}/bundle.json" validate-bundle --root .
+          python -B scripts/ztad.py --output "${{ runner.temp }}/wiring.json" policy-wiring --root .
+
+      - name: Set deterministic build timestamp
+        shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build exact distributions twice
+        run: |
+          python -B scripts/ztad.py build-distribution --root . --output-dir "${{ runner.temp }}/dist-a"
+          python -B scripts/ztad.py build-distribution --root . --output-dir "${{ runner.temp }}/dist-b"
+
+      - name: Compare and validate exact package trees
+        shell: bash
+        run: |
+          set -euo pipefail
+          diff -qr "${RUNNER_TEMP}/dist-a" "${RUNNER_TEMP}/dist-b"
+          VERSION="$(cat VERSION)"
+          PLUGIN="${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${VERSION}.zip"
+          MARKET="${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${VERSION}.zip"
+          python -B scripts/ztad.py validate-distribution --archive "$PLUGIN" --kind plugin
+          python -B scripts/ztad.py validate-distribution --archive "$MARKET" --kind marketplace
+          python -B scripts/run_packaged_regressions.py --archive "$PLUGIN" --kind plugin --scope full
+          python -B scripts/run_packaged_regressions.py --archive "$MARKET" --kind marketplace --scope full
+
+      - name: Diff forensics and historical evidence protection
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          ! git diff --name-only | grep -E '^validation/.*v42' || { echo 'Historical v4.2 validation evidence changed'; exit 1; }
+          ! git diff | grep -E '^\+.*(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]+)' || { echo 'Possible secret material in diff'; exit 1; }
+          test "$(cat VERSION)" = "4.3.6"
+
+      - name: Commit only the fully verified candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat: add autonomous fail-closed bug-to-production lifecycle"
+          git push origin HEAD:feat/fail-closed-bug-to-production-4.3.6
