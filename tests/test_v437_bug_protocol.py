@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from ztad.bug_lifecycle import (
+    _protected_approval_errors,
     advance_bug_lifecycle,
     bind_artifact,
     bind_candidate,
@@ -350,3 +351,56 @@ def test_high_risk_domain_profiles_add_mandatory_targeted_evidence():
     assert gate["ZATCA"] == ["ZATCA_INVARIANTS_PASSED"]
     assert gate["PROVIDER"] == ["PROVIDER_SEMANTICS_PASSED"]
     assert gate["CONCURRENCY"] == ["CONCURRENCY_INVARIANTS_PASSED"]
+    assert gate["SECURITY"] == ["SECURITY_VALIDATION_PASSED"]
+
+
+def test_staging_is_runtime_evidence_and_owner_release_requires_protected_supervisor():
+    assert POLICY["gates"]["STAGING_PASS"]["minimum_trust"] == "E5"
+    required = POLICY["gates"]["READY_FOR_OWNER_RELEASE"]["required_evidence"]
+    assert "PROTECTED_SUPERVISOR_APPROVAL" in required
+
+
+def test_protected_approvals_require_e6_controller_authority():
+    weak = {
+        "evidence_id": "ev-weak",
+        "type": "PROTECTED_SUPERVISOR_APPROVAL",
+        "trust_level": "E5",
+        "producer": "platform:github",
+        "status": "APPROVED",
+    }
+    errors = _protected_approval_errors(
+        [weak],
+        ["ev-weak"],
+        evidence_type="PROTECTED_SUPERVISOR_APPROVAL",
+        label="Protected supervisor approval",
+    )
+    assert any("E6" in error for error in errors)
+
+    model = {
+        "evidence_id": "ev-model",
+        "type": "PROTECTED_RELEASE_AUTHORIZATION",
+        "trust_level": "E6",
+        "producer": "agent:sol",
+        "status": "APPROVED",
+    }
+    errors = _protected_approval_errors(
+        [model],
+        ["ev-model"],
+        evidence_type="PROTECTED_RELEASE_AUTHORIZATION",
+        label="Production release authorization",
+    )
+    assert any("protected platform/controller" in error for error in errors)
+
+    protected = {
+        "evidence_id": "ev-protected",
+        "type": "PROTECTED_RELEASE_AUTHORIZATION",
+        "trust_level": "E6",
+        "producer": "controller:release",
+        "status": "APPROVED",
+    }
+    assert _protected_approval_errors(
+        [protected],
+        ["ev-protected"],
+        evidence_type="PROTECTED_RELEASE_AUTHORIZATION",
+        label="Production release authorization",
+    ) == []
