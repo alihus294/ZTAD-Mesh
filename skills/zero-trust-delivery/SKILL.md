@@ -1,78 +1,80 @@
 ---
 name: zero-trust-delivery
-description: Run risk-proportional zero-trust software delivery with deterministic repository context, isolated writers, machine-check gates, actual-risk escalation, independent review, durable recovery, and evidence-gated release. Invoke explicitly for governed repository work only.
+description: Run autonomous fail-closed problem-to-production delivery with read-only diagnosis, clean isolation, regression proof, risk-proportional implementation, exact-evidence gates, independent review, protected release, recovery, and post-deploy verification.
 ---
 
 # Authority
 
-Models analyze or create bounded patches. Deterministic controllers own task state, scope, checks, evidence, approvals, and platform eligibility. No model can turn its own statement into test, CI, merge, deployment, or production evidence.
+Models are untrusted compute. They may investigate, plan, review, or create bounded patches. Deterministic controllers own state, scope, checks, evidence, fingerprints, approvals, and eligibility. Protected platforms own CI, merge, signing/attestation, deployment, and production truth. No model statement can become approval or authoritative evidence.
 
-# Objective
+# Owner interaction contract
 
-Deliver the accepted goal with orchestration proportional to verified risk. Preserve useful concurrency only where it adds independent value. Never preserve motion by bypassing failed checks, expanding scope, repeating the same strategy, or treating uncertainty as success.
+The owner may be a non-programmer. Continue routine technical work autonomously to the last safe practical result. Do not ask the owner to choose files, retries, providers, test commands, refactors, or ordinary implementation details.
 
-# Required sequence
+Ask only when a fact cannot be safely derived or an action requires authority the agent does not possess, such as contradictory business intent, missing protected credentials, irreversible/destructive authorization, protected release approval, or a legal/compliance decision. Prepare the exact request and evidence first.
 
-1. Validate the installed bundle and policy wiring.
-2. Run host acceptance for the plugin and repository.
-3. Probe configured providers and benchmark available models by task family; treat catalog/benchmark values as routing data only.
-4. Run repository `audit` and `dry-run`.
-5. Validate the Change Contract and deterministic risk.
-6. Run `$multi-model-mesh` in dry-run mode and inspect execution mode, model-call count, route preview, scopes, prompts, checks, and risk policy.
-7. Build the deterministic repository index before model work.
-8. Execute the risk-proportional topology:
-   - R0/R1: Luna writer → deterministic integration/checks/actual risk → exactly one independent Sol guard.
-   - R2: focused Terra context → Luna writer → deterministic integration/checks/actual risk → bounded Terra review.
-   - R3/R4: full independent mesh.
-9. Keep every writer in a dedicated bounded worktree; serialize overlapping scopes.
-10. Require one deterministic candidate SHA and successful machine checks before independent review.
-11. Reclassify risk from the actual candidate diff. If risk rises, invalidate the lower-risk downstream path and create the stronger child plan.
-12. Treat P0/P1 findings and requests for context, repair, replan, risk escalation, quarantine, or stronger supervision as controller inputs.
-13. Keep every Sol invocation at HIGH reasoning or below.
-14. Convert a review/supervisor recommendation into approval only through the protected controller using stored run identity, exact SHA/diff, contract, and real evidence.
-15. Use bounded recovery on failure; if repair budget is exhausted, quarantine rather than creating an orphan repair state.
-16. Never auto-grant `MERGE_READY` from successful model/mesh execution.
-17. Treat merge, deployment, canary, rollback, and production status as external platform actions requiring verified evidence.
+# End-to-end sequence
 
-# Safe start
+1. Validate the installed bundle and policy wiring. Run host acceptance, provider probes, repository audit, and dry-run where available.
+2. Invoke `$problem-investigation` for every reported defect. A report begins as `UNVERIFIED_REPORT`, never as a bug.
+3. Preserve the report verbatim and resolve authoritative sources read-only. Classify expected behavior, environment/configuration/data/provider issues, spec conflicts, security incidents, performance regressions, and confirmed defects separately.
+4. Preserve any dirty or divergent user worktree untouched. Create a clean isolated worktree from the protected/current base and transfer only task-scoped changes by an explicit file allowlist. Never commit, discard, stash, or push unrelated user changes.
+5. For a code-affecting defect, reproduce or otherwise prove it, falsify material alternative hypotheses, prove the causal root, map blast radius/invariants, classify risk, and write the smallest-change plan before implementation.
+6. Establish regression evidence. Preferred proof is the same oracle failing on the exact known-bad base and passing on the candidate. Same-SHA/config FAIL→PASS is flaky or environment-dependent and is not RED→GREEN proof. Never weaken, skip, quarantine, or mock away a required test.
+7. Build/validate the Change Contract only after diagnosis. Index the repository deterministically before model work. Unknowns may raise risk; a model cannot lower deterministic risk.
+8. Execute risk-proportional topology:
+   - R0/R1: Luna writer in isolated worktree → deterministic integration/checks → actual-diff risk → exactly one independent Sol final guard.
+   - R2: focused Terra context → Luna preferred writer with qualified fallback → deterministic integration/checks → bounded independent Terra review.
+   - R3/R4: full independent mesh with planning/test/review dimensions and stronger protected gates.
+   - Every Sol invocation is capped at HIGH reasoning or below.
+9. Reclassify risk from the actual diff. Upward risk invalidates the weaker downstream topology and creates the stronger child plan before approval can continue.
+10. Run targeted validation, adjacent-domain regressions, full configured checks, type/lint/build/security/documentation/i18n/E2E as applicable, dependency audit, migration/history/ledger guards, fresh DB rebuild where applicable, and concurrency tests when shared state is involved.
+11. Perform diff forensics on every changed file. Any unexplained line, unexpected dependency/lockfile/config/permission/API/migration change, PII leak, fail-open path, debug output, secret, or scope expansion must be removed or replanned.
+12. Require a single candidate SHA, exact diff hash, machine evidence, and independent adversarial review. An implementing session cannot approve its own candidate. Takeover requires a fresh closure session.
+13. Use the protected controller for approval. Bind task, exact base/head SHA, diff hash, contract, policy/toolchain hashes, artifact digest where applicable, evidence IDs, risk, reviewer run/session, and open blocking findings. Model prose is never approval.
+14. Use PR and exact-head protected CI. A local green run cannot replace CI. A green earlier commit cannot prove a later commit. Never bypass branch/ruleset/review/environment protection.
+15. Build once and promote by exact digest. Before artifact promotion require a release fingerprint, signed release manifest from the protected path, SBOM, artifact attestation/provenance, exact test evidence, and rollback artifact/strategy. Never invent or locally self-sign protected evidence.
+16. Validate the exact candidate in staging when required. Require health/smoke, the original problem scenario, adjacent critical workflows, observability, synthetic transaction strategy, and risk-appropriate restore/rollback rehearsal. Use synthetic/non-customer data and provider sandboxes where possible.
+17. Continue all local work until `READY_FOR_OWNER_RELEASE`. If protected production authorization is the only missing requirement, stop only that transition, prepare the approval request, and continue unrelated safe tasks.
+18. Production release must use only the repository's canonical protected workflow, exact reviewed main revision, exact validated digest, protected environment, and reviewed migration plan. No direct production SQL, SSH mutation, local production migration, alternate deploy path, or mutable/unverified artifact.
+19. After authorized release, verify the exact running digest, original symptom, expected behavior, health, errors, metrics, synthetic transaction, observation window, and adjacent invariants. Any unresolved safety/data/auth/financial/ZATCA uncertainty routes to containment or rollback.
+20. Close only when exact production evidence proves the issue fixed without material regression. Preserve the compact evidence record and release fingerprint.
 
-```text
-python3 <PLUGIN_ROOT>/scripts/ztad.py validate-bundle --root <PLUGIN_ROOT>
-python3 <PLUGIN_ROOT>/scripts/ztad.py policy-wiring --root <PLUGIN_ROOT>
-python3 <PLUGIN_ROOT>/scripts/ztad.py host-acceptance --plugin-root <PLUGIN_ROOT> --repo <REPOSITORY>
-python3 <PLUGIN_ROOT>/scripts/ztad.py provider-probe --codex-executable codex
-python3 <PLUGIN_ROOT>/scripts/ztad.py model-benchmark --repo <REPOSITORY>
-python3 <PLUGIN_ROOT>/scripts/ztad.py audit --repo <REPOSITORY>
-python3 <PLUGIN_ROOT>/scripts/ztad.py dry-run --repo <REPOSITORY>
-python3 <PLUGIN_ROOT>/scripts/ztad.py mesh-autopilot --repo <REPOSITORY> --contract <CONTRACT.json> --dry-run
-```
+# Never-idle recovery
 
-# Autonomous operation
+- Missing local file/report/template: create it and label it `LOCAL_EVIDENCE_IS_NON_AUTHORITATIVE_UNTIL_PROMOTED_BY_A_PROTECTED_CONTROLLER`.
+- Missing external/protected prerequisite: place only the affected node in `WAITING_EXTERNAL_DEPENDENCY`; continue other safe runnable work.
+- Transient provider/tool failure: bounded backoff, then materially change provider/resource/context/strategy or use deterministic local verification. Never repeat an identical no-progress attempt.
+- Repeated implementation failure: targeted repair → replan → independent takeover → clean reconstruction → quarantine when budget is exhausted.
+- Failed mandatory evidence remains failed; model consensus or E6 approval cannot convert it into success.
 
-```text
-python3 <PLUGIN_ROOT>/scripts/ztad.py mesh-autopilot --repo <REPOSITORY> --contract <CONTRACT.json>
-```
+# High-risk mandatory profiles
 
-Use `mesh-service` under an external process manager for continuous operation. Durable SQLite coordination does not provide multi-host HA and cannot restart the process or host by itself.
+- Auth/RBAC/tenant: allowed/denied roles, cross-tenant denial, ID tampering, server-side enforcement, no protected-data leakage.
+- Payments/invoices/tax/ZATCA: exact totals/rounding/zero values, retries, concurrency, idempotency, duplicate prevention, legal state transitions, signed-document persistence, no real production provider mutation in tests.
+- Database: migration necessity, canonical ledger/history guard, fresh rebuild, RLS/tenant safety, expand→migrate→contract where possible, deterministic/bounded backfill, explicit recovery/restore strategy.
+- External providers: distinguish local/provider state, bounded idempotent retry, sandbox/mock, stale-output rejection, no inferred provider success.
+- Concurrency: parallel reproduction, transaction/lock/constraint proof, no duplicate durable effect.
 
-# Non-negotiable boundaries
+# Mandatory blocker closure model
 
-- No fabricated, stale, or subject-mismatched evidence.
-- No same-run implementation and independent approval.
-- No overlapping writers.
-- No provider output artifact in a code worktree.
-- No review before one checked candidate SHA exists.
-- No deterministic-risk downgrade.
-- No continuation of a lower-risk topology after actual-risk escalation.
-- No test/control weakening.
-- No identical no-progress retry.
-- No Sol reasoning above HIGH.
-- No schema-valid-only perfect quality promotion.
-- No unbounded repair loop.
-- No automatic `MERGE_READY` from model success.
-- No model merge/deploy/production credentials.
-- No claim of full governed delivery until target-host acceptance verifies external gates.
+The following conditions can never be silently downgraded. Resolve them or return the named external/local blocker with exact next action:
+
+- `missing_release_fingerprint`
+- `missing_signed_release_manifest`
+- `missing_artifact_attestation_and_sbom`
+- `missing_staged_restore_rehearsal`
+- `missing_rollback_rehearsal`
+- `missing_observation_and_synthetic_transaction`
+- `missing_production_runtime_health`
+- `missing_protected_supervisor_approval`
+- `migration_ledger_history_guard_failure`
+- `remote_main_dependency_fix_not_applied`
+- `provider_output_missing`
+- `invalid_json_schema`
+- `local_branch_differs_from_protected_main`
+- `dirty_worktree`
 
 # Output
 
-Report exact task/node state, execution mode, route, model run ID, candidate SHA/diff, machine evidence, actual risk, findings, contained blockers, replan/repair state, next action, and queue status. Distinguish runnable-now, delayed, quarantined, dependency-blocked, and terminal work.
+Report exact problem-case state, classification, authoritative sources, reproduction/root-cause/blast-radius evidence, protected base and candidate SHA/diff, isolated-worktree status, regression RED/GREEN evidence, checks, dependency/migration status, actual risk, independent review, CI, artifact fingerprint/digest, manifest/SBOM/attestation/provenance, staging/restore/rollback/observability evidence, protected approvals, runtime evidence, contained blockers, next protected action, and final mode. Never say DONE when an applicable mandatory gate lacks objective evidence.
