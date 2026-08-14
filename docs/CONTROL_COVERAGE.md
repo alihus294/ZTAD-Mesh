@@ -1,10 +1,15 @@
-# Control Coverage — ZTAD Mesh 4.3.6
+# Control Coverage — ZTAD Mesh 4.3.7
 
 ## Deterministically enforced locally
 
+- exact bug-to-production lifecycle ordering from `UNVERIFIED_REPORT` through `CLOSED`, with `BLOCKED` before production and `ROLLBACK_REQUIRED` after production exposure;
+- internal scheduler `DONE` cannot close a bug case;
 - fail-closed problem intake, source-of-truth/classification/root-cause/blast-radius gates before Change Contract creation;
 - protected-base resolution and autonomous clean-worktree isolation without mutating dirty/divergent user work;
-- RED→GREEN base/candidate oracle semantics distinct from same-SHA flakiness;
+- separate `PATCH_IMPLEMENTED` and `REGRESSION_TEST_PROVEN` states;
+- RED→GREEN exact-base/exact-candidate same-oracle semantics distinct from same-SHA flakiness;
+- targeted/full-regression/diff-forensics/independent-review/CI/staging/release/post-deploy state separation;
+- domain evidence requirements for database, auth/tenant, financial, ZATCA, provider, and concurrency changes;
 - strict provider-schema preflight, request fingerprints, stderr/event/receipt preservation, and boundary-only role normalization;
 - deterministic non-authoritative release fingerprints and exact blocker evidence/remediation requests;
 - strict structured input and schema validation;
@@ -40,9 +45,10 @@
 - GitHub branch rulesets, review enforcement, and merge queue;
 - remote protected CI as an enforced merge prerequisite;
 - OIDC and environment protection;
+- protected release authorization;
 - artifact provenance and attestation beyond repository checksum validation;
 - deployment, canary, metric analysis, and rollback;
-- production health and business transaction success;
+- production health, original-problem verification, synthetic transaction, and observation window;
 - provider account quotas, hosted model quality, and model availability.
 
 ## Human/owner decisions that cannot be inferred safely
@@ -51,4 +57,5 @@
 - legal/compliance policy choices not encoded in the contract;
 - creation or disclosure of missing credentials;
 - acceptance of irreversible destructive operations;
+- protected production release authorization when the platform requires the owner;
 - waivers of non-waivable controls.
