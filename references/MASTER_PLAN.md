@@ -1,4 +1,4 @@
-# ZTAD Mesh 4.3.6 — Normative Master Plan
+# ZTAD Mesh 4.3.7 — Normative Master Plan
 
 ## 1. Mission
 
@@ -25,6 +25,7 @@ ZTAD does not promise that every task completes under every condition. Missing c
 11. Dangerous actions fail closed locally; global execution fails contained.
 12. Hosted controls are not inferred from generated configuration.
 13. Production transitions use exact artifacts and runtime evidence.
+14. A reported code defect is never closed by an internal scheduler terminal state; closure requires the authoritative bug-to-production lifecycle.
 
 ## 3. Trust levels
 
@@ -576,3 +577,44 @@ Full governed delivery is available only when target-platform evidence validates
 - Dependency-audit failures MUST be repaired on a clean protected-base candidate with regenerated lock state and exact-head protected CI.
 - Production database mutation MUST NOT be performed from a normal coding-agent shell or ad-hoc direct database session.
 - Production release MUST use only the repository's canonical protected release path and exact validated artifact.
+
+## 28. Exact fail-closed bug-to-production lifecycle
+
+For every reported code-affecting defect, the authoritative case state MUST progress through every state below without skipping:
+
+```text
+UNVERIFIED_REPORT
+→ SOURCE_OF_TRUTH_RESOLVED
+→ ISSUE_CLASSIFIED
+→ BUG_REPRODUCED
+→ ROOT_CAUSE_PROVEN
+→ BLAST_RADIUS_MAPPED
+→ CHANGE_PLANNED
+→ PATCH_IMPLEMENTED
+→ REGRESSION_TEST_PROVEN
+→ TARGETED_VALIDATION_PASS
+→ REGRESSION_VALIDATION_PASS
+→ DIFF_FORENSICS_PASS
+→ INDEPENDENT_REVIEW_PASS
+→ CI_PASS
+→ STAGING_PASS
+→ READY_FOR_OWNER_RELEASE
+→ PRODUCTION_RELEASED
+→ POST_DEPLOY_VERIFIED
+→ CLOSED
+```
+
+- `PATCH_IMPLEMENTED` MUST NOT imply that the bug is fixed.
+- `REGRESSION_TEST_PROVEN` MUST bind the same oracle to a failing exact known-bad protected base and a passing exact candidate.
+- `TARGETED_VALIDATION_PASS`, `REGRESSION_VALIDATION_PASS`, and `DIFF_FORENSICS_PASS` MUST remain distinct claims.
+- `INDEPENDENT_REVIEW_PASS` MUST come from a review context independent of implementation and have verdict `PASS`.
+- `CI_PASS` MUST bind protected required checks to the exact final PR head.
+- `STAGING_PASS` MUST test the exact candidate/artifact and include the original problem scenario.
+- `READY_FOR_OWNER_RELEASE` MUST require release fingerprint, protected signed manifest, SBOM, attestation/provenance, rollback/observability/synthetic evidence, and risk-appropriate restore/rehearsal evidence.
+- `PRODUCTION_RELEASED` MUST require protected release authority and exact revision/artifact evidence and MUST remain distinct from fix verification.
+- `POST_DEPLOY_VERIFIED` MUST prove the original problem is fixed and runtime health, synthetic transaction, and observation window are acceptable.
+- `CLOSED` MUST NOT be reachable from an internal scheduler `DONE`, merge completion, model statement, or deployment-command success.
+- Missing mandatory evidence before production MUST result in `BLOCKED` for the affected transition.
+- Missing, conflicting, or unhealthy mandatory evidence after production exposure MUST result in `ROLLBACK_REQUIRED` or containment.
+- Hotfix mode MAY reduce validation breadth but MUST NOT skip lifecycle states, and database/auth/tenant/financial/ZATCA/security changes retain their high-risk gates.
+- The WorkshopOS profile MUST use only `DEPLOYMENT.md → infra/docs/runbook.md → .github/workflows/deploy.yml` as its canonical production path.
