@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +15,9 @@ from .worktrees import WorktreeManager
 def isolate_problem_case(case: dict[str, Any]) -> dict[str, Any]:
     """Create a managed detached worktree from the exact recorded protected base.
 
-    This operation intentionally does not stash, reset, commit, checkout, or edit
-    the user's original worktree. The only original-repository mutation is Git's
-    managed worktree metadata plus the gitignored `.delivery/ztad/worktrees` tree.
+    The user's original worktree content, HEAD, index, and porcelain status must
+    remain unchanged. The isolated worktree is created under a dedicated system
+    temporary root; only Git's internal linked-worktree metadata changes.
     Returned evidence is local E2 evidence and cannot grant approval/release.
     """
     repository = Path(str(case.get("repository") or "")).resolve()
@@ -31,18 +33,27 @@ def isolate_problem_case(case: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Problem base SHA did not resolve to the recorded exact commit")
 
     original_head = repo.current_head()
+    original_status = repo.status_porcelain()
     original_case_fingerprint = problem_case_fingerprint(case)
     node_id = f"problem-{str(case.get('case_id') or 'case').lower()}-{base_sha[:12]}"
-    manager = WorktreeManager(repo)
-    worktree = manager.create(node_id, base_sha)
-    isolated_repo = GitRepository(worktree)
-    isolated_head = isolated_repo.current_head()
-    if isolated_head != base_sha:
-        manager.remove(worktree)
-        raise RuntimeError("Isolated worktree head does not match the protected base SHA")
-    if repo.current_head() != original_head:
-        manager.remove(worktree)
-        raise RuntimeError("Original worktree HEAD changed during isolation")
+    managed_root = Path(tempfile.mkdtemp(prefix="ztad-problem-worktrees-")).resolve()
+    manager = WorktreeManager(repo, root=managed_root, allow_external_temp_root=True)
+    worktree: Path | None = None
+    try:
+        worktree = manager.create(node_id, base_sha)
+        isolated_repo = GitRepository(worktree)
+        isolated_head = isolated_repo.current_head()
+        if isolated_head != base_sha:
+            raise RuntimeError("Isolated worktree head does not match the protected base SHA")
+        if repo.current_head() != original_head:
+            raise RuntimeError("Original worktree HEAD changed during isolation")
+        if repo.status_porcelain() != original_status:
+            raise RuntimeError("Original worktree status changed during isolation")
+    except Exception:
+        if worktree is not None:
+            manager.remove(worktree)
+        shutil.rmtree(managed_root, ignore_errors=True)
+        raise
 
     evidence_payload = {
         "schema_version": 1,
@@ -54,8 +65,11 @@ def isolate_problem_case(case: dict[str, Any]) -> dict[str, Any]:
         "repository": str(repo.root),
         "protected_base_sha": base_sha,
         "original_head_sha": original_head,
+        "original_status_hash": sha256_bytes(canonical_json(original_status)),
+        "original_status_unchanged": True,
         "isolated_head_sha": isolated_head,
         "worktree": str(worktree),
+        "managed_root": str(managed_root),
         "created_at": utc_now(),
         "local_evidence_notice": LOCAL_EVIDENCE_NOTICE,
     }
@@ -72,6 +86,7 @@ def isolate_problem_case(case: dict[str, Any]) -> dict[str, Any]:
     return {
         "problem_case": updated,
         "worktree": str(worktree),
+        "managed_root": str(managed_root),
         "evidence_id": evidence_id,
         "evidence": evidence_payload,
         "claim_boundary": "Local clean-worktree evidence is E2 only; protected CI/review/release authority remains external.",
