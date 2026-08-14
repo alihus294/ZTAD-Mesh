@@ -1,4 +1,4 @@
-# ZTAD Mesh 4.3.7 — Normative Master Plan
+# ZTAD Mesh 4.3.8 — Normative Master Plan
 
 ## 1. Mission
 
@@ -291,12 +291,13 @@ The frontier supervisor can propose:
 - `ROLLBACK`;
 - `QUARANTINE`.
 
-If the supervisor implements code, that run cannot approve the candidate. A fresh independent closure run reviews the exact resulting SHA.
+`APPROVE` is an advisory model recommendation only. If the supervisor implements code, that run cannot review or recommend approval for the resulting candidate. A fresh independent closure run reviews the exact resulting SHA.
 
 ## 17. Approval controller
 
-A model proposal becomes E6 only when the protected controller verifies:
+A model or supervisor proposal remains advisory. The protected non-model controller may emit E6 only after it independently verifies:
 
+- the configured protected authority for the requested action;
 - stored task/node/model run identity;
 - independent implementation/review identities;
 - contract hash;
@@ -308,7 +309,7 @@ A model proposal becomes E6 only when the protected controller verifies:
 - required closure after takeover;
 - permitted release strategy.
 
-Invented or stale evidence invalidates the proposal. An E6 decision cannot override failed E3 checks.
+The controller MUST NOT create E6 by merely signing, wrapping, or translating a model `APPROVE` recommendation. Production release authorization MUST represent an authorized protected production action outside model self-approval. Invented or stale evidence invalidates the proposal. An E6 decision cannot override failed E3 checks.
 
 ## 18. Loop prevention and recovery
 
@@ -388,7 +389,7 @@ The same verified artifact is promoted through staging and progressive release. 
 
 ### Production
 
-Production verification requires E5 health, synthetic/business transaction, deployed-digest, and observation-window evidence. Workflow success alone is insufficient.
+Production verification requires E5 health, synthetic/business transaction, deployed-digest, and observation-window evidence. Workflow success alone is insufficient. A readiness result is not bug-lifecycle `CLOSED`.
 
 ## 22. Hooks
 
@@ -512,7 +513,7 @@ Full governed delivery is available only when target-platform evidence validates
 - Approval MUST bind to stored run identity, task, contract, exact SHA, diff hash, risk, and registered evidence.
 - Invented, stale, expired, invalidated, weak, or mismatched evidence MUST invalidate approval.
 - A signed negative result MUST remain negative.
-- Model approval MUST NOT authorize merge or deployment directly.
+- Model approval MUST remain advisory and MUST NOT itself create E6 or authorize merge, release, deployment, or production.
 
 ### Loops, recovery, and continuity
 
@@ -557,14 +558,14 @@ Full governed delivery is available only when target-platform evidence validates
 - Every reported defect MUST begin as an unverified report rather than an assumed bug.
 - Investigation MUST resolve the current source of truth read-only before implementation begins.
 - A code-affecting report MUST be classified, reproduced or equivalently proven, causally explained, blast-radius mapped, and planned before a Change Contract is created.
-- A known-bad regression baseline SHOULD use the same oracle that later validates the candidate.
+- For a code-fix case, the regression baseline MUST use the same oracle that later validates the exact candidate, proving FAIL on the exact protected known-bad base and PASS on the exact candidate; model judgment, feasibility exceptions, controller-reviewed waivers, or equivalent evidence MUST NOT substitute for this gate.
 - A same-SHA or same-configuration fail-then-pass rerun MUST NOT be represented as RED-to-GREEN regression proof.
 - A dirty or protected-base-divergent user worktree MUST be preserved untouched while task work proceeds in an isolated clean worktree from the exact protected base.
 - Routine technical choices MUST NOT be delegated to a non-programmer owner when the controller can safely derive and execute them.
 - Missing local evidence files SHOULD be created as explicitly non-authoritative local evidence rather than stopping all progress.
 - An identical no-progress provider, test, or repair attempt MUST NOT be repeated.
 - Missing external authority MUST block only the affected protected transition while unrelated safe runnable work continues.
-- A model MUST NOT convert its own text, confidence, review, or agreement into merge, release, deployment, signing, attestation, or production evidence.
+- A model MUST NOT convert its own text, confidence, review, agreement, or `APPROVE` recommendation into E6, merge, release, deployment, signing, attestation, or production evidence.
 - Strict model-output schemas MUST be validated before provider execution; an invalid schema MUST NOT be misreported as missing structured output.
 - Test/orchestration role aliases MUST be normalized only at the provider/validation boundary and MUST NOT weaken the canonical structured-output schema.
 - Every candidate release MUST have a deterministic fingerprint bound to its exact manifest subject before protected promotion.
@@ -613,7 +614,7 @@ UNVERIFIED_REPORT
 - `READY_FOR_OWNER_RELEASE` MUST require release fingerprint, protected signed manifest, SBOM, attestation/provenance, rollback/observability/synthetic evidence, and risk-appropriate restore/rehearsal evidence.
 - `PRODUCTION_RELEASED` MUST require protected release authority and exact revision/artifact evidence and MUST remain distinct from fix verification.
 - `POST_DEPLOY_VERIFIED` MUST prove the original problem is fixed and runtime health, synthetic transaction, and observation window are acceptable.
-- `CLOSED` MUST NOT be reachable from an internal scheduler `DONE`, merge completion, model statement, or deployment-command success.
+- `CLOSED` MUST NOT be reachable from an internal scheduler `DONE`, merge completion, model statement, deployment-command success, or a readiness result such as `PRODUCTION_VERIFIED`.
 - Missing mandatory evidence before production MUST result in `BLOCKED` for the affected transition.
 - Missing, conflicting, or unhealthy mandatory evidence after production exposure MUST result in `ROLLBACK_REQUIRED` or containment.
 - Hotfix mode MAY reduce validation breadth but MUST NOT skip lifecycle states, and database/auth/tenant/financial/ZATCA/security changes retain their high-risk gates.
