@@ -76,9 +76,27 @@ def test_initialize_problem_case_is_read_only_and_marks_local_evidence(tmp_path)
     case = initialize_problem_case(repo, report="Observed problem")
     assert case["state"] == "UNVERIFIED_REPORT"
     assert case["local_evidence_notice"] == LOCAL_EVIDENCE_NOTICE
-    assert case["base_sha"]
+    assert case["protected_ref"] == "main"
+    assert case["protected_ref_resolved"] is True
+    assert case["base_sha"] == case["local_head_sha"]
     assert (repo / "app.py").read_bytes() == before
     assert not validate_problem_case(case, SCHEMA)
+
+
+def test_divergent_local_branch_binds_case_to_protected_main(tmp_path):
+    repo = _repo(tmp_path)
+    import subprocess
+    protected = subprocess.run(["git", "-C", str(repo), "rev-parse", "main"], check=True, text=True, capture_output=True).stdout.strip()
+    _git(repo, "switch", "-c", "work-in-progress")
+    (repo / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+    _git(repo, "add", "app.py")
+    _git(repo, "commit", "-m", "local work")
+    local = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, text=True, capture_output=True).stdout.strip()
+    case = initialize_problem_case(repo, report="Reported from a divergent branch", protected_ref="main")
+    assert case["base_sha"] == protected
+    assert case["local_head_sha"] == local
+    assert case["base_sha"] != case["local_head_sha"]
+    assert case["worktree_status"]["diverged_from_protected_base"] is True
 
 
 def test_schema_rejects_unexpected_properties(tmp_path):
@@ -115,6 +133,7 @@ def test_proven_case_advances_to_handoff_and_generates_valid_change_contract(tmp
     assert not validate_instance(contract, CONTRACT_SCHEMA)
     assert contract["governance"]["requested_risk"] == "R1"
     assert contract["governance"]["human_decisions"][0]["value"] == problem_case_fingerprint(handed)
+    assert contract["governance"]["human_decisions"][1]["value"] == handed["base_sha"]
 
 
 def test_unresolved_external_dependency_blocks_handoff(tmp_path):
