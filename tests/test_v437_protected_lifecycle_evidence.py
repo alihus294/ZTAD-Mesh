@@ -21,7 +21,7 @@ ARTIFACT = "sha256:" + "e" * 64
 OUTPUT = "sha256:" + "f" * 64
 
 
-def _lifecycle(state: str, *, domains: list[str] | None = None) -> dict:
+def _lifecycle(state: str, *, domains: list[str] | None = None, risk: str = "R3") -> dict:
     return {
         "schema_version": 1,
         "protocol_version": "WorkshopOS-Fail-Closed-Bug-to-Production-v1",
@@ -40,7 +40,7 @@ def _lifecycle(state: str, *, domains: list[str] | None = None) -> dict:
         "head_sha": SHA1,
         "diff_hash": DIFF,
         "artifact_digest": ARTIFACT,
-        "risk": "R3",
+        "risk": risk,
         "domains": domains or ["GENERAL"],
         "canonical_deployment_chain": [],
         "change_contract_hash": CONTRACT,
@@ -140,7 +140,9 @@ def test_security_domain_is_a_mandatory_targeted_validation_gate():
 
 
 def test_ready_for_owner_release_rejects_non_e6_supervisor_approval(tmp_path: Path):
-    lifecycle = _lifecycle("STAGING_PASS")
+    # Use R2 so this test isolates the approval-strength predicate; R3/R4
+    # restore/rehearsal requirements are tested separately and remain intact.
+    lifecycle = _lifecycle("STAGING_PASS", risk="R2")
     required = POLICY["gates"]["READY_FOR_OWNER_RELEASE"]["required_evidence"]
 
     build_private, build_root = _key(
@@ -179,7 +181,9 @@ def test_ready_for_owner_release_rejects_non_e6_supervisor_approval(tmp_path: Pa
 
 
 def test_ready_for_owner_release_accepts_e6_controller_approval(tmp_path: Path):
-    lifecycle = _lifecycle("STAGING_PASS")
+    # R2 intentionally avoids conflating the E6 approval test with the
+    # additional R3 staged-restore requirement.
+    lifecycle = _lifecycle("STAGING_PASS", risk="R2")
     required = POLICY["gates"]["READY_FOR_OWNER_RELEASE"]["required_evidence"]
 
     build_private, build_root = _key(
