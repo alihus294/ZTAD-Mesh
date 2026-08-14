@@ -1,4 +1,4 @@
-# Operating Guide — ZTAD Mesh 4.3.6
+# Operating Guide — ZTAD Mesh 4.3.7
 
 ## Modes
 
@@ -14,11 +14,40 @@
 3. Run `provider-probe` for every configured provider.
 4. Run `model-benchmark` using the current catalog and benchmark cases; treat results as routing data only.
 5. Run repository `audit` and `dry-run`.
-6. Validate the Change Contract and deterministic risk.
-7. Run `mesh-autopilot --dry-run`.
-8. Inspect execution mode, model-call count, route preview, write scopes, dependencies, machine checks, and risk policy.
-9. Start bounded operation only when the plan is consistent with the risk and host acceptance.
-10. Use `mesh-service` only under an external process manager if continuous operation is required.
+6. For reported defects, initialize the problem case and exact bug lifecycle before implementation. WorkshopOS uses the `workshopos` lifecycle profile and its canonical deployment chain.
+7. Validate the Change Contract and deterministic risk only after `CHANGE_PLANNED`.
+8. Run `mesh-autopilot --dry-run`.
+9. Inspect execution mode, model-call count, route preview, write scopes, dependencies, machine checks, and risk policy.
+10. Start bounded operation only when the plan is consistent with the risk and host acceptance.
+11. Use `mesh-service` only under an external process manager if continuous operation is required.
+
+## Bug-to-production lifecycle
+
+The authoritative bug record follows:
+
+```text
+UNVERIFIED_REPORT
+→ SOURCE_OF_TRUTH_RESOLVED
+→ ISSUE_CLASSIFIED
+→ BUG_REPRODUCED
+→ ROOT_CAUSE_PROVEN
+→ BLAST_RADIUS_MAPPED
+→ CHANGE_PLANNED
+→ PATCH_IMPLEMENTED
+→ REGRESSION_TEST_PROVEN
+→ TARGETED_VALIDATION_PASS
+→ REGRESSION_VALIDATION_PASS
+→ DIFF_FORENSICS_PASS
+→ INDEPENDENT_REVIEW_PASS
+→ CI_PASS
+→ STAGING_PASS
+→ READY_FOR_OWNER_RELEASE
+→ PRODUCTION_RELEASED
+→ POST_DEPLOY_VERIFIED
+→ CLOSED
+```
+
+A failed mandatory gate becomes `BLOCKED` before production and `ROLLBACK_REQUIRED` after production exposure. Internal scheduler `DONE` is not bug closure.
 
 ## Normal autonomous flow
 
@@ -34,7 +63,7 @@ deterministic index
 → approval/evidence controller
 ```
 
-This normal path uses exactly two model calls. Any upward actual-risk result invalidates the fast path before the Sol guard and submits the stronger required topology.
+This normal path uses exactly two model calls. Any upward actual-risk result invalidates the fast path before the Sol guard and submits the stronger required topology. The internal path still has to satisfy each authoritative bug-lifecycle state when the task is a reported defect.
 
 ### R2 — Bounded Mesh
 
@@ -87,7 +116,7 @@ Catalog values are priors. Measured overrides are accepted only when bound to th
 
 Every writer receives an immutable parent goal, acceptance criteria, allowed scope, and must-not-touch scope. Material work outside scope becomes a child task. One checked candidate SHA must exist before independent review.
 
-Mesh execution may synchronize Continuity through planning, implementation, machine checks, and supervisor review. It does **not** auto-grant `MERGE_READY`; merge/deployment transitions require the protected approval/platform evidence path.
+Mesh execution may synchronize Continuity through planning, implementation, machine checks, and supervisor review. It does **not** auto-grant merge, release, or bug closure; protected evidence is required for `CI_PASS`, `STAGING_PASS`, `READY_FOR_OWNER_RELEASE`, `PRODUCTION_RELEASED`, and `POST_DEPLOY_VERIFIED`.
 
 ## Persistent service
 
