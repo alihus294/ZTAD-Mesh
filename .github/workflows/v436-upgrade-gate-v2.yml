@@ -44,7 +44,9 @@ jobs:
           git show origin/fix/autonomous-delivery-4.3.6:toolkit/ztad/schema_validation.py > toolkit/ztad/schema_validation.py
           git show origin/fix/autonomous-delivery-4.3.6:schemas/agent-result.schema.json > schemas/agent-result.schema.json
           python -B scripts/_v436_upgrade.py
+          python -B scripts/_v436_finalize.py
           test ! -e scripts/_v436_upgrade.py
+          test ! -e scripts/_v436_finalize.py
           test ! -e .github/workflows/v436-upgrade-gate-v2.yml
           test ! -d .ztad-upgrade
           test -d tests
@@ -76,7 +78,7 @@ jobs:
         env:
           PYTHONPATH: toolkit
         run: >-
-          python -B -m pytest -q -W error::ResourceWarning
+          python -B -m pytest -q -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
           tests/test_v43_last_gaps.py
           tests/test_v43_final_hardening.py
           tests/test_v43_runtime_controls.py
