@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 
 import pytest
 from pathlib import Path
@@ -31,12 +33,28 @@ def test_windows_command_shim_is_wrapped_without_shell_interpolation(monkeypatch
     argv = _command_argv(["codex", "--version"])
     assert argv[1:3] == ["/d", "/s"]
     assert argv[3] == "/c"
-    assert argv[4].startswith("C:\\Tools\\codex.CMD")
-    assert "--version" in argv[4]
+    assert argv[4] == "call"
+    assert argv[5].startswith("C:\\Tools\\codex.CMD")
+    assert "--version" in argv[6]
     path_argv = _command_argv(["codex", "--output-schema", r"C:\\Repo (test)\\schema.json"])
-    assert "Repo (test)" in path_argv[4]
+    assert any("Repo (test)" in item for item in path_argv)
     with pytest.raises(ValueError, match="metacharacters"):
         _command_argv(["codex", "bad&value"])
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows command shims are only executable on Windows")
+def test_windows_command_shim_executes_from_a_spaced_path(tmp_path):
+    shim = tmp_path / "Program Files" / "probe.cmd"
+    shim.parent.mkdir()
+    shim.write_text("@echo off\r\necho %~1\r\n", encoding="utf-8")
+
+    result = subprocess.run(
+        _command_argv([str(shim), r"C:\Repo (test)\schema.json"]),
+        text=True, capture_output=True, check=False, shell=False, timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == r"C:\Repo (test)\schema.json"
 
 
 def test_router_uses_economy_for_low_risk_navigation():

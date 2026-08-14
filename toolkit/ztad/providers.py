@@ -18,8 +18,8 @@ from .util import atomic_write, canonical_json, load_data, sha256_bytes, utc_now
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _PLATFORM_NAME = os.name
-# Double quotes are retained for argv quoting by ``list2cmdline``; shell
-# metacharacters and control characters are rejected before the shim is used.
+# Shell metacharacters and control characters are rejected before the shim is
+# invoked through ``cmd.exe``.
 _CMD_UNSAFE_CHARS = frozenset("&|<>^%!")
 
 
@@ -36,7 +36,7 @@ def _command_argv(argv: Sequence[str]) -> list[str]:
         ):
             raise ValueError("Windows command shim arguments contain prohibited shell metacharacters")
         comspec = os.environ.get("COMSPEC") or shutil.which("cmd.exe") or "cmd.exe"
-        return [comspec, "/d", "/s", "/c", subprocess.list2cmdline(command)]
+        return [comspec, "/d", "/s", "/c", "call", *command]
     return command
 
 
