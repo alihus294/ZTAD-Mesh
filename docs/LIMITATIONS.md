@@ -1,4 +1,4 @@
-# Known Limitations — ZTAD Mesh 4.3.6
+# Known Limitations — ZTAD Mesh 4.3.7
 
 1. No system can guarantee completion of an impossible or externally blocked task. ZTAD guarantees containment, durable state, bounded recovery, and continuation of other safe runnable work.
 2. The bundled SQLite stores are single-host. Multi-host execution requires a shared transactional backend or durable workflow platform with equivalent lease/idempotency semantics.
@@ -14,4 +14,4 @@
 12. Release checksums and deterministic builds establish integrity for the published files, not the security of a target download channel or workstation.
 13. Codex hooks require host discovery/trust and must not be the only control.
 14. Windows path/security behavior still requires native host acceptance on the target machine despite cross-platform repository CI.
-15. Production autonomy remains conditional until target-host acceptance, rollback rehearsal, and observed canary behavior succeed.
+15. Production autonomy remains conditional until target-host acceptance, protected release authority, rollback rehearsal, and observed production/canary evidence succeed. The bug lifecycle therefore cannot reach `CLOSED` from an internal scheduler terminal state alone.
