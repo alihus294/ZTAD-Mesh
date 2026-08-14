@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ztad/problem-case.schema.json",
+  "title": "ZTAD Problem Case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "repository",
+    "report",
+    "observed_at",
+    "base_sha",
+    "working_branch",
+    "worktree_status",
+    "environment",
+    "expected_behavior",
+    "observed_behavior",
+    "supplied_evidence",
+    "authoritative_sources",
+    "source_conflicts",
+    "classification",
+    "classification_evidence",
+    "reproduction",
+    "root_cause",
+    "rejected_hypotheses",
+    "blast_radius",
+    "invariants",
+    "risk",
+    "regression_baseline",
+    "change_plan",
+    "external_dependencies",
+    "local_evidence_notice"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "case_id": {"type": "string", "pattern": "^CASE-[A-Za-z0-9._-]{3,80}$"},
+    "repository": {"type": "string", "minLength": 1},
+    "report": {"type": "string", "minLength": 1},
+    "observed_at": {"type": ["string", "null"], "format": "date-time"},
+    "base_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+    "working_branch": {"type": ["string", "null"]},
+    "worktree_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dirty", "diverged_from_protected_base", "user_worktree_preserved", "isolated_clean_worktree", "evidence_refs"],
+      "properties": {
+        "dirty": {"type": ["boolean", "null"]},
+        "diverged_from_protected_base": {"type": ["boolean", "null"]},
+        "user_worktree_preserved": {"type": ["boolean", "null"]},
+        "isolated_clean_worktree": {"type": ["boolean", "null"]},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "environment": {"type": "object", "additionalProperties": false, "required": ["label", "details"], "properties": {"label": {"type": ["string", "null"]}, "details": {"type": "array", "items": {"type": "string"}}}},
+    "expected_behavior": {"type": ["string", "null"]},
+    "observed_behavior": {"type": ["string", "null"]},
+    "supplied_evidence": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "authoritative_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "authority", "evidence_ref"],
+        "properties": {
+          "source": {"type": "string", "minLength": 1},
+          "authority": {"enum": ["GOVERNING_INSTRUCTION", "EXECUTABLE_SOURCE", "AUTHORIZED_RUNTIME", "TEST_EVIDENCE", "ARCHITECTURE_INTENT", "HISTORICAL_NON_AUTHORITY"]},
+          "evidence_ref": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "source_conflicts": {"type": "array", "items": {"type": "string"}},
+    "classification": {"type": ["string", "null"], "enum": [null, "CONFIRMED_BUG", "EXPECTED_BEHAVIOR", "ENVIRONMENT_ISSUE", "CONFIGURATION_ISSUE", "DATA_ISSUE", "EXTERNAL_DEPENDENCY", "USER_WORKFLOW_ISSUE", "SPEC_CONFLICT", "SECURITY_INCIDENT", "PERFORMANCE_REGRESSION", "INCONCLUSIVE"]},
+    "classification_evidence": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "reproduction": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["preconditions", "action", "input", "expected", "actual", "environment", "deterministic", "observed_frequency", "evidence_refs"],
+      "properties": {
+        "preconditions": {"type": "array", "items": {"type": "string"}},
+        "action": {"type": "string"},
+        "input": {"type": ["string", "null"]},
+        "expected": {"type": "string"},
+        "actual": {"type": "string"},
+        "environment": {"type": "string"},
+        "deterministic": {"type": "boolean"},
+        "observed_frequency": {"type": ["string", "null"]},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "root_cause": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["trigger", "incorrect_state_or_assumption", "propagation", "observable_failure", "affected_source", "evidence_refs"],
+      "properties": {
+        "trigger": {"type": "string"},
+        "incorrect_state_or_assumption": {"type": "string"},
+        "propagation": {"type": "array", "items": {"type": "string"}},
+        "observable_failure": {"type": "string"},
+        "affected_source": {"type": "array", "items": {"type": "string"}},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "rejected_hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hypothesis", "disposition", "evidence_refs"],
+        "properties": {
+          "hypothesis": {"type": "string", "minLength": 1},
+          "disposition": {"enum": ["REJECTED", "INCONCLUSIVE", "SUPPORTED"]},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        }
+      }
+    },
+    "blast_radius": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direct", "adjacent", "security_boundaries", "data_boundaries"],
+      "properties": {
+        "direct": {"type": "array", "items": {"type": "string"}},
+        "adjacent": {"type": "array", "items": {"type": "string"}},
+        "security_boundaries": {"type": "array", "items": {"type": "string"}},
+        "data_boundaries": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "invariants": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "risk": {"type": ["string", "null"], "enum": [null, "R0", "R1", "R2", "R3", "R4"]},
+    "regression_baseline": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["base_sha", "test_or_oracle", "bad_result", "patched_result", "same_oracle", "exception_reason", "evidence_refs"],
+      "properties": {
+        "base_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "test_or_oracle": {"type": ["string", "null"]},
+        "bad_result": {"enum": [null, "FAIL", "PROVEN_BAD_WITH_EQUIVALENT_EVIDENCE"]},
+        "patched_result": {"enum": [null, "PASS"]},
+        "same_oracle": {"type": ["boolean", "null"]},
+        "exception_reason": {"type": ["string", "null"]},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "change_plan": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["root_cause_summary", "intended_fix", "expected_files", "tests", "forbidden_scope", "database_impact", "external_side_effects", "rollback_or_containment"],
+      "properties": {
+        "root_cause_summary": {"type": "string"},
+        "intended_fix": {"type": "string"},
+        "expected_files": {"type": "array", "items": {"type": "string"}},
+        "tests": {"type": "array", "items": {"type": "string"}},
+        "forbidden_scope": {"type": "array", "items": {"type": "string"}},
+        "database_impact": {"type": "string"},
+        "external_side_effects": {"type": "string"},
+        "rollback_or_containment": {"type": "string"}
+      }
+    },
+    "external_dependencies": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "local_evidence_notice": {"const": "LOCAL_EVIDENCE_IS_NON_AUTHORITATIVE_UNTIL_PROMOTED_BY_A_PROTECTED_CONTROLLER"}
+  }
+}
