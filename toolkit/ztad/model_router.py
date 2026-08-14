@@ -14,6 +14,15 @@ FRONTIER_ROLES = {
 WRITE_ROLES = {"worker", "repairer", "supervisor_takeover"}
 
 
+def _strict_float(value: Any, field: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"Model {field} must be numeric, not boolean")
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"Model {field} must be numeric") from exc
+
+
 @dataclass(frozen=True)
 class TaskProfile:
     task_family: str
@@ -78,17 +87,17 @@ class ModelCandidate:
         if not sandboxes or any(item not in {"read-only", "workspace-write"} for item in sandboxes):
             raise ValueError("Model candidate has an unsafe or unsupported sandbox")
         try:
-            task_quality = {str(k): float(v) for k, v in (value.get("task_quality", {}) or {}).items()}
+            task_quality = {
+                str(k): _strict_float(v, "task quality values")
+                for k, v in (value.get("task_quality", {}) or {}).items()
+            }
         except (AttributeError, TypeError, ValueError) as exc:
             raise ValueError("Model task quality values must be numeric") from exc
         if any(not math.isfinite(score) or not 0.0 <= score <= 1.0 for score in task_quality.values()):
             raise ValueError("Model task quality values must be between 0 and 1")
-        try:
-            reliability = float(value.get("reliability", 0.9))
-            cost_index = float(value.get("cost_index", 1.0))
-            latency_index = float(value.get("latency_index", 1.0))
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Model reliability, cost, and latency values must be numeric") from exc
+        reliability = _strict_float(value.get("reliability", 0.9), "reliability")
+        cost_index = _strict_float(value.get("cost_index", 1.0), "cost index")
+        latency_index = _strict_float(value.get("latency_index", 1.0), "latency index")
         if not math.isfinite(reliability) or not 0.0 <= reliability <= 1.0:
             raise ValueError("Model reliability must be between 0 and 1")
         if not math.isfinite(cost_index) or not math.isfinite(latency_index) or cost_index <= 0 or latency_index <= 0:

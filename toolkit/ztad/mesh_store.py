@@ -18,6 +18,15 @@ MESH_TERMINAL_STATES = {"SUCCEEDED", "FAILED", "QUARANTINED", "CANCELLED", "SUPE
 MESH_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
+def _strict_float(value: Any, field: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be numeric, not boolean")
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field} must be numeric") from exc
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -657,12 +666,9 @@ class MeshStore:
             raise ValueError("registry_id and task_family are required")
         if not isinstance(success, bool):
             raise ValueError("success must be a boolean")
-        try:
-            quality = float(quality)
-            latency = float(latency)
-            cost = float(cost)
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError("quality, latency, and cost must be numeric") from exc
+        quality = _strict_float(quality, "quality")
+        latency = _strict_float(latency, "latency")
+        cost = _strict_float(cost, "cost")
         if not math.isfinite(quality) or not 0.0 <= quality <= 1.0:
             raise ValueError("quality must be finite and between 0 and 1")
         if not math.isfinite(latency) or latency <= 0:

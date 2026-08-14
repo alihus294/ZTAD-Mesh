@@ -20,6 +20,7 @@ from .mesh_plan import build_mesh_plan, write_mesh_plan
 from .mesh_store import MeshStore
 from .model_router import AdaptiveModelRouter, RouteDecision, TaskProfile
 from .orchestrator import ContinuityStore
+from .path_security import is_link_like
 from .providers import ProviderRegistry, ProviderRunRequest, ProviderRunResult
 from .repository import GitRepository
 from .repository_index import assess_context_sufficiency, build_repository_index
@@ -41,8 +42,8 @@ def _is_relative_to(path: Path, root: Path) -> bool:
 def _reject_symlink_ancestors(path: Path) -> None:
     current = path
     while True:
-        if current.is_symlink():
-            raise ValueError(f"Managed artifact path has a symlink ancestor: {current}")
+        if is_link_like(current):
+            raise ValueError(f"Managed artifact path has a symlink or reparse-point ancestor: {current}")
         if current.parent == current:
             return
         current = current.parent
@@ -502,6 +503,7 @@ class MeshRuntime:
         path = self.output_root / f"{node_id}-{run_id}{suffix}"
         if not _is_relative_to(path, self.output_root):
             raise ValueError("Managed output path escapes output root")
+        _reject_symlink_ancestors(path)
         if path.exists() or path.is_symlink():
             raise FileExistsError(f"Managed output artifact already exists: {path}")
         return path

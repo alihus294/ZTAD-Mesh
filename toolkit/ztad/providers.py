@@ -13,13 +13,14 @@ from pathlib import Path
 from typing import Any, Protocol, Sequence, Mapping
 
 from .schema_validation import validate_instance
+from .path_security import is_link_like
 from .util import atomic_write, canonical_json, load_data, sha256_bytes, utc_now
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _PLATFORM_NAME = os.name
 # Double quotes are retained for argv quoting by ``list2cmdline``; shell
 # metacharacters and control characters are rejected before the shim is used.
-_CMD_UNSAFE_CHARS = frozenset("&|<>^()%!")
+_CMD_UNSAFE_CHARS = frozenset("&|<>^%!")
 
 
 def _command_argv(argv: Sequence[str]) -> list[str]:
@@ -135,14 +136,14 @@ def _prepare_run_artifacts(root: Path, run_id: str) -> tuple[Path, Path, Path]:
     root = Path(os.path.abspath(root))
     current = root
     while True:
-        if current.is_symlink():
-            raise ValueError(f"Provider output path has a symlink ancestor: {current}")
+        if is_link_like(current):
+            raise ValueError(f"Provider output path has a symlink or reparse-point ancestor: {current}")
         if current.parent == current:
             break
         current = current.parent
     root.mkdir(parents=True, exist_ok=True)
-    if root.is_symlink() or not root.is_dir():
-        raise ValueError("Provider output root must be a regular non-symlink directory")
+    if is_link_like(root) or not root.is_dir():
+        raise ValueError("Provider output root must be a regular non-link directory")
     output_path = root / f"{run_id}.result.json"
     event_path = root / f"{run_id}.events.jsonl"
     for path in (output_path, event_path):

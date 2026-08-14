@@ -33,6 +33,8 @@ def test_windows_command_shim_is_wrapped_without_shell_interpolation(monkeypatch
     assert argv[3] == "/c"
     assert argv[4].startswith("C:\\Tools\\codex.CMD")
     assert "--version" in argv[4]
+    path_argv = _command_argv(["codex", "--output-schema", r"C:\\Repo (test)\\schema.json"])
+    assert "Repo (test)" in path_argv[4]
     with pytest.raises(ValueError, match="metacharacters"):
         _command_argv(["codex", "bad&value"])
 
@@ -260,6 +262,10 @@ def test_preferred_provider_is_a_preference_not_a_single_point_of_failure():
     ("cost_index", 0),
     ("cost_index", float("nan")),
     ("latency_index", float("inf")),
+    ("reliability", True),
+    ("cost_index", True),
+    ("latency_index", True),
+    ("task_quality", {"default": True}),
     ("max_parallel", 1000),
     ("max_parallel", "2"),
     ("enabled", "false"),

@@ -3,6 +3,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import re
+import stat
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -10,6 +11,23 @@ from typing import Iterable
 
 _DRIVE = re.compile(r"^[A-Za-z]:[\\/]")
 _UNC = re.compile(r"^(?:\\\\|//)")
+
+
+def is_link_like(path: Path) -> bool:
+    """Return whether *path* is a symlink or filesystem reparse point."""
+    try:
+        if path.is_symlink():
+            return True
+        is_junction = getattr(path, "is_junction", None)
+        if callable(is_junction) and is_junction():
+            return True
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+        reparse_point = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+        return bool(reparse_point and attributes & reparse_point)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
 
 
 def normalize_repo_path(raw: str, *, case_insensitive: bool = False) -> str:

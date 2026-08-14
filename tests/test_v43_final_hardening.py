@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import stat
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,7 @@ from ztad.mesh_plan import build_mesh_plan
 from ztad.mesh_runtime import MeshRuntime
 from ztad.mesh_store import MeshNodeSpec, MeshStore
 from ztad.model_router import AdaptiveModelRouter
+from ztad.path_security import is_link_like
 from ztad.orchestrator import ContinuityStore
 from ztad.providers import MockProvider, ProviderRegistry
 
@@ -54,6 +57,12 @@ def test_model_performance_rejects_nonfinite_or_out_of_range_observations(tmp_pa
         store.record_model_performance(**{**base, "latency": float("inf")})
     with pytest.raises(ValueError, match="cost"):
         store.record_model_performance(**{**base, "cost": 0.0})
+    with pytest.raises(ValueError, match="quality"):
+        store.record_model_performance(**{**base, "quality": True})
+    with pytest.raises(ValueError, match="latency"):
+        store.record_model_performance(**{**base, "latency": True})
+    with pytest.raises(ValueError, match="cost"):
+        store.record_model_performance(**{**base, "cost": True})
 
 
 def test_corrupt_performance_rows_are_ignored_by_routing(tmp_path):
@@ -95,6 +104,16 @@ def test_mesh_runtime_rejects_symlinked_artifact_root(tmp_path):
             router=AdaptiveModelRouter.from_file(CATALOG), providers=ProviderRegistry([]),
             worker_id="symlink", output_root=link,
         )
+
+
+def test_path_security_rejects_windows_reparse_point(monkeypatch, tmp_path):
+    path = tmp_path / "reparse-point"
+    path.mkdir()
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    assert reparse_flag
+    monkeypatch.setattr(Path, "is_symlink", lambda self: False)
+    monkeypatch.setattr(Path, "lstat", lambda self: SimpleNamespace(st_file_attributes=reparse_flag))
+    assert is_link_like(path)
 
 
 def test_provider_fingerprint_and_benchmark_cache_are_deterministic_and_provider_bound():
