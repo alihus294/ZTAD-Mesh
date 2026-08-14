@@ -44,11 +44,11 @@ jobs:
           python - <<'PY'
           import base64, gzip
           from pathlib import Path
-          for name in ("patch_existing_436", "provider_patch_436"):
+          for name in ("patch_existing_436_v2", "provider_patch_436"):
               payload = Path(f".ztad-upgrade/{name}.py.gz.b64").read_text(encoding="utf-8").strip()
               Path(f"/tmp/{name}.py").write_bytes(gzip.decompress(base64.b64decode(payload)))
           PY
-          python /tmp/patch_existing_436.py
+          python /tmp/patch_existing_436_v2.py
           python /tmp/provider_patch_436.py
           rm -rf .ztad-upgrade
           rm -f .github/workflows/v436-upgrade-gate.yml
