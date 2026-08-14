@@ -9,9 +9,21 @@ from typing import Any
 
 from .util import load_data, sha256_bytes, canonical_json, utc_now
 from .schema_validation import validate_instance
-from .providers import parse_jsonl_metadata
+from .providers import _command_argv, parse_jsonl_metadata
 
 VALID_ROLES = {"worker", "supervisor", "closure"}
+_REASONING_ORDER = ("none", "low", "medium", "high", "xhigh", "max", "ultra")
+
+
+def _is_sol_model(model: str) -> bool:
+    return model.casefold().endswith("-sol")
+
+
+def _validate_reasoning_ceiling(model: str, reasoning_effort: str) -> None:
+    if reasoning_effort not in _REASONING_ORDER:
+        raise ValueError(f"Unsupported reasoning effort: {reasoning_effort}")
+    if _is_sol_model(model) and _REASONING_ORDER.index(reasoning_effort) > _REASONING_ORDER.index("high"):
+        raise ValueError("Sol reasoning effort cannot exceed HIGH")
 
 
 @dataclass(frozen=True)
@@ -48,10 +60,13 @@ class ModelRoutingPolicy:
             value = raw_roles.get(role)
             if not isinstance(value, dict):
                 raise ValueError(f"Missing model role configuration: {role}")
+            model = str(value["model"])
+            reasoning_effort = str(value.get("reasoning_effort", "medium"))
+            _validate_reasoning_ceiling(model, reasoning_effort)
             self.roles[role] = ModelRole(
                 role=role,
-                model=str(value["model"]),
-                reasoning_effort=str(value.get("reasoning_effort", "medium")),
+                model=model,
+                reasoning_effort=reasoning_effort,
                 sandbox=str(value.get("sandbox", "read-only")),
                 max_attempts=int(value.get("max_attempts", 1)),
                 fallback_models=tuple(str(item) for item in value.get("fallback_models", []) or []),
@@ -77,6 +92,7 @@ class ModelRoutingPolicy:
 
 
 def build_codex_exec_argv(spec: ModelRunSpec, *, codex_executable: str = "codex") -> list[str]:
+    _validate_reasoning_ceiling(spec.model, spec.reasoning_effort)
     argv = [
         codex_executable,
         "exec",
@@ -138,7 +154,7 @@ def execute_codex_run(
     environment overrides.
     """
     prompt = spec.prompt_path.read_text(encoding="utf-8")
-    argv = build_codex_exec_argv(spec, codex_executable=codex_executable)
+    argv = _command_argv(build_codex_exec_argv(spec, codex_executable=codex_executable))
     started = utc_now()
     proc = subprocess.run(
         argv,

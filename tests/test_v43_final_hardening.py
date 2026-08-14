@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+import stat
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -16,6 +19,7 @@ from ztad.mesh_plan import build_mesh_plan
 from ztad.mesh_runtime import MeshRuntime
 from ztad.mesh_store import MeshNodeSpec, MeshStore
 from ztad.model_router import AdaptiveModelRouter
+from ztad.path_security import is_link_like
 from ztad.orchestrator import ContinuityStore
 from ztad.providers import MockProvider, ProviderRegistry
 
@@ -40,6 +44,76 @@ def test_performance_override_is_shadowed_until_two_observations(tmp_path):
         "implementation", catalog_hash="sha256:catalog", benchmark_suite_hash="sha256:context", minimum_runs=2
     )
     assert current["codex-luna"]["runs"] == 2.0
+
+
+def test_model_performance_rejects_nonfinite_or_out_of_range_observations(tmp_path):
+    store = MeshStore(tmp_path / "mesh.db")
+    base = dict(registry_id="codex-luna", task_family="implementation", success=True, quality=0.9, latency=0.3, cost=0.2)
+    with pytest.raises(ValueError, match="quality"):
+        store.record_model_performance(**{**base, "quality": float("nan")})
+    with pytest.raises(ValueError, match="quality"):
+        store.record_model_performance(**{**base, "quality": 1.1})
+    with pytest.raises(ValueError, match="latency"):
+        store.record_model_performance(**{**base, "latency": float("inf")})
+    with pytest.raises(ValueError, match="cost"):
+        store.record_model_performance(**{**base, "cost": 0.0})
+    with pytest.raises(ValueError, match="quality"):
+        store.record_model_performance(**{**base, "quality": True})
+    with pytest.raises(ValueError, match="latency"):
+        store.record_model_performance(**{**base, "latency": True})
+    with pytest.raises(ValueError, match="cost"):
+        store.record_model_performance(**{**base, "cost": True})
+
+
+def test_corrupt_performance_rows_are_ignored_by_routing(tmp_path):
+    database = tmp_path / "mesh.db"
+    store = MeshStore(database)
+    store.record_model_performance(
+        registry_id="codex-luna", task_family="implementation", success=True,
+        quality=0.9, latency=0.3, cost=0.2,
+    )
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE model_performance SET runs=?", (1.5,))
+        connection.commit()
+    assert store.performance_overrides("implementation") == {}
+
+
+def test_default_mesh_artifacts_are_external_to_the_application_worktree(tmp_path):
+    repo, _ = init_git_repo(tmp_path / "repo")
+    runtime = MeshRuntime(
+        repository=repo, mesh_store=MeshStore(tmp_path / "mesh.db"),
+        continuity_store=ContinuityStore(tmp_path / "continuity.db"),
+        router=AdaptiveModelRouter.from_file(CATALOG), providers=ProviderRegistry([]), worker_id="external",
+    )
+    assert not runtime.output_root.is_relative_to(repo.resolve())
+
+
+def test_mesh_runtime_rejects_symlinked_artifact_root(tmp_path):
+    repo, _ = init_git_repo(tmp_path / "repo")
+    target = tmp_path / "target"
+    target.mkdir()
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlink creation is unavailable on this host")
+    with pytest.raises(ValueError, match="symlink"):
+        MeshRuntime(
+            repository=repo, mesh_store=MeshStore(tmp_path / "mesh.db"),
+            continuity_store=ContinuityStore(tmp_path / "continuity.db"),
+            router=AdaptiveModelRouter.from_file(CATALOG), providers=ProviderRegistry([]),
+            worker_id="symlink", output_root=link,
+        )
+
+
+def test_path_security_rejects_windows_reparse_point(monkeypatch, tmp_path):
+    path = tmp_path / "reparse-point"
+    path.mkdir()
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    assert reparse_flag
+    monkeypatch.setattr(Path, "is_symlink", lambda self: False)
+    monkeypatch.setattr(Path, "lstat", lambda self: SimpleNamespace(st_file_attributes=reparse_flag))
+    assert is_link_like(path)
 
 
 def test_provider_fingerprint_and_benchmark_cache_are_deterministic_and_provider_bound():

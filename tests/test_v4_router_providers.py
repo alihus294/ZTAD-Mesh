@@ -1,14 +1,60 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 
 import pytest
 from pathlib import Path
 
+import ztad.providers as providers
+from ztad.model_benchmark import BenchmarkCase, benchmark_suite_hash
 from ztad.model_router import AdaptiveModelRouter, TaskProfile
-from ztad.providers import CodexExecProvider, ProviderRunRequest, ProviderRegistry, parse_jsonl_metadata
+from ztad.providers import CodexExecProvider, ProviderRunRequest, ProviderRegistry, _command_argv, _prepare_run_artifacts, parse_jsonl_metadata
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _provider_output_path(argv):
+    if "--output-last-message" in argv:
+        return Path(argv[argv.index("--output-last-message") + 1])
+    command_line = argv[-1]
+    marker = "--output-last-message "
+    raw = command_line.split(marker, 1)[1].split(" --ephemeral", 1)[0].strip()
+    return Path(raw[1:-1] if raw.startswith('"') and raw.endswith('"') else raw)
+
+
+def test_windows_command_shim_is_wrapped_without_shell_interpolation(monkeypatch):
+    monkeypatch.setattr(providers, "_PLATFORM_NAME", "nt")
+    monkeypatch.setattr(
+        "ztad.providers.shutil.which",
+        lambda value: "C:\\Tools\\codex.CMD" if value == "codex" else None,
+    )
+    argv = _command_argv(["codex", "--version"])
+    assert argv[1:3] == ["/d", "/s"]
+    assert argv[3] == "/c"
+    assert argv[4] == "call"
+    assert argv[5].startswith("C:\\Tools\\codex.CMD")
+    assert "--version" in argv[6]
+    path_argv = _command_argv(["codex", "--output-schema", r"C:\\Repo (test)\\schema.json"])
+    assert any("Repo (test)" in item for item in path_argv)
+    with pytest.raises(ValueError, match="metacharacters"):
+        _command_argv(["codex", "bad&value"])
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows command shims are only executable on Windows")
+def test_windows_command_shim_executes_from_a_spaced_path(tmp_path):
+    shim = tmp_path / "Program Files" / "probe.cmd"
+    shim.parent.mkdir()
+    shim.write_text("@echo off\r\necho %~1\r\n", encoding="utf-8")
+
+    result = subprocess.run(
+        _command_argv([str(shim), r"C:\Repo (test)\schema.json"]),
+        text=True, capture_output=True, check=False, shell=False, timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == r"C:\Repo (test)\schema.json"
 
 
 def test_router_uses_economy_for_low_risk_navigation():
@@ -28,6 +74,19 @@ def test_router_requires_frontier_for_supervisor_and_sensitive_risk():
         decision = router.route(profile)
         assert decision.candidate.tier == "frontier"
         assert decision.candidate.model == "gpt-5.6-sol"
+
+
+def test_sol_reasoning_ceiling_overrides_profile_and_catalog_effort():
+    router = AdaptiveModelRouter({
+        "models": [{
+            "registry_id": "codex-sol", "provider": "codex", "model": "gpt-5.6-sol",
+            "tier": "frontier", "reasoning_efforts": ["high", "ultra"], "sandboxes": ["read-only"],
+            "task_quality": {"review": 0.95}, "reliability": 0.95,
+            "cost_index": 1.0, "latency_index": 1.0, "max_parallel": 1,
+        }],
+    })
+    decision = router.route(TaskProfile("review", "supervisor", "R4", maximum_reasoning_effort="ultra"))
+    assert decision.reasoning_effort == "high"
 
 
 def test_router_quality_floor_allows_benchmarked_luna_for_r2_and_falls_back_safely():
@@ -74,7 +133,7 @@ def test_codex_provider_locally_rejects_schema_invalid_output(tmp_path, monkeypa
     schema.write_text(json.dumps({"type": "object", "required": ["ok"], "properties": {"ok": {"const": True}}, "additionalProperties": False}), encoding="utf-8")
 
     def fake_run(argv, **kwargs):
-        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path = _provider_output_path(argv)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps({"ok": False}), encoding="utf-8")
         class Result:
@@ -126,6 +185,18 @@ def test_provider_rejects_replayed_run_artifact(tmp_path, monkeypatch):
         ))
 
 
+def test_provider_rejects_symlink_artifact_root(tmp_path):
+    target = tmp_path / "target"
+    target.mkdir()
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlink creation is unavailable on this host")
+    with pytest.raises(ValueError, match="symlink"):
+        _prepare_run_artifacts(link, "fixed")
+
+
 def test_provider_artifacts_can_be_forced_outside_worktree(tmp_path, monkeypatch):
     worktree = tmp_path / "worktree"
     worktree.mkdir()
@@ -135,7 +206,7 @@ def test_provider_artifacts_can_be_forced_outside_worktree(tmp_path, monkeypatch
     observed = {}
 
     def fake_run(argv, **kwargs):
-        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path = _provider_output_path(argv)
         observed["output_path"] = output_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text('{"ok":true}', encoding="utf-8")
@@ -154,6 +225,36 @@ def test_provider_artifacts_can_be_forced_outside_worktree(tmp_path, monkeypatch
     assert result.success
     assert observed["output_path"].is_relative_to(artifact_dir.resolve())
     assert not list(worktree.rglob("*.result.json"))
+    assert not (worktree / ".delivery").exists()
+
+
+def test_provider_default_artifacts_are_external_to_worktree(tmp_path, monkeypatch):
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    schema = tmp_path / "schema.json"
+    schema.write_text('{"type":"object","required":["ok"],"properties":{"ok":{"const":true}},"additionalProperties":false}', encoding="utf-8")
+    observed = {}
+
+    def fake_run(argv, **kwargs):
+        output_path = _provider_output_path(argv)
+        observed["output_path"] = output_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text('{"ok":true}', encoding="utf-8")
+        class Result:
+            returncode = 0
+            stdout = json.dumps({"thread_id": "session"}) + "\n"
+            stderr = ""
+        return Result()
+
+    monkeypatch.setattr("ztad.providers.subprocess.run", fake_run)
+    monkeypatch.setattr("ztad.providers.tempfile.gettempdir", lambda: str(tmp_path))
+    result = CodexExecProvider(executable="codex").run(ProviderRunRequest(
+        task_id="t", role="worker", registry_id="x", model="m", reasoning_effort="medium",
+        sandbox="workspace-write", prompt="p", output_schema=schema, cwd=worktree, run_id="default-external",
+    ))
+    assert result.success
+    assert observed["output_path"].is_relative_to(tmp_path / "ztad-provider-runs")
+    assert not observed["output_path"].is_relative_to(worktree)
     assert not (worktree / ".delivery").exists()
 
 
@@ -177,7 +278,15 @@ def test_preferred_provider_is_a_preference_not_a_single_point_of_failure():
     ("sandboxes", ["danger-full-access"]),
     ("reliability", 1.5),
     ("cost_index", 0),
+    ("cost_index", float("nan")),
+    ("latency_index", float("inf")),
+    ("reliability", True),
+    ("cost_index", True),
+    ("latency_index", True),
+    ("task_quality", {"default": True}),
     ("max_parallel", 1000),
+    ("max_parallel", "2"),
+    ("enabled", "false"),
 ])
 def test_router_rejects_unsafe_or_nonsensical_catalog_values(field, value):
     item = {
@@ -236,3 +345,15 @@ def test_benchmark_artifacts_default_to_temporary_directory(tmp_path):
     assert not (tmp_path / ".delivery").exists()
     assert observed["artifact_dir"] is not None
     assert not observed["artifact_dir"].exists(), "temporary benchmark artifacts must be cleaned"
+
+
+def test_benchmark_suite_hash_binds_schema_content_not_checkout_path(tmp_path):
+    first_schema = tmp_path / "one" / "schema.json"
+    second_schema = tmp_path / "two" / "schema.json"
+    first_schema.parent.mkdir()
+    second_schema.parent.mkdir()
+    first_schema.write_text('{"type":"object"}', encoding="utf-8")
+    second_schema.write_text('{"type":"object"}', encoding="utf-8")
+    first = BenchmarkCase("case", "review", "planner", "R1", "prompt", first_schema, {})
+    second = BenchmarkCase("case", "review", "planner", "R1", "prompt", second_schema, {})
+    assert benchmark_suite_hash([first]) == benchmark_suite_hash([second])

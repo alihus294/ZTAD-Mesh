@@ -11,7 +11,7 @@ from .agent_output import validate_agent_result
 from .model_router import AdaptiveModelRouter, ModelCandidate
 from .providers import ProviderRegistry, ProviderRunRequest
 from .schema_validation import validate_instance
-from .util import canonical_json, load_data, sha256_bytes, utc_now
+from .util import canonical_json, load_data, sha256_bytes, sha256_file, utc_now
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ def benchmark_suite_hash(cases: Iterable[BenchmarkCase]) -> str:
     material = [
         {
             "case_id": case.case_id, "task_family": case.task_family, "role": case.role,
-            "risk": case.risk, "prompt": case.prompt, "schema": str(case.output_schema),
+            "risk": case.risk, "prompt": case.prompt, "schema_hash": sha256_file(case.output_schema),
             "assertions": case.assertions,
         }
         for case in cases
@@ -112,8 +112,14 @@ class ModelBenchmarkRunner:
         self.providers = providers
 
     def _reasoning(self, candidate: ModelCandidate) -> str:
-        preference = ["high", "medium", "xhigh", "max", "low", "none", "ultra"]
-        return next((item for item in preference if item in candidate.reasoning_efforts), candidate.reasoning_efforts[0])
+        if candidate.registry_id == "codex-sol" or candidate.model.casefold().endswith("-sol"):
+            preference = ["high", "medium", "low", "none"]
+        else:
+            preference = ["high", "medium", "xhigh", "max", "low", "none", "ultra"]
+        selected = next((item for item in preference if item in candidate.reasoning_efforts), None)
+        if selected is None:
+            raise ValueError(f"Candidate {candidate.registry_id} has no reasoning effort within its safety ceiling")
+        return selected
 
     def run(
         self,

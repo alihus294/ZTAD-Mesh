@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import concurrent.futures
 import copy
+import hashlib
 import json
+import os
 import re
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass
@@ -17,6 +20,7 @@ from .mesh_plan import build_mesh_plan, write_mesh_plan
 from .mesh_store import MeshStore
 from .model_router import AdaptiveModelRouter, RouteDecision, TaskProfile
 from .orchestrator import ContinuityStore
+from .path_security import is_link_like
 from .providers import ProviderRegistry, ProviderRunRequest, ProviderRunResult
 from .repository import GitRepository
 from .repository_index import assess_context_sufficiency, build_repository_index
@@ -33,6 +37,16 @@ def _is_relative_to(path: Path, root: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _reject_symlink_ancestors(path: Path) -> None:
+    current = path
+    while True:
+        if is_link_like(current):
+            raise ValueError(f"Managed artifact path has a symlink or reparse-point ancestor: {current}")
+        if current.parent == current:
+            return
+        current = current.parent
 
 @dataclass(frozen=True)
 class RuntimeTick:
@@ -101,7 +115,14 @@ class MeshRuntime:
         self.providers = providers
         self.worker_id = worker_id
         self.performance_context_hash = performance_context_hash
-        self.output_root = (output_root or self.repo.root / ".delivery" / "ztad" / "mesh-runs").resolve()
+        if output_root is None:
+            repository_key = hashlib.sha256(str(self.repo.root).encode("utf-8")).hexdigest()[:32]
+            output_root = Path(tempfile.gettempdir()) / "ztad-mesh-runs" / repository_key
+        output_root = Path(os.path.abspath(output_root))
+        _reject_symlink_ancestors(output_root)
+        self.output_root = output_root
+        if _is_relative_to(self.output_root, self.repo.root):
+            raise ValueError("Mesh and provider artifacts must remain outside the application worktree")
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.global_parallel_cap = max(1, global_parallel_cap)
         package_root = Path(__file__).resolve().parents[2]
@@ -479,9 +500,12 @@ class MeshRuntime:
     def _managed_output_path(self, node_id: str, run_id: str, suffix: str) -> Path:
         if not _ARTIFACT_COMPONENT_RE.fullmatch(node_id) or not _ARTIFACT_COMPONENT_RE.fullmatch(run_id):
             raise ValueError("Artifact node/run identifiers must be bounded path-free components")
-        path = (self.output_root / f"{node_id}-{run_id}{suffix}").resolve()
+        path = self.output_root / f"{node_id}-{run_id}{suffix}"
         if not _is_relative_to(path, self.output_root):
             raise ValueError("Managed output path escapes output root")
+        _reject_symlink_ancestors(path)
+        if path.exists() or path.is_symlink():
+            raise FileExistsError(f"Managed output artifact already exists: {path}")
         return path
 
     @staticmethod
@@ -516,11 +540,14 @@ class MeshRuntime:
     def _artifact_paths(self, node_id: str) -> list[Path]:
         result: list[Path] = []
         for artifact in self.mesh_store.dependency_artifacts(node_id):
-            path = Path(artifact["path"]).resolve()
+            path = Path(os.path.abspath(artifact["path"]))
+            _reject_symlink_ancestors(path)
             try:
                 path.relative_to(self.output_root)
             except ValueError as exc:
                 raise ValueError(f"Dependency artifact escapes managed output root: {path}") from exc
+            if path.is_symlink() or not path.is_file():
+                raise ValueError(f"Dependency artifact must be a regular file: {path}")
             if sha256_file(path) != artifact["sha256"]:
                 raise ValueError(f"Dependency artifact hash mismatch: {path}")
             result.append(path)
@@ -557,11 +584,14 @@ class MeshRuntime:
         omitted: list[dict[str, str]] = []
         serialized_bytes = 0
         for artifact in artifacts:
-            path = Path(artifact["path"]).resolve()
+            path = Path(os.path.abspath(artifact["path"]))
+            _reject_symlink_ancestors(path)
             try:
                 path.relative_to(self.output_root)
             except ValueError as exc:
                 raise ValueError(f"Dependency result escapes managed output root: {path}") from exc
+            if path.is_symlink() or not path.is_file():
+                raise ValueError(f"Dependency result must be a regular file: {path}")
             if sha256_file(path) != artifact["sha256"]:
                 raise ValueError(f"Dependency result hash mismatch: {path}")
             data = load_data(path)
@@ -607,7 +637,7 @@ class MeshRuntime:
         path = self._managed_output_path(node["node_id"], result.run_id, ".result.json")
         path.write_text(json.dumps(result.output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return self.mesh_store.register_artifact(
-            node_id=node["node_id"], artifact_type="MODEL_RESULT", path=str(path.resolve()),
+            node_id=node["node_id"], artifact_type="MODEL_RESULT", path=str(path),
             sha256=sha256_file(path), metadata={
                 "run_id": result.run_id, "registry_id": result.registry_id,
                 "provider": result.provider, "role": node["role"],
@@ -747,9 +777,12 @@ class MeshRuntime:
             risk_escalated = RISK_ORDER[actual_risk.risk] > RISK_ORDER[str(node["risk"])]
             contract_path = self._managed_output_path(node["node_id"], run_id, ".contract.json")
             contract_path.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            evidence_dir = (self.output_root / f"{node['node_id']}-{run_id}.evidence").resolve()
+            evidence_dir = self.output_root / f"{node['node_id']}-{run_id}.evidence"
             if not _is_relative_to(evidence_dir, self.output_root):
                 raise ValueError("Check evidence directory escapes output root")
+            _reject_symlink_ancestors(evidence_dir)
+            if evidence_dir.exists() or evidence_dir.is_symlink():
+                raise FileExistsError(f"Check evidence directory already exists: {evidence_dir}")
             package_root = Path(__file__).resolve().parents[2]
             report = run_checks(
                 worktree, base=base_sha, head=candidate_sha, contract_path=contract_path,
@@ -886,7 +919,7 @@ class MeshRuntime:
                     "state": result["state"], "route": None, "validation_errors": ["integration_has_no_dependency_patches"],
                 }
             applied = self.worktrees.apply_patches(worktree, patches)
-            output_path = self.output_root / f"{node['node_id']}-{run_id}.patch"
+            output_path = self._managed_output_path(node["node_id"], run_id, ".patch")
             patch = self.worktrees.patch(worktree, base_sha, output_path)
             errors: list[str] = []
             if not patch["has_changes"]:
@@ -914,7 +947,7 @@ class MeshRuntime:
                     "changed_paths": patch["changed_paths"], "patch": patch,
                 }
             artifact = self.mesh_store.register_artifact(
-                node_id=node["node_id"], artifact_type="COMBINED_PATCH", path=str(output_path.resolve()),
+                node_id=node["node_id"], artifact_type="COMBINED_PATCH", path=str(output_path),
                 sha256=sha256_file(output_path), metadata={"source_patches": applied["applied"], "changed_paths": patch["changed_paths"], "source_models": source_models},
             )
             updated = self.mesh_store.finish_node(

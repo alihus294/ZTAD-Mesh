@@ -14,4 +14,6 @@ This directory contains the curated offline evidence for ZTAD Mesh 4.2.0.
 - `runtime-environment-v42-final.json` — exact local interpreter/package evidence and the unresolved exact-lock boundary.
 - `run_v42_external_validation.py` and `run_v42_mutations.py` — reproducible local validation runners.
 
-These files prove only the recorded offline checks. They do not prove hosted model quality, Codex host discovery, GitHub enforcement, CI protection, deployment, canary health, rollback, or production safety on a target system.
+These files prove only the recorded offline checks for the exact release named by each file. They do not prove hosted model quality, Codex host discovery, GitHub enforcement, CI protection, deployment, canary health, rollback, or production safety on a target system.
+
+The current release identity comes from `VERSION`. Current CI and release evidence must be bound to the exact GitHub commit, workflow run, immutable tag, release assets, and checksums; historical files in this directory are never relabeled as v4.3.5 evidence.

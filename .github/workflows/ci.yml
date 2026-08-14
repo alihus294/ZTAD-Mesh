@@ -49,6 +49,9 @@ jobs:
       - name: Verify installed dependency consistency
         run: python -m pip check
 
+      - name: Verify current release identity
+        run: python -B scripts/verify_version_identity.py --profile source
+
       - name: Compile Python sources
         run: python -m compileall -q toolkit scripts evals tests
 

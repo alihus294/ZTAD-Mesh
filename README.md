@@ -1,4 +1,4 @@
-# Zero-Trust Agentic Delivery Mesh 4.3.4
+# Zero-Trust Agentic Delivery Mesh 4.3.5
 
 ZTAD Mesh is a Codex plugin and deterministic control toolkit for bounded software delivery. Version 4.3 makes orchestration proportional to verified risk: trivial and low-risk work uses a guarded fast path, normal feature work uses a bounded mesh, and sensitive/high-risk work retains the full independent mesh.
 
@@ -16,7 +16,7 @@ ZTAD targets **never idle while safe runnable work exists** without turning mode
 
 The low-risk path is deliberately small. It does not run redundant scout, plan-adjudication, test-oracle, review-fan-out, synthesis, or release-advisor model calls. If the actual candidate diff raises risk, the lower-risk topology is invalidated and a stronger child plan must complete before approval can continue.
 
-## What 4.3.4 implements
+## What 4.3.5 implements
 
 - deterministic repository indexing before model calls;
 - Luna as the preferred low/medium-risk implementation worker when it remains eligible;

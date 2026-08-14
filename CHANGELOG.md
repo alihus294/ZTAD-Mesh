@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.3.5 — 2026-08-13
+
+- Synchronized the current source, package, release-facing, operational, and normative identity surfaces to `4.3.5`.
+- Hardened the version-identity verifier so it fails closed across package metadata, runtime metadata, current release documentation, current operational headings, and source-only issue metadata while preserving the source/distribution profile boundary.
+- Added a visible CI release-identity gate before compilation and test execution.
+- Clarified that historical validation measurements remain historical unless rerun on the exact `v4.3.5` commit; protected CI, immutable release assets, and target-host acceptance provide separate evidence classes.
+- Documented the historical status of retained validation and critical-review snapshots without deleting their findings.
+- Enforced the Sol `HIGH` reasoning ceiling in adaptive routing, legacy command construction, and benchmark execution, including defense against permissive caller profiles and catalogs.
+- Rejected non-finite or malformed model-catalog and learned-performance values, and made benchmark suite hashes depend on schema content rather than checkout-specific paths.
+- Moved default mesh and provider artifacts outside application worktrees and rejected symlinked or stale managed artifact paths.
+- Added Windows command-shim handling for provider probes, host acceptance, and model execution without enabling general shell interpolation.
+- Added a compressed archive size bound alongside existing archive traversal, collision, and compression-ratio checks.
+- Added regression coverage for release identity, Sol reasoning caps, malformed numeric metadata, external artifacts, symlink handling, deterministic benchmark hashes, and oversized archives.
+- Preserved `v4.3.4` and all older releases as immutable historical records; no prior release or tag is rewritten.
+
 ## 4.3.4 — 2026-08-13
 
 - Fixed the remaining Windows packaged-check failure by binding policy-approved `python` and `python3` commands to the exact active Python interpreter before process creation instead of relying on Windows executable search order.

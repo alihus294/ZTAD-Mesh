@@ -125,6 +125,15 @@ def test_safe_extract_rejects_unsupported_compression(tmp_path: Path):
         safe_extract_archive(archive, tmp_path / "extract", expected_top_level=PLUGIN_NAME)
 
 
+def test_safe_extract_rejects_oversized_compressed_archive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    archive = tmp_path / "oversized.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr(f"{PLUGIN_NAME}/file.txt", "content")
+    monkeypatch.setattr("ztad.distribution.MAX_ARCHIVE_COMPRESSED_BYTES", 1)
+    with pytest.raises(ConfigurationError, match="compressed size limit"):
+        safe_extract_archive(archive, tmp_path / "extract", expected_top_level=PLUGIN_NAME)
+
+
 def test_release_metadata_is_reproducible_with_source_date_epoch(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("SOURCE_DATE_EPOCH", "0")
     first_dir = tmp_path / "first-release"

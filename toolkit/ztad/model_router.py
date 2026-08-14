@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Iterable
 
 from .util import load_data
@@ -11,6 +12,15 @@ FRONTIER_ROLES = {
     "data_reviewer", "release_advisor", "plan_adjudicator", "supervisor_takeover",
 }
 WRITE_ROLES = {"worker", "repairer", "supervisor_takeover"}
+
+
+def _strict_float(value: Any, field: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"Model {field} must be numeric, not boolean")
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"Model {field} must be numeric") from exc
 
 
 @dataclass(frozen=True)
@@ -76,22 +86,34 @@ class ModelCandidate:
         sandboxes = tuple(str(x) for x in value.get("sandboxes", ["read-only"]))
         if not sandboxes or any(item not in {"read-only", "workspace-write"} for item in sandboxes):
             raise ValueError("Model candidate has an unsafe or unsupported sandbox")
-        task_quality = {str(k): float(v) for k, v in (value.get("task_quality", {}) or {}).items()}
-        if any(not 0.0 <= score <= 1.0 for score in task_quality.values()):
+        try:
+            task_quality = {
+                str(k): _strict_float(v, "task quality values")
+                for k, v in (value.get("task_quality", {}) or {}).items()
+            }
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError("Model task quality values must be numeric") from exc
+        if any(not math.isfinite(score) or not 0.0 <= score <= 1.0 for score in task_quality.values()):
             raise ValueError("Model task quality values must be between 0 and 1")
-        reliability = float(value.get("reliability", 0.9))
-        if not 0.0 <= reliability <= 1.0:
+        reliability = _strict_float(value.get("reliability", 0.9), "reliability")
+        cost_index = _strict_float(value.get("cost_index", 1.0), "cost index")
+        latency_index = _strict_float(value.get("latency_index", 1.0), "latency index")
+        if not math.isfinite(reliability) or not 0.0 <= reliability <= 1.0:
             raise ValueError("Model reliability must be between 0 and 1")
-        cost_index = float(value.get("cost_index", 1.0))
-        latency_index = float(value.get("latency_index", 1.0))
-        if cost_index <= 0 or latency_index <= 0:
+        if not math.isfinite(cost_index) or not math.isfinite(latency_index) or cost_index <= 0 or latency_index <= 0:
             raise ValueError("Model cost and latency indexes must be positive")
-        max_parallel = int(value.get("max_parallel", 1))
+        max_parallel_value = value.get("max_parallel", 1)
+        if isinstance(max_parallel_value, bool) or not isinstance(max_parallel_value, int):
+            raise ValueError("Model max_parallel must be an integer")
+        max_parallel = max_parallel_value
         if not 1 <= max_parallel <= 64:
             raise ValueError("Model max_parallel must be between 1 and 64")
+        enabled = value.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ValueError("Model enabled must be a boolean")
         return cls(
             registry_id=registry_id, provider=provider, model=model, tier=tier,
-            enabled=bool(value.get("enabled", True)), reasoning_efforts=efforts,
+            enabled=enabled, reasoning_efforts=efforts,
             sandboxes=sandboxes, task_quality=task_quality, reliability=reliability,
             cost_index=cost_index, latency_index=latency_index, max_parallel=max_parallel,
         )
@@ -184,10 +206,15 @@ class AdaptiveModelRouter:
         if not available:
             raise ValueError(f"Candidate {candidate.registry_id} has no supported reasoning effort")
         caps = self.policy.get("maximum_reasoning_effort_by_registry", {}) or {}
-        cap = profile.maximum_reasoning_effort or caps.get(candidate.registry_id)
+        cap_values = [value for value in (profile.maximum_reasoning_effort, caps.get(candidate.registry_id)) if value is not None]
+        # Sol is an independent guard, not a route that can be raised by a
+        # caller-provided profile or an overly permissive catalog entry.
+        if candidate.registry_id == "codex-sol" or candidate.model.casefold().endswith("-sol"):
+            cap_values.append("high")
+        if any(value not in order for value in cap_values):
+            raise ValueError(f"Unsupported reasoning cap for {candidate.registry_id}")
+        cap = min(cap_values, key=order.index) if cap_values else None
         if cap is not None:
-            if cap not in order:
-                raise ValueError(f"Unsupported reasoning cap for {candidate.registry_id}: {cap}")
             cap_index = order.index(cap)
             available = [item for item in available if order.index(item) <= cap_index]
             if not available:

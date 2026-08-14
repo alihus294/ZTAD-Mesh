@@ -181,8 +181,11 @@ def test_evidence_loader_rejects_symlink(tmp_path):
     import json
     real.write_text(json.dumps(evidence()), encoding="utf-8")
     link = tmp_path / "linked.json"
-    link.symlink_to(real)
     import pytest
+    try:
+        link.symlink_to(real)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is unavailable on this host")
     with pytest.raises(Exception, match="symlink"):
         load_evidence_records(link)
 

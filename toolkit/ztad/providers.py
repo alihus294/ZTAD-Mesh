@@ -1,19 +1,44 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, Sequence, Mapping
 
 from .schema_validation import validate_instance
+from .path_security import is_link_like
 from .util import atomic_write, canonical_json, load_data, sha256_bytes, utc_now
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_PLATFORM_NAME = os.name
+# Shell metacharacters and control characters are rejected before the shim is
+# invoked through ``cmd.exe``.
+_CMD_UNSAFE_CHARS = frozenset("&|<>^%!")
+
+
+def _command_argv(argv: Sequence[str]) -> list[str]:
+    """Resolve command shims without enabling shell interpolation."""
+    if not argv:
+        raise ValueError("Provider argv must not be empty")
+    resolved = shutil.which(argv[0]) or argv[0]
+    command = [resolved, *argv[1:]]
+    if _PLATFORM_NAME == "nt" and Path(resolved).suffix.casefold() in {".cmd", ".bat"}:
+        if any(
+            any(ord(character) < 32 or character in _CMD_UNSAFE_CHARS for character in item)
+            for item in command
+        ):
+            raise ValueError("Windows command shim arguments contain prohibited shell metacharacters")
+        comspec = os.environ.get("COMSPEC") or shutil.which("cmd.exe") or "cmd.exe"
+        return [comspec, "/d", "/s", "/c", "call", *command]
+    return command
+
 
 def _safe_run_id(value: str | None) -> str:
     run_id = value or f"run-{uuid.uuid4()}"
@@ -100,16 +125,27 @@ def _safe_provider_env(extra_names: Sequence[str] = ()) -> dict[str, str]:
     return {name: value for name, value in os.environ.items() if name in allow}
 
 
+def _default_provider_artifact_root(cwd: Path) -> Path:
+    cwd_key = os.path.abspath(cwd)
+    run_key = hashlib.sha256(cwd_key.encode("utf-8")).hexdigest()[:32]
+    return Path(tempfile.gettempdir()) / "ztad-provider-runs" / run_key
 
 
 def _prepare_run_artifacts(root: Path, run_id: str) -> tuple[Path, Path, Path]:
     """Create a non-symlink run directory and reject stale/replayed artifacts."""
-    root = root.resolve()
+    root = Path(os.path.abspath(root))
+    current = root
+    while True:
+        if is_link_like(current):
+            raise ValueError(f"Provider output path has a symlink or reparse-point ancestor: {current}")
+        if current.parent == current:
+            break
+        current = current.parent
     root.mkdir(parents=True, exist_ok=True)
-    if root.is_symlink() or not root.is_dir():
-        raise ValueError("Provider output root must be a regular non-symlink directory")
-    output_path = (root / f"{run_id}.result.json").resolve()
-    event_path = (root / f"{run_id}.events.jsonl").resolve()
+    if is_link_like(root) or not root.is_dir():
+        raise ValueError("Provider output root must be a regular non-link directory")
+    output_path = root / f"{run_id}.result.json"
+    event_path = root / f"{run_id}.events.jsonl"
     for path in (output_path, event_path):
         try:
             path.relative_to(root)
@@ -192,7 +228,7 @@ class CodexExecProvider:
         resolved = shutil.which(self.executable)
         if not resolved:
             return {"available": False, "provider": self.name, "reason": "executable_not_found"}
-        proc = subprocess.run([resolved, "--version"], text=True, capture_output=True, check=False, timeout=30, shell=False)
+        proc = subprocess.run(_command_argv([resolved, "--version"]), text=True, capture_output=True, check=False, timeout=30, shell=False)
         return {
             "available": proc.returncode == 0,
             "provider": self.name,
@@ -212,11 +248,11 @@ class CodexExecProvider:
         if self.ignore_rules:
             argv.append("--ignore-rules")
         argv += ["-c", f'model_reasoning_effort="{request.reasoning_effort}"', "-"]
-        return argv
+        return _command_argv(argv)
 
     def run(self, request: ProviderRunRequest) -> ProviderRunResult:
         run_id = _safe_run_id(request.run_id)
-        root = request.artifact_dir or self.output_dir or request.cwd / ".delivery" / "ztad" / "model-runs"
+        root = request.artifact_dir or self.output_dir or _default_provider_artifact_root(request.cwd)
         _, output_path, event_path = _prepare_run_artifacts(root, run_id)
         argv = self._argv(request, output_path)
         started = utc_now()
@@ -349,7 +385,7 @@ class GenericStructuredCommandProvider:
             return {"available": False, "provider": self.name, "reason": "executable_not_found"}
         try:
             proc = subprocess.run(
-                [resolved, *self.version_argv], text=True, capture_output=True, check=False,
+                _command_argv([resolved, *self.version_argv]), text=True, capture_output=True, check=False,
                 timeout=30, shell=False, env=_safe_provider_env(self.allowed_environment_names),
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
@@ -375,11 +411,11 @@ class GenericStructuredCommandProvider:
             if "\x00" in rendered or "\n" in rendered or "\r" in rendered:
                 raise ValueError("Provider argv contains prohibited control characters")
             result.append(rendered)
-        return result
+        return _command_argv(result)
 
     def run(self, request: ProviderRunRequest) -> ProviderRunResult:
         run_id = _safe_run_id(request.run_id)
-        root = request.artifact_dir or self.output_dir or request.cwd / ".delivery" / "ztad" / "model-runs"
+        root = request.artifact_dir or self.output_dir or _default_provider_artifact_root(request.cwd)
         _, output_path, event_path = _prepare_run_artifacts(root, run_id)
         argv = self._argv(request, output_path)
         started = utc_now()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 import uuid
@@ -15,6 +16,15 @@ from .util import canonical_json, sha256_bytes
 MESH_RUNNABLE_STATES = {"READY", "RETRY_READY"}
 MESH_TERMINAL_STATES = {"SUCCEEDED", "FAILED", "QUARANTINED", "CANCELLED", "SUPERSEDED"}
 MESH_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _strict_float(value: Any, field: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be numeric, not boolean")
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field} must be numeric") from exc
 
 
 def _now() -> str:
@@ -652,6 +662,19 @@ class MeshStore:
         catalog_hash: str | None = None,
         benchmark_suite_hash: str | None = None,
     ) -> None:
+        if not registry_id or not task_family:
+            raise ValueError("registry_id and task_family are required")
+        if not isinstance(success, bool):
+            raise ValueError("success must be a boolean")
+        quality = _strict_float(quality, "quality")
+        latency = _strict_float(latency, "latency")
+        cost = _strict_float(cost, "cost")
+        if not math.isfinite(quality) or not 0.0 <= quality <= 1.0:
+            raise ValueError("quality must be finite and between 0 and 1")
+        if not math.isfinite(latency) or latency <= 0:
+            raise ValueError("latency must be a finite positive value")
+        if not math.isfinite(cost) or cost <= 0:
+            raise ValueError("cost must be a finite positive value")
         conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
@@ -703,14 +726,38 @@ class MeshStore:
                     continue
                 if benchmark_suite_hash is not None and row["benchmark_suite_hash"] != benchmark_suite_hash:
                     continue
-                runs = max(1, int(row["runs"]))
-                if runs < minimum_runs:
+                try:
+                    runs_value = row["runs"]
+                    successes_value = row["successes"]
+                    if isinstance(runs_value, bool) or isinstance(successes_value, bool):
+                        raise ValueError("boolean counters are invalid")
+                    runs = int(runs_value)
+                    successes = int(successes_value)
+                    if float(runs) != float(runs_value) or float(successes) != float(successes_value):
+                        raise ValueError("performance counters must be integral")
+                    quality_sum = float(row["quality_sum"])
+                    latency_sum = float(row["latency_sum"])
+                    cost_sum = float(row["cost_sum"])
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if (
+                    runs < minimum_runs
+                    or runs < 1
+                    or successes < 0
+                    or successes > runs
+                    or not math.isfinite(quality_sum)
+                    or not 0.0 <= quality_sum <= runs
+                    or not math.isfinite(latency_sum)
+                    or latency_sum <= 0
+                    or not math.isfinite(cost_sum)
+                    or cost_sum <= 0
+                ):
                     continue
                 result[row["registry_id"]] = {
-                    "quality": float(row["quality_sum"]) / runs,
-                    "reliability": float(row["successes"]) / runs,
-                    "latency_index": max(0.01, float(row["latency_sum"]) / runs),
-                    "cost_index": max(0.01, float(row["cost_sum"]) / runs),
+                    "quality": quality_sum / runs,
+                    "reliability": successes / runs,
+                    "latency_index": max(0.01, latency_sum / runs),
+                    "cost_index": max(0.01, cost_sum / runs),
                     "runs": float(runs),
                 }
             return result

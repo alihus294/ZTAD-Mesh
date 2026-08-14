@@ -1,4 +1,4 @@
-# Target Host Acceptance — ZTAD Mesh 4.3.0
+# Target Host Acceptance — ZTAD Mesh 4.3.5
 
 The package is not production-authoritative merely because it installs or because repository CI is green. Run these gates on the target Codex/GitHub/deployment environment.
 
