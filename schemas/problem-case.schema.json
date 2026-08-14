@@ -7,10 +7,14 @@
   "required": [
     "schema_version",
     "case_id",
+    "state",
     "repository",
     "report",
     "observed_at",
+    "protected_ref",
+    "protected_ref_resolved",
     "base_sha",
+    "local_head_sha",
     "working_branch",
     "worktree_status",
     "environment",
@@ -35,10 +39,14 @@
   "properties": {
     "schema_version": {"const": 1},
     "case_id": {"type": "string", "pattern": "^CASE-[A-Za-z0-9._-]{3,80}$"},
+    "state": {"enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "REGRESSION_BASELINE_PROVEN", "HANDOFF_READY", "WAITING_EXTERNAL_DEPENDENCY", "RESOLVED_NO_CODE", "QUARANTINED"]},
     "repository": {"type": "string", "minLength": 1},
     "report": {"type": "string", "minLength": 1},
     "observed_at": {"type": ["string", "null"], "format": "date-time"},
+    "protected_ref": {"type": "string", "minLength": 1},
+    "protected_ref_resolved": {"type": "boolean"},
     "base_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+    "local_head_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
     "working_branch": {"type": ["string", "null"]},
     "worktree_status": {
       "type": "object",
@@ -52,7 +60,15 @@
         "evidence_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
       }
     },
-    "environment": {"type": "object", "additionalProperties": false, "required": ["label", "details"], "properties": {"label": {"type": ["string", "null"]}, "details": {"type": "array", "items": {"type": "string"}}}},
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "details"],
+      "properties": {
+        "label": {"type": ["string", "null"]},
+        "details": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "expected_behavior": {"type": ["string", "null"]},
     "observed_behavior": {"type": ["string", "null"]},
     "supplied_evidence": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
