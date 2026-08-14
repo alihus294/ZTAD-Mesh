@@ -6,6 +6,8 @@ on:
     paths:
       - .github/ztad-v436-autofix.py
       - .github/workflows/ztad-v436-autofix.yml
+      - docs/SECURITY_CONTROLS.md
+      - docs/THREAT_MODEL.md
 
 permissions:
   contents: write
