@@ -47,6 +47,8 @@ jobs:
           test ! -e scripts/_v436_upgrade.py
           test ! -e .github/workflows/v436-upgrade-gate-v2.yml
           test ! -d .ztad-upgrade
+          test -d tests
+          echo "source_test_files=$(find tests -maxdepth 1 -type f -name 'test_*.py' | wc -l)"
 
       - name: Dependency and release identity gates
         run: |
@@ -97,7 +99,7 @@ jobs:
           python -B scripts/ztad.py build-distribution --root . --output-dir "${{ runner.temp }}/dist-a"
           python -B scripts/ztad.py build-distribution --root . --output-dir "${{ runner.temp }}/dist-b"
 
-      - name: Compare and validate exact package trees
+      - name: Compare, inspect, and validate exact package trees
         shell: bash
         run: |
           set -euo pipefail
@@ -105,6 +107,17 @@ jobs:
           VERSION="$(cat VERSION)"
           PLUGIN="${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-plugin-${VERSION}.zip"
           MARKET="${RUNNER_TEMP}/dist-a/zero-trust-agentic-delivery-marketplace-${VERSION}.zip"
+          python - "$PLUGIN" "$MARKET" <<'PY'
+          import sys, zipfile
+          for raw in sys.argv[1:]:
+              with zipfile.ZipFile(raw) as z:
+                  names = z.namelist()
+              test_names = [name for name in names if "/tests/test_" in name]
+              print(f"archive={raw} members={len(names)} test_files={len(test_names)}")
+              print("first_tests=", test_names[:5])
+              if not test_names:
+                  raise SystemExit(f"archive has no packaged tests: {raw}")
+          PY
           python -B scripts/ztad.py validate-distribution --archive "$PLUGIN" --kind plugin
           python -B scripts/ztad.py validate-distribution --archive "$MARKET" --kind marketplace
           python -B scripts/run_packaged_regressions.py --archive "$PLUGIN" --kind plugin --scope full
