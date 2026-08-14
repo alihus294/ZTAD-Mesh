@@ -2,6 +2,28 @@
   "$id": "https://example.invalid/ztad/bug-lifecycle.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "risk": {
+            "enum": ["R3", "R4"]
+          }
+        },
+        "required": ["risk"]
+      },
+      "then": {
+        "properties": {
+          "domains": {
+            "contains": {
+              "enum": ["DATABASE", "AUTH_TENANT", "FINANCIAL", "ZATCA", "PROVIDER", "CONCURRENCY", "SECURITY"]
+            },
+            "minContains": 1
+          }
+        }
+      }
+    }
+  ],
   "properties": {
     "artifact_digest": {
       "pattern": "^sha256:[0-9a-f]{64}$",
@@ -41,6 +63,7 @@
       "items": {
         "enum": ["GENERAL", "DATABASE", "AUTH_TENANT", "FINANCIAL", "ZATCA", "PROVIDER", "CONCURRENCY", "SECURITY"]
       },
+      "minItems": 1,
       "type": "array",
       "uniqueItems": true
     },
