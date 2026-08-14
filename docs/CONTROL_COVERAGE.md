@@ -1,4 +1,4 @@
-# Control Coverage — ZTAD Mesh 4.3.7
+# Control Coverage — ZTAD Mesh 4.3.8
 
 ## Deterministically enforced locally
 
@@ -8,6 +8,7 @@
 - protected-base resolution and autonomous clean-worktree isolation without mutating dirty/divergent user work;
 - separate `PATCH_IMPLEMENTED` and `REGRESSION_TEST_PROVEN` states;
 - RED→GREEN exact-base/exact-candidate same-oracle semantics distinct from same-SHA flakiness;
+- skill-prompt regressions that prohibit RED→GREEN exceptions, model-to-E6 conversion, missing independent-review `PASS`, and production-verification-as-closure shortcuts;
 - targeted/full-regression/diff-forensics/independent-review/CI/staging/release/post-deploy state separation;
 - domain evidence requirements for database, auth/tenant, financial, ZATCA, provider, and concurrency changes;
 - strict provider-schema preflight, request fingerprints, stderr/event/receipt preservation, and boundary-only role normalization;
