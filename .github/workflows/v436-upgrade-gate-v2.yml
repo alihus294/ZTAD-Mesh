@@ -45,8 +45,11 @@ jobs:
           git show origin/fix/autonomous-delivery-4.3.6:schemas/agent-result.schema.json > schemas/agent-result.schema.json
           python -B scripts/_v436_upgrade.py
           python -B scripts/_v436_finalize.py
+          python -B scripts/_v436_governance_finalize.py
+          python -B scripts/generate_traceability.py
           test ! -e scripts/_v436_upgrade.py
           test ! -e scripts/_v436_finalize.py
+          test ! -e scripts/_v436_governance_finalize.py
           test ! -e .github/workflows/v436-upgrade-gate-v2.yml
           test ! -d .ztad-upgrade
           test -d tests
@@ -64,7 +67,10 @@ jobs:
         run: >-
           python -B -m pytest -q
           tests/test_v436_problem_lifecycle.py
+          tests/test_v436_problem_isolation.py
           tests/test_v436_provider_and_release_contracts.py
+          tests/test_v436_provider_role_boundary.py
+          tests/test_v436_blocker_requests.py
           tests/test_schema_cli.py
           tests/test_context_footprint.py
           tests/test_evidence_agent.py
@@ -87,10 +93,12 @@ jobs:
       - name: Run offline deterministic and adversarial evals
         run: python -B evals/run_evals.py --output "${{ runner.temp }}/eval-summary.json"
 
-      - name: Validate bundle and policy wiring
+      - name: Validate bundle, policy wiring, and regenerated traceability
         run: |
           python -B scripts/ztad.py --output "${{ runner.temp }}/bundle.json" validate-bundle --root .
           python -B scripts/ztad.py --output "${{ runner.temp }}/wiring.json" policy-wiring --root .
+          grep -q '27. Autonomous problem-to-production intake' traceability/requirements.csv
+          grep -q '# ZTAD Mesh 4.3.6 Traceability Matrix' traceability/TRACEABILITY_MATRIX.md
 
       - name: Set deterministic build timestamp
         shell: bash
