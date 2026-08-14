@@ -1,0 +1,51 @@
+name: v4.3.7 Traceability Materialization
+
+on:
+  push:
+    branches: [fix/workshopos-protocol-v4.3.7]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v437-traceability-materialize
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Install exact test environment
+        run: python -m pip install --disable-pip-version-check -r toolkit/requirements-dev.lock.txt
+
+      - name: Regenerate traceability from normative master plan
+        run: python -B scripts/generate_traceability.py
+
+      - name: Verify generated files and remove one-shot workflow
+        shell: bash
+        run: |
+          git diff --check -- traceability/requirements.csv traceability/TRACEABILITY_MATRIX.md
+          git rm .github/workflows/v437-traceability-materialize.yml
+          git add traceability/requirements.csv traceability/TRACEABILITY_MATRIX.md
+          git diff --cached --check
+
+      - name: Commit exact generated traceability
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore: regenerate v4.3.7 traceability'
+          git push origin HEAD:fix/workshopos-protocol-v4.3.7
