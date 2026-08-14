@@ -61,19 +61,42 @@ def _git(repo: Path, *argv: str) -> tuple[int, str]:
     return completed.returncode, (completed.stdout or "").strip()
 
 
-def inspect_repository_read_only(repository: Path) -> dict[str, Any]:
+def _resolve_protected_sha(repo: Path, protected_ref: str) -> tuple[str | None, str | None]:
+    ref = protected_ref.strip()
+    if not ref:
+        return None, None
+    candidates = [ref] if SHA_RE.fullmatch(ref) else [
+        f"refs/remotes/origin/{ref}",
+        f"refs/heads/{ref}",
+        ref,
+    ]
+    for candidate in candidates:
+        code, value = _git(repo, "rev-parse", "--verify", candidate)
+        if code == 0 and SHA_RE.fullmatch(value):
+            return value, candidate
+    return None, None
+
+
+def inspect_repository_read_only(repository: Path, *, protected_ref: str = "main") -> dict[str, Any]:
     repo = repository.resolve()
     code, head = _git(repo, "rev-parse", "HEAD")
     head_sha = head if code == 0 and SHA_RE.fullmatch(head) else None
+    protected_sha, resolved_ref = _resolve_protected_sha(repo, protected_ref)
     code, branch = _git(repo, "branch", "--show-current")
     current_branch = branch if code == 0 and branch else None
     code, status = _git(repo, "status", "--porcelain=v1", "--untracked-files=all")
     dirty = None if code != 0 else bool(status)
+    diverged = None if protected_sha is None or head_sha is None else protected_sha != head_sha
     return {
         "repository": str(repo),
-        "base_sha": head_sha,
+        "protected_ref": protected_ref,
+        "resolved_protected_ref": resolved_ref,
+        "protected_ref_resolved": protected_sha is not None,
+        "protected_base_sha": protected_sha,
+        "local_head_sha": head_sha,
         "working_branch": current_branch,
         "dirty": dirty,
+        "diverged_from_protected_base": diverged,
         "status_lines": status.splitlines() if code == 0 else [],
     }
 
@@ -84,12 +107,25 @@ def initialize_problem_case(
     report: str,
     expected_behavior: str | None = None,
     case_id: str | None = None,
+    protected_ref: str = "main",
 ) -> dict[str, Any]:
     if not isinstance(report, str) or not report.strip():
         raise ValueError("report must be non-empty")
-    inspected = inspect_repository_read_only(repository)
-    digest = sha256_bytes(canonical_json({"repository": inspected["repository"], "report": report.strip(), "base_sha": inspected["base_sha"]}))
+    inspected = inspect_repository_read_only(repository, protected_ref=protected_ref)
+    base_sha = inspected["protected_base_sha"] or inspected["local_head_sha"]
+    digest = sha256_bytes(canonical_json({
+        "repository": inspected["repository"],
+        "report": report.strip(),
+        "protected_ref": protected_ref,
+        "base_sha": base_sha,
+        "local_head_sha": inspected["local_head_sha"],
+    }))
     generated_case_id = "CASE-" + digest.removeprefix("sha256:")[:16].upper()
+    environment_details: list[str] = []
+    if inspected["resolved_protected_ref"]:
+        environment_details.append(f"protected_ref_resolved_as={inspected['resolved_protected_ref']}")
+    elif protected_ref:
+        environment_details.append(f"protected_ref_unresolved={protected_ref}")
     return {
         "schema_version": 1,
         "case_id": case_id or generated_case_id,
@@ -97,16 +133,19 @@ def initialize_problem_case(
         "repository": inspected["repository"],
         "report": report,
         "observed_at": utc_now(),
-        "base_sha": inspected["base_sha"],
+        "protected_ref": protected_ref,
+        "protected_ref_resolved": inspected["protected_ref_resolved"],
+        "base_sha": base_sha,
+        "local_head_sha": inspected["local_head_sha"],
         "working_branch": inspected["working_branch"],
         "worktree_status": {
             "dirty": inspected["dirty"],
-            "diverged_from_protected_base": None,
+            "diverged_from_protected_base": inspected["diverged_from_protected_base"],
             "user_worktree_preserved": None,
             "isolated_clean_worktree": None,
             "evidence_refs": [],
         },
-        "environment": {"label": "local", "details": []},
+        "environment": {"label": "local", "details": environment_details},
         "expected_behavior": expected_behavior,
         "observed_behavior": None,
         "supplied_evidence": [],
@@ -122,7 +161,7 @@ def initialize_problem_case(
         "risk": None,
         "regression_baseline": None,
         "change_plan": None,
-        "external_dependencies": [],
+        "external_dependencies": [] if inspected["protected_ref_resolved"] else [f"protected_ref_unresolved:{protected_ref}"],
         "local_evidence_notice": LOCAL_EVIDENCE_NOTICE,
     }
 
@@ -144,6 +183,8 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
 
     index = PROBLEM_STATES.index(state) if state in PROBLEM_STATES[:9] else -1
     if index >= PROBLEM_STATES.index("SOURCE_OF_TRUTH_RESOLVED"):
+        _require(case.get("protected_ref_resolved") is True, "protected/current base ref must be resolved before source-of-truth completion", errors)
+        _require(bool(case.get("base_sha")), "protected/current base SHA is required", errors)
         _require(bool(case.get("authoritative_sources")), "source-of-truth resolution requires authoritative_sources", errors)
         _require(not case.get("source_conflicts"), "unresolved source conflicts must not be treated as resolved", errors)
     if index >= PROBLEM_STATES.index("ISSUE_CLASSIFIED"):
@@ -180,6 +221,7 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
         if worktree.get("dirty") or worktree.get("diverged_from_protected_base"):
             _require(worktree.get("user_worktree_preserved") is True, "dirty/divergent user worktree must be preserved", errors)
             _require(worktree.get("isolated_clean_worktree") is True, "dirty/divergent work requires an isolated clean worktree", errors)
+            _require(bool(worktree.get("evidence_refs")), "clean-isolation claim requires evidence_refs", errors)
     if index >= PROBLEM_STATES.index("REGRESSION_BASELINE_PROVEN"):
         baseline = case.get("regression_baseline")
         _require(isinstance(baseline, dict), "regression baseline is required", errors)
@@ -190,7 +232,7 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
             if baseline.get("bad_result") == "FAIL":
                 _require(baseline.get("same_oracle") is True, "RED→GREEN requires the same oracle", errors)
             if case.get("base_sha"):
-                _require(baseline.get("base_sha") == case.get("base_sha"), "regression baseline must bind the exact problem base SHA", errors)
+                _require(baseline.get("base_sha") == case.get("base_sha"), "regression baseline must bind the exact protected problem base SHA", errors)
     if state == "HANDOFF_READY":
         _require(not case.get("external_dependencies"), "HANDOFF_READY cannot retain unresolved external dependencies", errors)
     return sorted(set(errors))
@@ -279,7 +321,7 @@ def problem_case_to_change_contract(case: dict[str, Any], schema: dict[str, Any]
             "compatibility": "Preserve adjacent contracts unless explicitly planned and re-reviewed.",
         },
         "verification": {
-            "test_oracles": [{"acceptance_test": str(baseline["test_or_oracle"]), "expected_evidence": "Same oracle fails on recorded bad base and passes on exact candidate."}],
+            "test_oracles": [{"acceptance_test": str(baseline["test_or_oracle"]), "expected_evidence": "Same oracle fails on recorded protected bad base and passes on exact candidate."}],
             "observability": [{"metric": "original_problem_recurrence", "threshold": "0 during the applicable verification window"}],
             "negative_cases": negative_cases,
         },
@@ -294,7 +336,11 @@ def problem_case_to_change_contract(case: dict[str, Any], schema: dict[str, Any]
             "engineering_owner": "ztad-controller",
             "requested_risk": risk,
             "policy_risk": risk,
-            "human_decisions": [{"type": "PROBLEM_CASE_FINGERPRINT", "value": problem_case_fingerprint(case)}],
+            "human_decisions": [
+                {"type": "PROBLEM_CASE_FINGERPRINT", "value": problem_case_fingerprint(case)},
+                {"type": "PROTECTED_BASE_SHA", "value": case["base_sha"]},
+                {"type": "LOCAL_HEAD_SHA", "value": case.get("local_head_sha")},
+            ],
         },
         "budget": {"max_implementation_runs": 3, "max_repair_cycles": 2, "max_review_runs": 3},
     }
