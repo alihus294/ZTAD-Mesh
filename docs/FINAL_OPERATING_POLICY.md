@@ -1,4 +1,4 @@
-# Final Operating Policy — ZTAD Mesh 4.3.5
+# Final Operating Policy — ZTAD Mesh 4.3.6
 
 1. Models propose; deterministic tools, protected controllers, and protected platforms create evidence and authority.
 2. Orchestration cost MUST be proportional to verified risk: R0/R1 use the guarded fast path, R2 uses the bounded mesh, and R3/R4 use the full mesh.

@@ -92,6 +92,12 @@ def _finish(p: Any, self: Any, request: Any, *, run_id: str, argv: Sequence[str]
     else:
         errors.append("provider_output_missing")
     if output is not None:
+        # Test/orchestration role aliases are normalized only at the provider boundary.
+        # The canonical model schema remains intentionally narrow and strict.
+        from .agent_output import normalize_agent_role
+        if "agent_role" in output:
+            output = dict(output)
+            output["agent_role"] = normalize_agent_role(output.get("agent_role"))
         errors.extend(f"schema:{item}" for item in validate_instance(output, schema))
     meta = p.parse_jsonl_metadata(stdout)
     if meta["invalid_jsonl_lines"]: errors.append(f"invalid_jsonl_lines:{meta['invalid_jsonl_lines']}")

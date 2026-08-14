@@ -2,118 +2,45 @@
   "$defs": {
     "finding": {
       "additionalProperties": false,
-      "anyOf": [
-        {
-          "properties": {
-            "file": {
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "file"
-          ]
-        },
-        {
-          "properties": {
-            "symbol": {
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": [
-            "symbol"
-          ]
-        }
-      ],
       "properties": {
         "blast_radius": {
-          "items": {
-            "type": "string"
-          },
+          "items": {"type": "string"},
           "type": "array"
         },
-        "claim": {
-          "minLength": 3,
-          "type": "string"
-        },
+        "claim": {"minLength": 3, "type": "string"},
         "evidence_refs": {
-          "items": {
-            "type": "string"
-          },
+          "items": {"type": "string"},
           "type": "array",
           "uniqueItems": true
         },
-        "falsification_attempt": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "file": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "finding_id": {
-          "pattern": "^REV-[0-9]{3,8}$",
-          "type": "string"
-        },
-        "head_sha": {
-          "pattern": "^[0-9a-f]{40,64}$",
-          "type": "string"
-        },
-        "line_end": {
-          "minimum": 1,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "line_start": {
-          "minimum": 1,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
+        "falsification_attempt": {"minLength": 1, "type": "string"},
+        "file": {"type": ["string", "null"]},
+        "finding_id": {"pattern": "^REV-[0-9]{3,8}$", "type": "string"},
+        "head_sha": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"},
+        "line_end": {"minimum": 1, "type": ["integer", "null"]},
+        "line_start": {"minimum": 1, "type": ["integer", "null"]},
         "reproduction": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "additionalProperties": false,
+          "properties": {
+            "command": {"type": ["string", "null"]},
+            "evidence_refs": {
+              "items": {"type": "string"},
+              "type": "array",
+              "uniqueItems": true
+            },
+            "exit_code": {"type": ["integer", "null"]},
+            "summary": {"type": ["string", "null"]}
+          },
+          "required": ["command", "evidence_refs", "exit_code", "summary"],
+          "type": ["object", "null"]
         },
-        "severity": {
-          "enum": [
-            "P0",
-            "P1",
-            "P2",
-            "P3"
-          ]
-        },
-        "symbol": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "uncertainty": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
+        "severity": {"enum": ["P0", "P1", "P2", "P3"]},
+        "symbol": {"type": ["string", "null"]},
+        "uncertainty": {"type": ["string", "null"]},
         "verification_status": {
-          "enum": [
-            "PROPOSED",
-            "CONFIRMED",
-            "FALSIFIED",
-            "INCONCLUSIVE"
-          ]
+          "enum": ["PROPOSED", "CONFIRMED", "FALSIFIED", "INCONCLUSIVE"]
         },
-        "violated_rule": {
-          "minLength": 1,
-          "type": "string"
-        }
+        "violated_rule": {"minLength": 1, "type": "string"}
       },
       "required": [
         "finding_id",
@@ -124,7 +51,13 @@
         "evidence_refs",
         "blast_radius",
         "falsification_attempt",
-        "verification_status"
+        "verification_status",
+        "file",
+        "symbol",
+        "line_start",
+        "line_end",
+        "reproduction",
+        "uncertainty"
       ],
       "type": "object"
     }
@@ -145,17 +78,12 @@
         "retrospective_analyst"
       ]
     },
-    "base_sha": {
-      "pattern": "^[0-9a-f]{40,64}$",
-      "type": "string"
-    },
+    "base_sha": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"},
     "claims": {
       "items": {
         "additionalProperties": false,
         "properties": {
-          "claim": {
-            "type": "string"
-          },
+          "claim": {"type": "string"},
           "claim_type": {
             "enum": [
               "REPOSITORY_FACT",
@@ -165,25 +93,14 @@
               "PROPOSAL"
             ]
           },
-          "evidence_ref": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "source_sha": {
-            "type": "string"
-          },
-          "verification_status": {
-            "enum": [
-              "VERIFIED",
-              "UNVERIFIED"
-            ]
-          }
+          "evidence_ref": {"type": ["string", "null"]},
+          "source_sha": {"type": "string"},
+          "verification_status": {"enum": ["VERIFIED", "UNVERIFIED"]}
         },
         "required": [
           "claim",
           "claim_type",
+          "evidence_ref",
           "source_sha",
           "verification_status"
         ],
@@ -191,55 +108,27 @@
       },
       "type": "array"
     },
-    "context_id": {
-      "minLength": 8,
-      "type": "string"
-    },
+    "context_id": {"minLength": 8, "type": "string"},
     "files_not_read": {
-      "items": {
-        "type": "string"
-      },
+      "items": {"type": "string"},
       "type": "array",
       "uniqueItems": true
     },
     "files_read": {
-      "items": {
-        "type": "string"
-      },
+      "items": {"type": "string"},
       "type": "array",
       "uniqueItems": true
     },
     "findings": {
-      "items": {
-        "$ref": "#/$defs/finding"
-      },
+      "items": {"$ref": "#/$defs/finding"},
       "maxItems": 5,
       "type": "array"
     },
-    "head_sha": {
-      "pattern": "^[0-9a-f]{40,64}$",
-      "type": "string"
-    },
-    "known_unknowns": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "model_registry_id": {
-      "minLength": 1,
-      "type": "string"
-    },
-    "patch_path": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "prompt_version": {
-      "minLength": 1,
-      "type": "string"
-    },
+    "head_sha": {"pattern": "^[0-9a-f]{40,64}$", "type": "string"},
+    "known_unknowns": {"items": {"type": "string"}, "type": "array"},
+    "model_registry_id": {"minLength": 1, "type": "string"},
+    "patch_path": {"type": ["string", "null"]},
+    "prompt_version": {"minLength": 1, "type": "string"},
     "requested_action": {
       "enum": [
         "VALIDATE_PLAN",
@@ -280,43 +169,14 @@
       ]
     },
     "risk_escalation": {
-      "enum": [
-        null,
-        "R1",
-        "R2",
-        "R3",
-        "R4"
-      ],
-      "type": [
-        "string",
-        "null"
-      ]
+      "enum": [null, "R1", "R2", "R3", "R4"],
+      "type": ["string", "null"]
     },
-    "schema_version": {
-      "const": 1
-    },
-    "task_id": {
-      "minLength": 1,
-      "type": "string"
-    },
-    "tested_scope": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "uncertainties": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "untested_scope": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    }
+    "schema_version": {"const": 1},
+    "task_id": {"minLength": 1, "type": "string"},
+    "tested_scope": {"items": {"type": "string"}, "type": "array"},
+    "uncertainties": {"items": {"type": "string"}, "type": "array"},
+    "untested_scope": {"items": {"type": "string"}, "type": "array"}
   },
   "required": [
     "schema_version",
@@ -336,7 +196,9 @@
     "tested_scope",
     "untested_scope",
     "known_unknowns",
-    "requested_action"
+    "requested_action",
+    "patch_path",
+    "risk_escalation"
   ],
   "title": "ZTAD Agent Result Envelope",
   "type": "object"

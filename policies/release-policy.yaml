@@ -1,4 +1,4 @@
-version: 2
+version: 3
 build_once_promote_by_digest: true
 rebuild_in_production: prohibited
 required_release_manifest: true
@@ -51,6 +51,8 @@ gates:
     - ARTIFACT_ATTESTATION_VERIFIED
     - SBOM_VERIFIED
     - BUILD_PROVENANCE_VERIFIED
+    - RELEASE_FINGERPRINT_VERIFIED
+    - SIGNED_RELEASE_MANIFEST
     by_risk: {}
   RELEASE:
     minimum_trust: E4
@@ -58,6 +60,7 @@ gates:
     - STAGING_SMOKE_PASSED
     - ROLLBACK_READY
     - OBSERVABILITY_READY
+    - ROLLBACK_REHEARSAL_VERIFIED
     required_platform_controls:
     - production_environment
     by_risk:
@@ -67,15 +70,19 @@ gates:
       R3:
         required_approvals:
         - STRONG_SUPERVISOR_RELEASE_APPROVAL
+        required_evidence:
+        - STAGED_RESTORE_REHEARSAL
       R4:
         required_evidence:
         - BACKUP_RESTORE_EVIDENCE
         - REHEARSAL_EVIDENCE
+        - STAGED_RESTORE_REHEARSAL
         required_approvals:
         - STRONG_SUPERVISOR_RELEASE_APPROVAL
   PRODUCTION:
     minimum_trust: E5
     required_evidence:
+    - PROTECTED_RELEASE_AUTHORIZATION
     - EXPECTED_DIGEST_RUNNING
     - HEALTH_CHECKS_PASSED
     - SYNTHETIC_TRANSACTION_PASSED

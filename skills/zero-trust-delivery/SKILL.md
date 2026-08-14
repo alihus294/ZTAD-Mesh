@@ -40,6 +40,15 @@ Ask only when a fact cannot be safely derived or an action requires authority th
 19. After authorized release, verify the exact running digest, original symptom, expected behavior, health, errors, metrics, synthetic transaction, observation window, and adjacent invariants. Any unresolved safety/data/auth/financial/ZATCA uncertainty routes to containment or rollback.
 20. Close only when exact production evidence proves the issue fixed without material regression. Preserve the compact evidence record and release fingerprint.
 
+# Minimal owner entry
+
+For a reported problem, the owner only needs to describe what happened and, if known, what was expected. ZTAD initializes the case against the protected ref, isolates dirty/divergent work automatically, proves the problem before patching, and carries the resulting Change Contract through governed delivery.
+
+```text
+python3 <PLUGIN_ROOT>/scripts/ztad.py problem-init --repo <REPOSITORY> --protected-ref main --report "<what happened>" --expected "<expected behavior>"
+python3 <PLUGIN_ROOT>/scripts/ztad.py problem-isolate --case <CASE.json>
+```
+
 # Never-idle recovery
 
 - Missing local file/report/template: create it and label it `LOCAL_EVIDENCE_IS_NON_AUTHORITATIVE_UNTIL_PROMOTED_BY_A_PROTECTED_CONTROLLER`.
@@ -74,6 +83,16 @@ The following conditions can never be silently downgraded. Resolve them or retur
 - `invalid_json_schema`
 - `local_branch_differs_from_protected_main`
 - `dirty_worktree`
+
+# Protected evidence request preparation
+
+When a mandatory blocker remains, prepare a precise subject-bound request rather than asking the owner a generic technical question or claiming success:
+
+```text
+python3 <PLUGIN_ROOT>/scripts/ztad.py prepare-blocker-request --blocker <BLOCKER> --subject <SUBJECT.json> --reason "<observed missing evidence>"
+```
+
+The request itself is local/non-authoritative and cannot satisfy the gate it requests.
 
 # Output
 

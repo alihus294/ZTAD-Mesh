@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.3.6 — 2026-08-14
+
+- Added deterministic fail-closed problem investigation before Change Contract creation: source-of-truth resolution, classification, reproduction/proof, root cause, blast radius, minimal plan, clean isolation, and regression baseline.
+- Added autonomous owner-interaction rules so routine technical decisions remain agent/controller work while protected authority and irreducible business decisions remain external.
+- Added strict model-output schema preflight and provider request/receipt binding so invalid schemas fail before model execution and are not misreported as missing structured output.
+- Added deterministic local release fingerprints and strengthened protected gates for signed manifests, SBOM/attestation/provenance, restore/rollback rehearsal, observability, protected release authorization, runtime health, synthetic transactions, and observation windows.
+- Made dependency-audit, migration-ledger, dirty/divergent worktree, provider-output, schema, and external-evidence failures explicit fail-closed workflow concerns.
+- Preserved v4.3.5 and all earlier releases/validation artifacts as immutable historical evidence.
+
 ## 4.3.5 — 2026-08-13
 
 - Synchronized the current source, package, release-facing, operational, and normative identity surfaces to `4.3.5`.

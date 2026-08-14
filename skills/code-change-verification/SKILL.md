@@ -18,7 +18,7 @@ description: Verify an exact software change with protected-path checks, test-in
 4. Run only checks registered in `.delivery/ztad/config.json` through `run-checks`. Never invent a command or use a shell string.
 5. Run cheap checks before expensive ones: syntax/format, lint, type checks, targeted tests, build, contracts/security, then broader integration checks.
 6. Local results are `E2`. They cannot be relabeled as protected CI evidence.
-7. A fail-then-pass history is `FLAKY_OR_ENVIRONMENT_DEPENDENT`, not a pass.
+7. A FAIL→PASS rerun on the same SHA/configuration is `FLAKY_OR_ENVIRONMENT_DEPENDENT`, not a pass. Valid RED→GREEN proof binds the same regression oracle to a failing known-bad base SHA and a passing candidate SHA.
 8. Never skip, weaken, quarantine, mock away, or make non-blocking a required test.
 
 # Commands

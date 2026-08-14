@@ -1,7 +1,11 @@
-# Evaluation Strategy — 4.3.5
+# Evaluation Strategy — 4.3.6
 
 Evaluation is divided into independently reported categories:
 
+- unverified-report intake, protected-base resolution, classification, reproduction/root-cause/blast-radius gates, and clean worktree isolation;
+- RED→GREEN regression-baseline proof versus same-SHA flakiness;
+- strict provider-schema preflight, provider receipts, and role-alias normalization at the validation boundary;
+- release fingerprints and all prior blocker remediation/protected-evidence request mappings;
 - package, schema, policy, skill, and release-workflow validation;
 - positive and negative skill activation;
 - deterministic repository index and context sufficiency;
