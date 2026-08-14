@@ -15,15 +15,33 @@ def _canonical_patch_bytes(path: Path) -> bytes:
 
 
 class WorktreeManager:
-    """Create disposable detached worktrees beneath a repository-local managed root."""
+    """Create disposable detached worktrees beneath an explicitly bounded managed root."""
 
-    def __init__(self, repo: GitRepository, root: Path | None = None):
+    def __init__(
+        self,
+        repo: GitRepository,
+        root: Path | None = None,
+        *,
+        allow_external_temp_root: bool = False,
+    ):
         self.repo = repo
-        self.root = (root or repo.root / ".delivery" / "ztad" / "worktrees").resolve()
-        try:
-            self.root.relative_to(repo.root.resolve())
-        except ValueError as exc:
-            raise ValueError("Worktree root must remain inside the repository") from exc
+        candidate = root or repo.root / ".delivery" / "ztad" / "worktrees"
+        if candidate.exists() and candidate.is_symlink():
+            raise ValueError("Worktree root must not be a symlink")
+        self.root = candidate.resolve()
+        if allow_external_temp_root:
+            temp_root = Path(tempfile.gettempdir()).resolve()
+            try:
+                self.root.relative_to(temp_root)
+            except ValueError as exc:
+                raise ValueError("External worktree root must remain inside the system temporary directory") from exc
+            if self.root == temp_root:
+                raise ValueError("External worktree root must be a dedicated subdirectory")
+        else:
+            try:
+                self.root.relative_to(repo.root.resolve())
+            except ValueError as exc:
+                raise ValueError("Worktree root must remain inside the repository") from exc
         self.root.mkdir(parents=True, exist_ok=True)
 
     def create(self, node_id: str, base_sha: str) -> Path:
