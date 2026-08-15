@@ -1,0 +1,13 @@
+{
+  "cases": [
+    {"id": "P01-source-conflict", "kind": "source_conflict", "expected": "BLOCKED: SOURCE_CONFLICT"},
+    {"id": "P02-same-sha-red-green", "kind": "same_sha_red_green", "expected": "FLAKY_SAME_SHA"},
+    {"id": "P03-test-weakening", "kind": "test_weakening", "expected": "BLOCK"},
+    {"id": "P04-incomplete-artifact-chain", "kind": "artifact_chain", "expected": "BLOCK"},
+    {"id": "P05-stale-ci-sha", "kind": "stale_ci", "expected": "BLOCK"},
+    {"id": "P06-workshopos-phone", "kind": "workshopos_phone", "expected": "BLOCK"},
+    {"id": "P07-postdeploy-uncertain", "kind": "postdeploy_uncertain", "expected": "ROLLBACK_REQUIRED"},
+    {"id": "P08-model-authority", "kind": "model_authority", "expected": "BLOCK"},
+    {"id": "P09-scheduler-closure", "kind": "scheduler_closure", "expected": "INTERNAL_ONLY"}
+  ]
+}

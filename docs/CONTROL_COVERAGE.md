@@ -1,4 +1,4 @@
-# Control Coverage — ZTAD Mesh 4.3.8
+# Control Coverage — ZTAD Mesh 4.3.9
 
 ## Deterministically enforced locally
 
@@ -40,6 +40,8 @@
 - bounded repair budgets and non-replayable quarantine reactivation;
 - policy-consumer wiring report;
 - deterministic Plugin/Marketplace packaging, internal manifests, and release checksums.
+- deterministic release SBOM, provenance, release fingerprint, subject checksums, and fail-closed evidence verification;
+- protected release and SBOM attestations are requested for the exact published archive subjects by the release workflow.
 
 ## Advisory until target-host evidence exists
 
@@ -47,7 +49,7 @@
 - remote protected CI as an enforced merge prerequisite;
 - OIDC and environment protection;
 - protected release authorization;
-- artifact provenance and attestation beyond repository checksum validation;
+- target-platform provenance and attestation authority beyond repository-local evidence validation;
 - deployment, canary, metric analysis, and rollback;
 - production health, original-problem verification, synthetic transaction, and observation window;
 - provider account quotas, hosted model quality, and model availability.

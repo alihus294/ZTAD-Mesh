@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.3.9 — 2026-08-15
+
+- Added machine-enforced fail-closed protocol metadata for source conflicts, classification, reproduction, root cause, scope, RED-to-GREEN proof, test integrity, full regression, exact-head CI, staging, progressive exposure, production release, and post-deploy verification.
+- Added subject-bound evidence bundles with immutable artifact identity, release fingerprint, SBOM, provenance, attestation, production revision, and final-state validation.
+- Separated authoritative bug closure from internal scheduler execution, added explicit internal-only completion, autonomous continuation decisions, and host capability limits.
+- Added WorkshopOS profile enforcement for the canonical deployment chain, test-only destination, and dummy browser/E2E data, plus adversarial protocol evaluations and traceability mapping.
+- Preserved v4.3.8 and all earlier releases as immutable historical evidence.
+
 ## 4.3.8 — 2026-08-15
 
 - Removed the remaining skill-level exception language that could treat controller-reviewed “equivalent evidence” as a substitute for exact protected bad-base/exact-candidate same-oracle RED→GREEN proof.

@@ -1,4 +1,4 @@
-# Security Controls — ZTAD Mesh 4.3.8
+# Security Controls — ZTAD Mesh 4.3.9
 
 ## Model distrust
 

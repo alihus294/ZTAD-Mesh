@@ -6,6 +6,16 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from .bug_protocol import (
+    IMPLEMENTATION_CLASSIFICATIONS,
+    NON_CODE_CLASSIFICATIONS,
+    derive_risk_class,
+    validate_authoritative_sources,
+    validate_change_plan,
+    validate_classification_record,
+    validate_reproduction,
+    validate_root_cause,
+)
 from .schema_validation import validate_instance
 from .util import canonical_json, sha256_bytes, utc_now
 
@@ -27,11 +37,7 @@ PROBLEM_STATES = (
     "QUARANTINED",
 )
 
-CODE_CLASSIFICATIONS = {"CONFIRMED_BUG", "SECURITY_INCIDENT", "PERFORMANCE_REGRESSION"}
-NON_CODE_CLASSIFICATIONS = {
-    "EXPECTED_BEHAVIOR", "ENVIRONMENT_ISSUE", "CONFIGURATION_ISSUE", "DATA_ISSUE",
-    "EXTERNAL_DEPENDENCY", "USER_WORKFLOW_ISSUE", "SPEC_CONFLICT", "INCONCLUSIVE",
-}
+CODE_CLASSIFICATIONS = set(IMPLEMENTATION_CLASSIFICATIONS)
 
 TRANSITIONS: dict[str, set[str]] = {
     "UNVERIFIED_REPORT": {"SOURCE_OF_TRUTH_RESOLVED", "WAITING_EXTERNAL_DEPENDENCY", "QUARANTINED"},
@@ -132,6 +138,7 @@ def initialize_problem_case(
         "state": "UNVERIFIED_REPORT",
         "repository": inspected["repository"],
         "report": report,
+        "original_report_verbatim": report,
         "observed_at": utc_now(),
         "protected_ref": protected_ref,
         "protected_ref_resolved": inspected["protected_ref_resolved"],
@@ -147,18 +154,25 @@ def initialize_problem_case(
         },
         "environment": {"label": "local", "details": environment_details},
         "expected_behavior": expected_behavior,
+        "expected": expected_behavior,
         "observed_behavior": None,
+        "observed": None,
         "supplied_evidence": [],
+        "evidence": [],
         "authoritative_sources": [],
         "source_conflicts": [],
+        "unresolved_ambiguities": [],
         "classification": None,
+        "classification_record": None,
         "classification_evidence": [],
         "reproduction": None,
         "root_cause": None,
+        "hypothesis_tests": [],
         "rejected_hypotheses": [],
         "blast_radius": {"direct": [], "adjacent": [], "security_boundaries": [], "data_boundaries": []},
         "invariants": [],
         "risk": None,
+        "risk_class": None,
         "regression_baseline": None,
         "change_plan": None,
         "external_dependencies": [] if inspected["protected_ref_resolved"] else [f"protected_ref_unresolved:{protected_ref}"],
@@ -187,17 +201,21 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
         _require(bool(case.get("base_sha")), "protected/current base SHA is required", errors)
         _require(bool(case.get("authoritative_sources")), "source-of-truth resolution requires authoritative_sources", errors)
         _require(not case.get("source_conflicts"), "unresolved source conflicts must not be treated as resolved", errors)
+        _require(not case.get("unresolved_ambiguities"), "unresolved source ambiguity must not be treated as resolved", errors)
+        errors.extend(validate_authoritative_sources(case.get("authoritative_sources") or [], case.get("source_conflicts") or []))
     if index >= PROBLEM_STATES.index("ISSUE_CLASSIFIED"):
-        _require(case.get("classification") is not None, "classification is required", errors)
-        _require(bool(case.get("classification_evidence")), "classification evidence is required", errors)
+        errors.extend(validate_classification_record(case))
     if state == "RESOLVED_NO_CODE":
         _require(case.get("classification") in NON_CODE_CLASSIFICATIONS, "RESOLVED_NO_CODE requires a non-code classification", errors)
         return sorted(set(errors))
     if index >= PROBLEM_STATES.index("BUG_REPRODUCED"):
-        _require(case.get("classification") in CODE_CLASSIFICATIONS, "implementation path requires a code-affecting classification", errors)
+        _require(case.get("classification") in CODE_CLASSIFICATIONS, "implementation path requires a code/config-affecting classification", errors)
         _require(isinstance(case.get("reproduction"), dict), "reproduction/proof is required", errors)
         reproduction = case.get("reproduction") or {}
         _require(bool(reproduction.get("evidence_refs")), "reproduction requires evidence_refs", errors)
+        errors.extend(validate_reproduction(reproduction))
+        if not isinstance(case.get("reproduction"), dict) or not (case.get("reproduction") or {}).get("evidence_refs"):
+            errors.append("BLOCKED: NOT_REPRODUCED")
     if index >= PROBLEM_STATES.index("ROOT_CAUSE_PROVEN"):
         root = case.get("root_cause")
         _require(isinstance(root, dict), "root cause is required", errors)
@@ -206,10 +224,18 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
             _require(bool(root.get("incorrect_state_or_assumption")), "root cause incorrect state/assumption is required", errors)
             _require(bool(root.get("observable_failure")), "root cause observable failure is required", errors)
             _require(bool(root.get("evidence_refs")), "root cause requires evidence_refs", errors)
+        errors.extend(validate_root_cause(case))
+        if not isinstance(root, dict) or not root.get("evidence_refs"):
+            errors.append("BLOCKED: ROOT_CAUSE_UNPROVEN")
     if index >= PROBLEM_STATES.index("BLAST_RADIUS_MAPPED"):
         _require(bool((case.get("blast_radius") or {}).get("direct")), "blast radius must contain direct surfaces", errors)
         _require(bool(case.get("invariants")), "at least one invariant is required", errors)
         _require(case.get("risk") in {"R0", "R1", "R2", "R3", "R4"}, "risk classification is required", errors)
+        if case.get("risk_class") is not None:
+            expected_class = derive_risk_class(risk=case.get("risk"), domains=(case.get("blast_radius") or {}).get("security_boundaries", []))
+            _require(case.get("risk_class") in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}, "risk_class is invalid", errors)
+            if case.get("risk_class") in {"LOW", "MEDIUM"} and expected_class in {"HIGH", "CRITICAL"}:
+                errors.append("risk_class cannot downgrade deterministic domain risk")
     if index >= PROBLEM_STATES.index("CHANGE_PLANNED"):
         plan = case.get("change_plan")
         _require(isinstance(plan, dict), "change plan is required", errors)
@@ -217,6 +243,7 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
             _require(bool(plan.get("intended_fix")), "change plan intended_fix is required", errors)
             _require(bool(plan.get("expected_files")), "change plan expected_files must be explicit", errors)
             _require(bool(plan.get("tests")), "change plan must name tests/oracles", errors)
+        errors.extend(validate_change_plan(plan))
         worktree = case.get("worktree_status") or {}
         if worktree.get("dirty") or worktree.get("diverged_from_protected_base"):
             _require(worktree.get("user_worktree_preserved") is True, "dirty/divergent user worktree must be preserved", errors)
@@ -226,11 +253,10 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
         baseline = case.get("regression_baseline")
         _require(isinstance(baseline, dict), "regression baseline is required", errors)
         if isinstance(baseline, dict):
-            _require(baseline.get("bad_result") in {"FAIL", "PROVEN_BAD_WITH_EQUIVALENT_EVIDENCE"}, "known-bad baseline must fail or carry equivalent proof", errors)
+            _require(baseline.get("bad_result") == "FAIL", "known-bad baseline must produce an exact failing result", errors)
             _require(bool(baseline.get("test_or_oracle")), "regression baseline requires a test/oracle", errors)
             _require(bool(baseline.get("evidence_refs")), "regression baseline requires evidence_refs", errors)
-            if baseline.get("bad_result") == "FAIL":
-                _require(baseline.get("same_oracle") is True, "RED→GREEN requires the same oracle", errors)
+            _require(baseline.get("same_oracle") is True, "RED→GREEN requires the same oracle", errors)
             if case.get("base_sha"):
                 _require(baseline.get("base_sha") == case.get("base_sha"), "regression baseline must bind the exact protected problem base SHA", errors)
     if state == "HANDOFF_READY":

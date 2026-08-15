@@ -36,7 +36,8 @@ def test_supervisor_recommendation_is_not_protected_authority() -> None:
 
 def test_independent_review_emits_lifecycle_pass_or_block() -> None:
     text = _skill("independent-review")
-    assert "explicit lifecycle verdict (`PASS`, `BLOCK`, or `INSUFFICIENT_EVIDENCE`)" in text
+    assert "explicit lifecycle verdict (`PASS` or `BLOCK`)" in text
+    assert "Only `PASS` or `BLOCK` are valid" in text
     assert "only when metadata verdict is exactly `PASS`" in text
     assert "it is never E6 approval" in text
 

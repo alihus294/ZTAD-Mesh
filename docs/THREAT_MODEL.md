@@ -1,4 +1,4 @@
-# Threat Model — ZTAD Mesh 4.3.8
+# Threat Model — ZTAD Mesh 4.3.9
 
 ## Assets
 

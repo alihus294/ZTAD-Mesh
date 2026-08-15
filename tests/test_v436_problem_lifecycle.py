@@ -48,19 +48,20 @@ def _proven_case(tmp_path: Path) -> dict:
     base = case["base_sha"]
     case.update({
         "state": "REGRESSION_BASELINE_PROVEN",
-        "authoritative_sources": [{"source": "app.py", "authority": "EXECUTABLE_SOURCE", "evidence_ref": "ev-source"}],
+        "authoritative_sources": [{"source": "app.py", "authority": "EXECUTABLE_SOURCE", "authority_reason": "Executable behavior is the highest available implementation authority for this local case.", "evidence_ref": "ev-source"}],
         "classification": "CONFIRMED_BUG",
         "classification_evidence": ["ev-classification"],
         "reproduction": {
             "preconditions": ["base fixture"], "action": "run regression", "input": None,
             "expected": "Z", "actual": "Y", "environment": "local", "deterministic": True,
-            "observed_frequency": "1/1", "evidence_refs": ["ev-red"],
+            "observed_frequency": "1/1", "affected_component": "app.py", "evidence_refs": ["ev-red"],
         },
         "root_cause": {
             "trigger": "X", "incorrect_state_or_assumption": "wrong branch", "propagation": ["app.py"],
             "observable_failure": "Y", "affected_source": ["app.py"], "evidence_refs": ["ev-root"],
         },
         "rejected_hypotheses": [{"hypothesis": "cache", "disposition": "REJECTED", "evidence_refs": ["ev-cache"]}],
+        "hypothesis_tests": [{"hypothesis": "cache", "test": "invalidate cache and rerun oracle", "result": "cache hypothesis rejected", "evidence_refs": ["ev-cache"]}],
         "blast_radius": {"direct": ["app.py"], "adjacent": ["tests"], "security_boundaries": [], "data_boundaries": []},
         "invariants": ["Unrelated behavior remains unchanged."],
         "risk": "R1",

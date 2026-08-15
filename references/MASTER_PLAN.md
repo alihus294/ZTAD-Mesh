@@ -1,4 +1,4 @@
-# ZTAD Mesh 4.3.8 — Normative Master Plan
+# ZTAD Mesh 4.3.9 — Normative Master Plan
 
 ## 1. Mission
 
@@ -619,3 +619,26 @@ UNVERIFIED_REPORT
 - Missing, conflicting, or unhealthy mandatory evidence after production exposure MUST result in `ROLLBACK_REQUIRED` or containment.
 - Hotfix mode MAY reduce validation breadth but MUST NOT skip lifecycle states, and database/auth/tenant/financial/ZATCA/security changes retain their high-risk gates.
 - The WorkshopOS profile MUST use only `DEPLOYMENT.md → infra/docs/runbook.md → .github/workflows/deploy.yml` as its canonical production path.
+
+## 29. Machine-enforced fail-closed protocol completion
+
+The implementation of the bug-to-production protocol MUST preserve the following controls as executable, subject-bound decisions rather than prompt-only guidance:
+
+- Intake MUST preserve the original report verbatim together with repository, protected/current base and local head SHA, branch, divergence, dirty status, environment, observed behavior, expected behavior, and supplied evidence.
+- Source resolution MUST use the declared authority hierarchy, record why each source is authoritative, and return `BLOCKED: SOURCE_CONFLICT` when sources disagree or the canonical deployment chain is incomplete.
+- Classification MUST distinguish confirmed defects from expected behavior, environment/configuration/data issues, external dependencies, workflow/spec conflicts, security incidents, performance regressions, and inconclusive reports; `INCONCLUSIVE` MUST NOT enter implementation.
+- Reproduction MUST record the exact preconditions, action, expected and actual outcomes, environment, affected component, frequency, timing, and evidence; nondeterministic behavior MUST include repeated observations and timing conditions.
+- Root cause MUST record trigger, incorrect state or assumption, propagation, observable failure, affected source, tested hypotheses, and evidence before patch planning.
+- Blast-radius analysis MUST cover callers, routes/services, schemas, database/RLS/tenant filters, RBAC, caches/jobs/webhooks, financial/ZATCA/provider boundaries, frontend/i18n/PWA surfaces, concurrency, and invariants as applicable.
+- Dirty or divergent owner work MUST remain untouched; implementation MUST use an isolated clean worktree from the exact protected base and an explicit allowlist.
+- The change plan MUST name the smallest intended files and justify each file; material scope expansion MUST return to planning and re-review.
+- Regression proof MUST bind one oracle to `FAIL` on the exact known-bad base and `PASS` on the exact candidate. Same-SHA, equivalent-evidence, waiver, manual-substitute, or model-judgment paths MUST remain blocked.
+- Test-integrity and diff-forensics checks MUST reject skipped, weakened, deleted, moved, masked, non-blocking, mocked-away, or discovery-altering tests and every unexplained changed file.
+- Targeted validation, full regression validation, diff forensics, independent review, exact-head protected CI, exact-artifact staging, owner readiness, protected production release, and post-deploy verification MUST remain separate states.
+- Independent review MUST emit only `PASS` or `BLOCK` from a distinct review context; model output MUST never create E6, merge, release, attestation, deployment, or production authority.
+- The artifact chain MUST bind source SHA to release fingerprint, immutable artifact identity and digest, SBOM, provenance, attestation, staging, protected production release, deployed revision, and post-deploy evidence without rebuilding or mutable-tag substitution.
+- Database, auth/tenant, financial, ZATCA, provider, concurrency, and security profiles MUST raise their mandatory checks and retain full gates in hotfix mode.
+- Internal scheduler `DONE`, `MERGE_READY`, and `PRODUCTION_VERIFIED` MUST be subordinate execution states; an authoritative bug task may end scheduler execution only at `INTERNAL_EXECUTION_COMPLETE` and may close only through the authoritative lifecycle.
+- Missing external authority MUST produce `WAITING_EXTERNAL_DEPENDENCY` for the affected task, unsafe work MUST be quarantined, transient execution failures MAY use bounded `AUTO_REPAIR`, strategy failures MUST use `AUTO_REPLAN`, unrelated safe work MUST continue, and post-exposure uncertainty MUST produce `ROLLBACK_REQUIRED`.
+- WorkshopOS profile data MUST restrict test-only messages to `0594269477`, require dummy data for browser/E2E tests, and permit only `DEPLOYMENT.md → infra/docs/runbook.md → .github/workflows/deploy.yml` as the canonical production chain.
+- The final evidence bundle MUST preserve the original report, classification, evidence chain, exact subject fingerprint, all mandatory gate records, release artifacts, production identity, post-deploy proof, and final state; local reports MUST declare their host and external capability limits.

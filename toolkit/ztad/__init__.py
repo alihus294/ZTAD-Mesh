@@ -1,3 +1,3 @@
 """Zero-Trust Agentic Delivery deterministic toolkit."""
 
-__version__ = "4.3.8"
+__version__ = "4.3.9"

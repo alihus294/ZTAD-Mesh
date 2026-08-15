@@ -17,7 +17,7 @@ RUNNABLE_STATES = {
     "ARTIFACT_VERIFIED", "STAGING", "CANARY", "PRODUCTION_VERIFIED", "ROLLBACK",
 }
 DELAYED_STATES = {"WAITING_RETRY", "WAITING_EXTERNAL_DEPENDENCY", "QUARANTINED", "ROLLED_BACK_RETRYABLE"}
-TERMINAL_STATES = {"DONE", "CANCELLED", "SUPERSEDED"}
+TERMINAL_STATES = {"DONE", "INTERNAL_EXECUTION_COMPLETE", "CANCELLED", "SUPERSEDED"}
 
 # This table mirrors policies/state-machine.yaml. Packaging validation compares
 # both representations so the durable store cannot silently diverge from policy.
@@ -36,7 +36,7 @@ TRANSITIONS: dict[str, set[str]] = {
     "WAITING_RETRY": {"WORKER_IMPLEMENTING", "AUTO_REPLAN", "SUPERVISOR_TAKEOVER", "CLEAN_RECONSTRUCTION", "QUARANTINED", "CANCELLED"},
     "WAITING_EXTERNAL_DEPENDENCY": {"READY", "AUTO_REPLAN", "QUARANTINED", "CANCELLED"},
     "QUARANTINED": {"AUTO_REPLAN", "CLEAN_RECONSTRUCTION", "WAITING_RETRY", "CANCELLED", "SUPERSEDED"},
-    "MERGE_READY": {"MERGE_QUEUED", "STAGING", "DONE", "WAITING_RETRY", "QUARANTINED"},
+    "MERGE_READY": {"MERGE_QUEUED", "STAGING", "WAITING_RETRY", "QUARANTINED"},
     "MERGE_QUEUED": {"MERGED", "AUTO_REPLAN", "WAITING_RETRY", "QUARANTINED"},
     "MERGED": {"ARTIFACT_VERIFIED", "ROLLBACK", "QUARANTINED"},
     "ARTIFACT_VERIFIED": {"STAGING", "CANARY", "ROLLBACK", "QUARANTINED"},
@@ -44,7 +44,8 @@ TRANSITIONS: dict[str, set[str]] = {
     "CANARY": {"PRODUCTION_VERIFIED", "ROLLBACK", "WAITING_RETRY", "QUARANTINED"},
     "ROLLBACK": {"ROLLED_BACK_RETRYABLE", "DONE", "QUARANTINED"},
     "ROLLED_BACK_RETRYABLE": {"AUTO_REPLAN", "CLEAN_RECONSTRUCTION", "WAITING_RETRY", "QUARANTINED"},
-    "PRODUCTION_VERIFIED": {"DONE", "ROLLBACK"},
+    "PRODUCTION_VERIFIED": {"INTERNAL_EXECUTION_COMPLETE", "DONE", "ROLLBACK"},
+    "INTERNAL_EXECUTION_COMPLETE": set(),
     "DONE": set(), "CANCELLED": set(), "SUPERSEDED": set(),
 }
 
@@ -295,6 +296,11 @@ class ContinuityStore:
     def _task_row(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)
         result["contract"] = json.loads(result.pop("contract_json"))
+        result["authoritative_bug_lifecycle"] = bool(
+            result["contract"].get("authoritative_bug_lifecycle")
+            or result["contract"].get("bug_lifecycle_case_id")
+            or result["contract"].get("protocol") == "WorkshopOS-Fail-Closed-Bug-to-Production-v1"
+        )
         return result
 
     @staticmethod
@@ -524,6 +530,10 @@ class ContinuityStore:
             task = self._task_row(row)
             if expected_version is not None and task["version"] != expected_version:
                 raise RuntimeError("Optimistic concurrency conflict")
+            if task.get("authoritative_bug_lifecycle") and requested_state == "DONE":
+                raise PermissionError(
+                    "Internal scheduler DONE is not a bug-lifecycle closure; use the authoritative lifecycle"
+                )
             if requested_state not in TRANSITIONS.get(task["state"], set()):
                 raise ValueError(f"Transition {task['state']} -> {requested_state} is not allowed")
             lease_owner = None if release_lease else task["lease_owner"]

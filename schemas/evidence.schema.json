@@ -10,6 +10,9 @@
         "null"
       ]
     },
+    "artifact_identity": {
+      "type": ["string", "null"]
+    },
     "base_sha": {
       "pattern": "^[0-9a-f]{40,64}$",
       "type": "string"
@@ -52,6 +55,28 @@
       "pattern": "^[0-9a-f]{40,64}$",
       "type": "string"
     },
+    "release_fingerprint": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "sbom_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "provenance_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "attestation_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "production_release_id": {
+      "type": ["string", "null"]
+    },
+    "deployed_revision": {
+      "type": ["string", "null"]
+    },
     "invalidated_by": {
       "items": {
         "type": "string"
@@ -85,6 +110,10 @@
         "string",
         "null"
       ]
+    },
+    "subject_fingerprint": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
     },
     "status": {
       "type": [

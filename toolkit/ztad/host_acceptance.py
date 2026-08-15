@@ -106,6 +106,28 @@ def audit_host_acceptance(
         mode = "LOCAL_VERIFICATION_ONLY"
     if mode == "LOCAL_VERIFICATION_ONLY" and codex_exec.get("available") and hooks_trust:
         mode = "GOVERNED_LOCAL_DEVELOPMENT"
+    host_capabilities = {
+        "plugin_bundle_validation": bool(bundle.get("valid")),
+        "local_git_execution": bool(git.get("available")),
+        "protected_repository_access": False,
+        "protected_branch_rules": False,
+        "protected_ci_result": False,
+        "protected_supervisor_approval": False,
+        "protected_staging_environment": False,
+        "protected_production_release": False,
+        "production_runtime_health": False,
+        "protected_rollback_controller": False,
+        "network_sandbox": False,
+        "process_isolation": False,
+        "secrets_availability": False,
+        "protected_signing_key_custody": False,
+        "actual_production_access": False,
+    }
+    unproven_capabilities = sorted(name for name, proven in host_capabilities.items() if not proven)
+    capability_status = {
+        name: ("PROVEN" if proven else "HOST_CAPABILITY_UNPROVEN")
+        for name, proven in host_capabilities.items()
+    }
     # GitHub CLI presence is not proof of authentication, repository access,
     # branch protection, merge queue, required checks or least-privilege tokens.
     # Remote governance can only be raised by a separate GitHub audit that emits
@@ -126,6 +148,10 @@ def audit_host_acceptance(
             "claim_boundary": "The host must explicitly trust plugin hooks; file presence alone is not activation evidence.",
         },
         "repository": repo,
+        "host_capabilities": host_capabilities,
+        "capability_status": capability_status,
+        "unproven_capabilities": unproven_capabilities,
+        "capability_decision": "HOST_CAPABILITY_UNPROVEN" if unproven_capabilities else "HOST_CAPABILITIES_PROVEN",
         "maximum_verified_mode": mode,
         "blockers": blockers,
         "claim_boundary": "This is a non-mutating local probe. GitHub CLI presence never raises the mode; Remote branch protection, merge queue, deployment and runtime health require authoritative platform evidence.",
