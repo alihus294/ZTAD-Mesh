@@ -83,19 +83,20 @@ def test_cli_problem_contract_dispatches_to_canonical_validator(tmp_path):
     })
     case.update({
         "state": "HANDOFF_READY",
-        "authoritative_sources": [{"source": "src", "authority": "EXECUTABLE_SOURCE", "evidence_ref": "ev-source"}],
+        "authoritative_sources": [{"source": "src", "authority": "EXECUTABLE_SOURCE", "authority_reason": "Executable source controls observed behavior.", "evidence_ref": "ev-source"}],
         "classification": "CONFIRMED_BUG",
         "classification_evidence": ["ev-classification"],
         "reproduction": {
             "preconditions": ["known bad base"], "action": "run regression", "input": None,
             "expected": "Z", "actual": "Y", "environment": "local", "deterministic": True,
-            "observed_frequency": "1/1", "evidence_refs": ["ev-red"],
+            "observed_frequency": "1/1", "affected_component": "src/example.py", "evidence_refs": ["ev-red"],
         },
         "root_cause": {
             "trigger": "X", "incorrect_state_or_assumption": "wrong condition", "propagation": ["src"],
             "observable_failure": "Y", "affected_source": ["src/example.py"], "evidence_refs": ["ev-root"],
         },
         "rejected_hypotheses": [],
+        "hypothesis_tests": [{"hypothesis": "cache", "test": "invalidate cache", "result": "not causal", "evidence_refs": ["ev-cache"]}],
         "blast_radius": {"direct": ["src/example.py"], "adjacent": ["tests"], "security_boundaries": [], "data_boundaries": []},
         "invariants": ["Unrelated behavior remains unchanged."],
         "risk": "R1",

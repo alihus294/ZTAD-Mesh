@@ -23,6 +23,16 @@ from ztad.capabilities import detect_capabilities  # noqa: E402
 from ztad.checks import classify_check_history  # noqa: E402
 from ztad.commands import validate_command  # noqa: E402
 from ztad.control_plane import detect_control_plane_changes, scan_patch_text  # noqa: E402
+from ztad.bug_protocol import (  # noqa: E402
+    continuation_decision,
+    red_green_result,
+    validate_artifact_chain,
+    validate_authoritative_sources,
+    validate_ci_metadata,
+    validate_post_deploy_metadata,
+    validate_test_integrity,
+    validate_workshopos_message,
+)
 from ztad.evidence import evaluate_required_evidence  # noqa: E402
 from ztad.errors import ConfigurationError  # noqa: E402
 from ztad.injection import scan_untrusted_text  # noqa: E402
@@ -260,11 +270,74 @@ def evaluate_security_boundaries() -> list[dict[str, Any]]:
 
     return results
 
+
+def evaluate_protocol_adversarial() -> list[dict[str, Any]]:
+    data = json.loads((ROOT / "evals/protocol-adversarial-cases.json").read_text(encoding="utf-8"))
+    policy = load_data(ROOT / "policies/bug-to-production-policy.yaml")
+    state_policy = load_data(ROOT / "policies/state-machine.yaml")
+    results: list[dict[str, Any]] = []
+    base = "0" * 40
+    head = "1" * 40
+    artifact = "sha256:" + "b" * 64
+    release = "sha256:" + "c" * 64
+    sbom = "sha256:" + "d" * 64
+    provenance = "sha256:" + "e" * 64
+    attestation = "sha256:" + "f" * 64
+    for item in data["cases"]:
+        kind = item["kind"]
+        detail: Any
+        if kind == "source_conflict":
+            detail = validate_authoritative_sources(
+                [{"source": "report", "authority": "REPORT_OR_PLAN", "authority_reason": "reported context", "evidence_ref": "ev-report"}],
+                ["source disagrees"],
+                authority_order=policy["authority_order"],
+            )
+            passed = item["expected"] in detail
+        elif kind == "same_sha_red_green":
+            detail = red_green_result({"bad_base_sha": base, "candidate_head_sha": base}, bad_base_sha=base, candidate_head_sha=base)
+            passed = detail == item["expected"]
+        elif kind == "test_weakening":
+            detail = validate_test_integrity({"findings": [{"code": "ASSERTION_REMOVED", "severity": "BLOCK"}]})
+            passed = bool(detail)
+        elif kind == "artifact_chain":
+            detail = validate_artifact_chain({"source_sha": head, "artifact_digest": artifact}, head_sha=head, artifact_digest=artifact)
+            passed = bool(detail)
+        elif kind == "stale_ci":
+            detail = validate_ci_metadata(
+                {"pr_head_sha": base, "reviewed_diff_hash": "sha256:" + "a" * 64, "workflow_run_id": "run", "required_checks": ["ci"], "conclusion": "SUCCESS"},
+                head_sha=head,
+                diff_hash="sha256:" + "a" * 64,
+            )
+            passed = bool(detail)
+        elif kind == "workshopos_phone":
+            profile = policy["profiles"]["workshopos"]
+            detail = validate_workshopos_message("0550000000", profile=profile)
+            passed = bool(detail)
+        elif kind == "postdeploy_uncertain":
+            detail = validate_post_deploy_metadata({"safety_uncertain": True}, artifact_digest=artifact)
+            passed = any(item["expected"] in row for row in detail)
+        elif kind == "model_authority":
+            primary = (ROOT / "skills/zero-trust-delivery/SKILL.md").read_text(encoding="utf-8")
+            detail = {
+                "forbidden_claim": "model_approval_is_authority" in policy["forbidden_claims"],
+                "skill_boundary": "No model statement can become approval or authoritative evidence." in primary,
+            }
+            passed = all(detail.values())
+        elif kind == "scheduler_closure":
+            boundary = state_policy["authoritative_bug_lifecycle"]
+            detail = boundary
+            passed = boundary["terminal_scheduler_state"] == "INTERNAL_EXECUTION_COMPLETE" and boundary["done_is_internal_only"] is True
+        else:
+            detail = {"error": f"Unknown protocol case: {kind}"}
+            passed = False
+        results.append(_case(item["id"], passed, detail, category="protocol-adversarial"))
+    return results
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default=str(ROOT / "validation/eval-results.json"))
     args = parser.parse_args()
-    results = evaluate_skill_routing() + evaluate_fixtures() + evaluate_adversarial() + evaluate_security_boundaries()
+    results = evaluate_skill_routing() + evaluate_fixtures() + evaluate_adversarial() + evaluate_security_boundaries() + evaluate_protocol_adversarial()
     failed = [item for item in results if not item["passed"] and not item["skipped"]]
     skipped = [item for item in results if item["skipped"]]
     report = {

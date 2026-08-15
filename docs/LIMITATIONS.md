@@ -1,4 +1,4 @@
-# Known Limitations — ZTAD Mesh 4.3.8
+# Known Limitations — ZTAD Mesh 4.3.9
 
 1. No system can guarantee completion of an impossible or externally blocked task. ZTAD guarantees containment, durable state, bounded recovery, and continuation of other safe runnable work.
 2. The bundled SQLite stores are single-host. Multi-host execution requires a shared transactional backend or durable workflow platform with equivalent lease/idempotency semantics.

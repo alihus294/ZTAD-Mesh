@@ -1,6 +1,103 @@
 version: 1
 protocol: WorkshopOS-Fail-Closed-Bug-to-Production-v1
 mode: FAIL_CLOSED
+authority_order:
+- GOVERNING_INSTRUCTION
+- EXECUTABLE_SOURCE
+- AUTHORIZED_RUNTIME
+- TEST_BEHAVIOR
+- ARCHITECTURE_INTENT
+- REPORT_OR_PLAN
+unresolved_conflict_action: 'BLOCKED: SOURCE_CONFLICT'
+pre_production_failure_action: BLOCKED
+post_production_failure_action: ROLLBACK_REQUIRED
+internal_state_boundary:
+  scheduler_states_are_subordinate: true
+  scheduler_terminal_state: INTERNAL_EXECUTION_COMPLETE
+  legacy_done_is_never_bug_closure: true
+risk_classes:
+  LOW:
+  - R0
+  - R1
+  MEDIUM:
+  - R2
+  HIGH:
+  - R3
+  CRITICAL:
+  - R4
+deterministic_escalation:
+  HIGH:
+  - auth
+  - authorization
+  - tenant_isolation
+  - persistent_write
+  - provider_side_effect
+  - concurrency
+  - infrastructure
+  CRITICAL:
+  - destructive_database
+  - payment
+  - ledger
+  - financial_invoice
+  - zatca
+  - encryption
+  - kms
+  - secret
+  - production_delivery
+  - irreversible_side_effect
+domain_profiles:
+  DATABASE:
+    minimum_risk_class: HIGH
+    destructive_risk_class: CRITICAL
+    required_checks:
+    - MIGRATION_NECESSITY_PROVEN
+    - MIGRATION_LEDGER_HISTORY_GUARD_PASSED
+    - FRESH_DB_REBUILD_PASSED
+    - DATABASE_RECOVERY_PLAN_VERIFIED
+    - OLD_APP_NEW_SCHEMA_COMPATIBILITY
+    - NEW_APP_OLD_SCHEMA_COMPATIBILITY
+  AUTH_TENANT:
+    minimum_risk_class: HIGH
+    required_checks:
+    - AUTHZ_TENANT_MATRIX_PASSED
+    - SERVER_SIDE_AUTHORIZATION_PASSED
+    - TENANT_CROSSING_DENIED
+    - ID_TAMPERING_DENIED
+  FINANCIAL:
+    minimum_risk_class: HIGH
+    required_checks:
+    - FINANCIAL_INVARIANTS_PASSED
+    - IDEMPOTENCY_PASSED
+    - CONCURRENCY_INVARIANTS_PASSED
+    - LEDGER_CONSISTENCY_PASSED
+    - NO_DUPLICATE_FINANCIAL_SIDE_EFFECT
+  ZATCA:
+    minimum_risk_class: HIGH
+    required_checks:
+    - ZATCA_INVARIANTS_PASSED
+    - ZATCA_LEGAL_STATE_MACHINE_PASSED
+    - ZATCA_DUPLICATE_PREVENTION_PASSED
+    - ZATCA_IMMUTABILITY_PASSED
+    - ZATCA_SANDBOX_ONLY_TEST_PASSED
+  PROVIDER:
+    minimum_risk_class: HIGH
+    required_checks:
+    - PROVIDER_SEMANTICS_PASSED
+    - PROVIDER_STATE_RECONCILIATION_PASSED
+    - PROVIDER_IDEMPOTENCY_PASSED
+    - PROVIDER_SAFE_OUTAGE_PASSED
+  CONCURRENCY:
+    minimum_risk_class: HIGH
+    required_checks:
+    - CONCURRENCY_INVARIANTS_PASSED
+    - PARALLEL_REPRODUCTION_PASSED
+    - NO_DUPLICATE_DURABLE_SIDE_EFFECT
+  SECURITY:
+    minimum_risk_class: HIGH
+    required_checks:
+    - SECURITY_VALIDATION_PASSED
+    - SECRETS_SCAN_PASSED
+    - FAIL_CLOSED_BOUNDARY_PASSED
 states:
 - UNVERIFIED_REPORT
 - SOURCE_OF_TRUTH_RESOLVED
@@ -92,6 +189,28 @@ profiles:
     - DEPLOYMENT.md
     - infra/docs/runbook.md
     - .github/workflows/deploy.yml
+    deployment_source_hierarchy:
+    - DEPLOYMENT.md
+    - infra/docs/runbook.md
+    - .github/workflows/deploy.yml
+    domain_profiles:
+    - FINANCIAL
+    - AUTH_TENANT
+    - ZATCA
+    - DATABASE
+    production_workflow: .github/workflows/deploy.yml
+    test_only_message_destinations:
+    - '0594269477'
+    browser_e2e_requires_dummy_data: true
+    protected_release_expectations:
+    - protected_environment
+    - exact_artifact_digest
+    - migration_ledger
+    - rollback_rehearsal
+    forbidden_deployment_paths:
+    - alternate SSH
+    - ad-hoc VPS
+    - direct production database
 gates:
   PATCH_IMPLEMENTED:
     minimum_trust: E2
@@ -101,6 +220,16 @@ gates:
     minimum_trust: E2
     required_evidence:
     - REGRESSION_RED_GREEN_PROVEN
+    metadata_requirements:
+    - bad_base_sha
+    - candidate_head_sha
+    - oracle_id
+    - oracle_hash
+    - oracle_command
+    - bad_output_hash
+    - candidate_output_hash
+    - failing_assertion
+    - passing_assertion
   TARGETED_VALIDATION_PASS:
     minimum_trust: E2
     required_evidence:
@@ -126,6 +255,11 @@ gates:
     minimum_trust: E2
     required_evidence:
     - FULL_REGRESSION_VALIDATION_PASSED
+    metadata_requirements:
+    - protected_base_sha
+    - candidate_head_sha
+    - test_layers
+    - conclusion
   DIFF_FORENSICS_PASS:
     minimum_trust: E2
     required_evidence:
@@ -139,11 +273,22 @@ gates:
     required_evidence:
     - PROTECTED_CI
     - REQUIRED_CHECKS_VERIFIED
+    metadata_requirements:
+    - pr_head_sha
+    - reviewed_diff_hash
+    - required_checks
+    - workflow_run_id
   STAGING_PASS:
     minimum_trust: E5
     required_evidence:
     - STAGING_SMOKE_PASSED
     - ORIGINAL_PROBLEM_STAGING_VERIFIED
+    metadata_requirements:
+    - candidate_head_sha
+    - artifact_digest
+    - original_symptom_absent
+    - expected_behavior_present
+    - health_verified
   READY_FOR_OWNER_RELEASE:
     minimum_trust: E4
     required_evidence:
@@ -160,16 +305,34 @@ gates:
     by_risk:
       R3:
       - STAGED_RESTORE_REHEARSAL
+      - PROGRESSIVE_EXPOSURE_PLAN
       R4:
       - BACKUP_RESTORE_EVIDENCE
       - REHEARSAL_EVIDENCE
       - STAGED_RESTORE_REHEARSAL
+      - PROGRESSIVE_EXPOSURE_PLAN
+    artifact_chain:
+    - source_sha
+    - release_fingerprint
+    - artifact_digest
+    - sbom_digest
+    - provenance_digest
+    - attestation_digest
+    - artifact_identity
   PRODUCTION_RELEASED:
     minimum_trust: E5
     required_evidence:
     - PROTECTED_RELEASE_AUTHORIZATION
     - PRODUCTION_RELEASE_COMPLETED
     - EXPECTED_DIGEST_RUNNING
+    metadata_requirements:
+    - reviewed_main_sha
+    - deployed_revision
+    - artifact_digest
+    - workflow_run_id
+    - deployment_receipt
+    - occurred_at
+    - production_release_id
   POST_DEPLOY_VERIFIED:
     minimum_trust: E5
     required_evidence:
@@ -177,6 +340,13 @@ gates:
     - PRODUCTION_HEALTH
     - SYNTHETIC_TRANSACTION
     - OBSERVATION_WINDOW
+    metadata_requirements:
+    - deployed_artifact_digest
+    - original_symptom_absent
+    - expected_behavior_present
+    - synthetic_transaction_safe
+    - observation_window_complete
+    - adjacent_health
   CLOSED:
     minimum_trust: E5
     required_evidence: []
@@ -197,6 +367,76 @@ hotfix:
   - FINANCIAL
   - ZATCA
   - SECURITY
+  minimum_lifecycle:
+  - UNVERIFIED_REPORT
+  - SOURCE_OF_TRUTH_RESOLVED
+  - ISSUE_CLASSIFIED
+  - BUG_REPRODUCED
+  - ROOT_CAUSE_PROVEN
+  - BLAST_RADIUS_MAPPED
+  - CHANGE_PLANNED
+  - PATCH_IMPLEMENTED
+  - REGRESSION_TEST_PROVEN
+  - TARGETED_VALIDATION_PASS
+  - REGRESSION_VALIDATION_PASS
+  - DIFF_FORENSICS_PASS
+  - INDEPENDENT_REVIEW_PASS
+  - CI_PASS
+  - READY_FOR_OWNER_RELEASE
+  - PRODUCTION_RELEASED
+  - POST_DEPLOY_VERIFIED
+  - CLOSED
+continuation:
+  local_remediable: AUTO_REPAIR
+  invalid_plan: AUTO_REPLAN
+  provider_or_model_failure: AUTO_REPAIR
+  unsafe_task: QUARANTINE
+  external_dependency: WAITING_EXTERNAL_DEPENDENCY
+  identical_retry: AUTO_REPLAN
+  continue_unrelated_safe_work: true
+  retry_requires_material_change: true
+progressive_exposure:
+  HIGH:
+  - FEATURE_FLAG
+  - CANARY
+  - TENANT_LIMITED
+  - ROLLBACK_TRIGGER
+  CRITICAL:
+  - FEATURE_FLAG
+  - CANARY
+  - WRITE_GATE
+  - ROLLBACK_TRIGGER
+  - OWNER_STOP_CONDITION
+artifact_chain:
+  immutable_subject_required: true
+  source_to_release_to_artifact: true
+  build_once_promote_by_digest: true
+  mutable_tag_only: false
+  rebuild_after_validation: false
+forbidden_behaviors:
+- ASSUME_BUG
+- EDIT_BEFORE_CLASSIFICATION
+- EDIT_BEFORE_REPRODUCTION
+- EDIT_BEFORE_ROOT_CAUSE
+- DIRECT_MAIN_MODIFICATION
+- FORCE_PUSH_PROTECTED
+- CI_BYPASS
+- TEST_WEAKENING
+- MOCKED_BOUNDARY_AS_PROOF
+- PRODUCTION_DB_EXPERIMENT
+- DIRECT_PRODUCTION_MIGRATION
+- ALTERNATE_DEPLOY_PATH
+- SECRETS_EXPOSURE
+- PII_LOGGING
+- TENANT_FILTER_REMOVAL
+- UNPLANNED_AUTH_CHANGE
+- UNPLANNED_FINANCIAL_CHANGE
+- UNPLANNED_ZATCA_CHANGE
+- DIFFERENT_COMMIT_DEPLOYED
+- DEPLOYMENT_COMMAND_AS_FIX_PROOF
+- UNEXPLAINED_DIFF
+- SILENT_SCOPE_EXPANSION
+- STALE_DOCS_OVERRIDE
 forbidden_claims:
 - model_approval_is_authority
 - deployment_command_success_means_fix_success

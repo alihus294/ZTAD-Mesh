@@ -29,6 +29,10 @@
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": ["string", "null"]
     },
+    "artifact_identity": {
+      "type": ["string", "null"]
+    },
+    "authoritative_lifecycle": {"type": "boolean"},
     "base_sha": {
       "pattern": "^[0-9a-f]{40,64}$",
       "type": ["string", "null"]
@@ -46,6 +50,10 @@
       "items": {"type": "string"},
       "type": "array",
       "uniqueItems": true
+    },
+    "attestation_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
     },
     "case_id": {
       "pattern": "^CASE-[A-Za-z0-9._-]{3,80}$",
@@ -87,8 +95,16 @@
       "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "RESOLVED_NO_CODE"]
     },
     "mode": {"enum": ["NORMAL", "HOTFIX"]},
+    "internal_execution_complete": {"type": "boolean"},
     "policy_bundle_hash": {
       "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "provenance_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "production_release_id": {
       "type": ["string", "null"]
     },
     "problem_case_fingerprint": {
@@ -104,9 +120,22 @@
       "type": ["string", "null"]
     },
     "risk": {"enum": [null, "R0", "R1", "R2", "R3", "R4"], "type": ["string", "null"]},
+    "risk_class": {"enum": [null, "LOW", "MEDIUM", "HIGH", "CRITICAL"], "type": ["string", "null"]},
+    "release_fingerprint": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
     "schema_version": {"const": 1},
     "state": {
       "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "BLOCKED", "ROLLBACK_REQUIRED", "RESOLVED_NO_CODE"]
+    },
+    "scheduler_state": {"type": ["string", "null"]},
+    "sbom_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "deployed_revision": {
+      "type": ["string", "null"]
     },
     "toolchain_hash": {
       "pattern": "^sha256:[0-9a-f]{64}$",

@@ -95,6 +95,22 @@ def detect_capabilities(repo_path: Path | str) -> dict[str, Any]:
         "deployment_markers": [],
         "local_tools": {},
         "platform_enforcement": {name: {"status": "UNKNOWN_NOT_VERIFIED"} for name in PLATFORM_CONTROLS},
+        "host_capabilities": {
+            "protected_repository_access": "UNKNOWN_NOT_VERIFIED",
+            "protected_branch_rules": "UNKNOWN_NOT_VERIFIED",
+            "protected_ci_result": "UNKNOWN_NOT_VERIFIED",
+            "protected_supervisor_approval": "UNKNOWN_NOT_VERIFIED",
+            "protected_staging_environment": "UNKNOWN_NOT_VERIFIED",
+            "protected_production_release": "UNKNOWN_NOT_VERIFIED",
+            "production_runtime_health": "UNKNOWN_NOT_VERIFIED",
+            "protected_rollback_controller": "UNKNOWN_NOT_VERIFIED",
+            "network_sandbox": "UNKNOWN_NOT_VERIFIED",
+            "process_isolation": "UNKNOWN_NOT_VERIFIED",
+            "secrets_availability": "UNKNOWN_NOT_VERIFIED",
+            "protected_signing_key_custody": "UNKNOWN_NOT_VERIFIED",
+            "actual_production_access": "UNKNOWN_NOT_VERIFIED",
+        },
+        "unproven_capabilities": [],
         "maximum_permitted_mode": "AUDIT_ONLY",
         "limitations": [],
     }
@@ -130,4 +146,8 @@ def detect_capabilities(repo_path: Path | str) -> dict[str, Any]:
         report["limitations"].append("A Git repository is required for SHA-bound evidence and diff-based policy.")
     if report["local_tools"].get("gh") is None:
         report["limitations"].append("GitHub CLI is unavailable; remote GitHub controls cannot be audited in this run.")
+    report["unproven_capabilities"] = sorted(
+        name for name, status in report["host_capabilities"].items() if status != "PROVEN"
+    )
+    report["capability_decision"] = "HOST_CAPABILITY_UNPROVEN" if report["unproven_capabilities"] else "HOST_CAPABILITIES_PROVEN"
     return report

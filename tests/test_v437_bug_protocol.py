@@ -73,7 +73,7 @@ def _proven_problem_case(tmp_path: Path) -> dict:
     case.update({
         "state": "HANDOFF_READY",
         "authoritative_sources": [
-            {"source": "app.py", "authority": "EXECUTABLE_SOURCE", "evidence_ref": "ev-source"}
+            {"source": "app.py", "authority": "EXECUTABLE_SOURCE", "authority_reason": "Executable source is the authoritative implementation behavior for the case.", "evidence_ref": "ev-source"}
         ],
         "classification": "CONFIRMED_BUG",
         "classification_evidence": ["ev-classification"],
@@ -86,6 +86,7 @@ def _proven_problem_case(tmp_path: Path) -> dict:
             "environment": "local",
             "deterministic": True,
             "observed_frequency": "1/1",
+            "affected_component": "app.py",
             "evidence_refs": ["ev-red"],
         },
         "root_cause": {
@@ -98,6 +99,9 @@ def _proven_problem_case(tmp_path: Path) -> dict:
         },
         "rejected_hypotheses": [
             {"hypothesis": "cache", "disposition": "REJECTED", "evidence_refs": ["ev-cache"]}
+        ],
+        "hypothesis_tests": [
+            {"hypothesis": "cache", "test": "invalidate cache and rerun oracle", "result": "cache hypothesis rejected", "evidence_refs": ["ev-cache"]}
         ],
         "blast_radius": {
             "direct": ["app.py"],
@@ -254,6 +258,17 @@ def test_patch_and_red_green_are_separate_mandatory_gates(tmp_path):
             "same_oracle": True,
             "bad_result": "FAIL",
             "patched_result": "PASS",
+            "oracle_id": "test-bug-oracle",
+            "oracle_hash": "sha256:" + "1" * 64,
+            "oracle_command": "pytest tests/test_bug.py",
+            "bad_environment": "base-local",
+            "candidate_environment": "candidate-local",
+            "bad_exit_code": 1,
+            "candidate_exit_code": 0,
+            "bad_output_hash": "sha256:" + "2" * 64,
+            "candidate_output_hash": "sha256:" + "3" * 64,
+            "failing_assertion": "assert expected == actual",
+            "passing_assertion": "assert expected == actual",
         },
     )
     lifecycle = advance_bug_lifecycle(

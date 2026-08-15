@@ -1,4 +1,4 @@
-# Evaluation Strategy — 4.3.8
+# Evaluation Strategy — 4.3.9
 
 Evaluation is divided into independently reported categories:
 
@@ -28,6 +28,7 @@ Evaluation is divided into independently reported categories:
 - Continuity synchronization without automatic `MERGE_READY`;
 - concurrency and transactional state;
 - archive traversal, symlinks, collisions, internal manifests, checksums, reproducibility, and release re-download verification;
+- release SBOM, provenance, subject checksums, protected attestation bundles, fingerprint binding, and published-asset verification;
 - source and extracted-distribution tests;
 - selected mutation tests for critical controls;
 - bounded fuzzing for structured inputs, paths, risk, routing, command policy, and ledger concurrency;

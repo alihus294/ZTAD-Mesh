@@ -19,6 +19,10 @@ POLICY_HASH = "sha256:" + "c" * 64
 TOOLCHAIN = "sha256:" + "d" * 64
 ARTIFACT = "sha256:" + "e" * 64
 OUTPUT = "sha256:" + "f" * 64
+RELEASE = "sha256:" + "0" * 64
+SBOM = "sha256:" + "1" * 64
+PROVENANCE = "sha256:" + "2" * 64
+ATTESTATION = "sha256:" + "3" * 64
 
 
 def _lifecycle(state: str, *, domains: list[str] | None = None, risk: str = "R3") -> dict:
@@ -40,6 +44,11 @@ def _lifecycle(state: str, *, domains: list[str] | None = None, risk: str = "R3"
         "head_sha": SHA1,
         "diff_hash": DIFF,
         "artifact_digest": ARTIFACT,
+        "release_fingerprint": RELEASE,
+        "sbom_digest": SBOM,
+        "provenance_digest": PROVENANCE,
+        "attestation_digest": ATTESTATION,
+        "artifact_identity": "owner/repo@" + ARTIFACT,
         "risk": risk,
         "domains": domains or ["GENERAL"],
         "canonical_deployment_chain": [],
@@ -77,11 +86,32 @@ def _record(
         "status": status,
         "output_hash": OUTPUT,
         "artifact_digest": ARTIFACT,
+        "release_fingerprint": RELEASE,
+        "sbom_digest": SBOM,
+        "provenance_digest": PROVENANCE,
+        "attestation_digest": ATTESTATION,
+        "artifact_identity": "owner/repo@" + ARTIFACT,
         "created_at": utc_now(),
         "expires_at": None,
         "invalidated_by": [],
         "signature_or_attestation": None,
-        "metadata": {},
+        "metadata": {
+            "source_sha": SHA1,
+            "artifact_digest": ARTIFACT,
+            "release_fingerprint": RELEASE,
+            "sbom_digest": SBOM,
+            "provenance_digest": PROVENANCE,
+            "attestation_digest": ATTESTATION,
+            "artifact_identity": "owner/repo@" + ARTIFACT,
+            "reviewed_main_sha": SHA1,
+            "deployed_revision": SHA1,
+            "environment": "production",
+            "workflow_run_id": "run-protected",
+            "deployment_receipt": "receipt-protected",
+            "occurred_at": utc_now(),
+            "production_release_id": "release-protected",
+            "protected_workflow": True,
+        },
     }
 
 

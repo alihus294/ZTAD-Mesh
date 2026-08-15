@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 import re
 from pathlib import Path
 from typing import Any, Iterable
@@ -8,7 +9,7 @@ from typing import Any, Iterable
 from .crypto import verify_evidence_signature
 from .errors import ConfigurationError
 from .schema_validation import validate_instance
-from .util import load_data
+from .util import atomic_write, load_data
 
 
 TRUST_ORDER = {"E0": 0, "E1": 1, "E2": 2, "E3": 3, "E4": 4, "E5": 5, "E6": 6}
@@ -16,6 +17,16 @@ AUTHORITATIVE_MINIMUM = "E3"
 AFFIRMATIVE_STATUSES = {"PASSED", "SUCCESS", "VERIFIED", "APPROVED", "COMPLETED", "READY", "ACTIVE"}
 
 SUBJECT_REQUIRED_FIELDS = ("repository", "change_contract_hash", "base_sha", "head_sha", "policy_bundle_hash", "toolchain_hash")
+SUBJECT_OPTIONAL_FIELDS = (
+    "artifact_digest",
+    "release_fingerprint",
+    "sbom_digest",
+    "provenance_digest",
+    "attestation_digest",
+    "production_release_id",
+    "deployed_revision",
+    "artifact_identity",
+)
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40,64}$")
 DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 
@@ -33,11 +44,24 @@ def validate_evidence_subject(subject: dict[str, Any] | None) -> list[str]:
         value = subject.get(field)
         if value is not None and (not isinstance(value, str) or not SHA_PATTERN.fullmatch(value)):
             errors.append(f"Evidence subject {field} must be an exact lowercase hexadecimal revision")
-    for field in ("change_contract_hash", "policy_bundle_hash", "toolchain_hash", "artifact_digest"):
+    for field in (
+        "change_contract_hash",
+        "policy_bundle_hash",
+        "toolchain_hash",
+        "artifact_digest",
+        "release_fingerprint",
+        "sbom_digest",
+        "provenance_digest",
+        "attestation_digest",
+    ):
         value = subject.get(field)
         if value is not None and (not isinstance(value, str) or not DIGEST_PATTERN.fullmatch(value)):
             errors.append(f"Evidence subject {field} must be a sha256 digest")
-    allowed = set(SUBJECT_REQUIRED_FIELDS) | {"artifact_digest"}
+    if subject.get("artifact_identity") is not None and (
+        not isinstance(subject.get("artifact_identity"), str) or not subject.get("artifact_identity").strip()
+    ):
+        errors.append("Evidence subject artifact_identity must be a non-empty string")
+    allowed = set(SUBJECT_REQUIRED_FIELDS) | set(SUBJECT_OPTIONAL_FIELDS)
     extra = sorted(set(subject) - allowed)
     if extra:
         errors.append("Evidence subject has unsupported fields: " + ", ".join(extra))
@@ -99,7 +123,7 @@ def validate_evidence_record(
             "head_sha",
             "policy_bundle_hash",
             "toolchain_hash",
-            "artifact_digest",
+            *SUBJECT_OPTIONAL_FIELDS,
         ):
             expected = subject.get(key)
             if expected is not None and evidence.get(key) != expected:
@@ -163,6 +187,35 @@ def load_evidence_records(path: Path, *, max_records: int = 2000) -> list[dict[s
     if isinstance(data, dict) and "evidence_id" in data:
         return [data]
     raise ConfigurationError(f"Evidence input must contain one record or a list of records: {path}")
+
+
+def create_local_untrusted_evidence(path: Path, record: dict[str, Any]) -> dict[str, Any]:
+    """Create a missing local evidence file without fabricating authority.
+
+    The function is intentionally create-only. It refuses replacement, forces a
+    local producer and E2-or-below trust, and marks the result as non-authoritative
+    in metadata so a missing sidecar can be repaired without being promoted.
+    """
+
+    if path.exists() or path.is_symlink():
+        raise ConfigurationError(f"Refusing to overwrite existing evidence file: {path}")
+    if not isinstance(record, dict):
+        raise ConfigurationError("Local evidence record must be an object")
+    created = dict(record)
+    created["trust_level"] = "E2"
+    created["producer"] = str(created.get("producer") or "local:ztad")
+    if not created["producer"].startswith("local:"):
+        created["producer"] = "local:" + created["producer"]
+    created["signature_or_attestation"] = None
+    created["invalidated_by"] = list(created.get("invalidated_by") or [])
+    metadata = dict(created.get("metadata") or {})
+    metadata.update({
+        "authority": "LOCAL_NON_AUTHORITATIVE",
+        "can_grant_merge_release_or_production": False,
+    })
+    created["metadata"] = metadata
+    atomic_write(path, (json.dumps(created, indent=2, sort_keys=True) + "\n").encode("utf-8"), mode=0o600)
+    return created
 
 
 def evidence_index(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:

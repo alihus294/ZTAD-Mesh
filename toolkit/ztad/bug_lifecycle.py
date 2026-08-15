@@ -5,6 +5,24 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+from .bug_protocol import (
+    AUTHORITATIVE_LIFECYCLE,
+    derive_risk_class,
+    infer_domains,
+    risk_class_for_level,
+    validate_artifact_chain,
+    validate_authoritative_sources,
+    validate_authoritative_lifecycle_policy,
+    validate_ci_metadata,
+    validate_diff_forensics,
+    validate_full_regression_metadata,
+    validate_post_deploy_metadata,
+    validate_production_release_metadata,
+    validate_progressive_exposure,
+    validate_red_green_evidence,
+    validate_staging_metadata,
+    validate_test_integrity,
+)
 from .evidence import TRUST_ORDER, evaluate_required_evidence
 from .problem import NON_CODE_CLASSIFICATIONS, problem_case_fingerprint, semantic_errors
 from .schema_validation import validate_instance
@@ -52,7 +70,9 @@ def initialize_bug_lifecycle(
     if mode not in {"NORMAL", "HOTFIX"}:
         raise ValueError("mode must be NORMAL or HOTFIX")
     canonical_chain = list(((profiles.get(profile) or {}).get("canonical_deployment_chain") or []))
-    normalized_domains = sorted(set(str(item) for item in domains))
+    normalized_domains = infer_domains(problem_case, domains)
+    risk = problem_case.get("risk")
+    risk_class = problem_case.get("risk_class") or derive_risk_class(risk=risk, domains=normalized_domains)
     return {
         "schema_version": 1,
         "protocol_version": str(policy.get("protocol")),
@@ -71,12 +91,23 @@ def initialize_bug_lifecycle(
         "head_sha": None,
         "diff_hash": None,
         "artifact_digest": None,
-        "risk": problem_case.get("risk"),
+        "risk": risk,
+        "risk_class": risk_class,
         "domains": normalized_domains,
         "canonical_deployment_chain": canonical_chain,
         "change_contract_hash": None,
         "policy_bundle_hash": None,
         "toolchain_hash": None,
+        "release_fingerprint": None,
+        "sbom_digest": None,
+        "provenance_digest": None,
+        "attestation_digest": None,
+        "production_release_id": None,
+        "deployed_revision": None,
+        "artifact_identity": None,
+        "scheduler_state": None,
+        "internal_execution_complete": False,
+        "authoritative_lifecycle": True,
         "evidence_refs": {},
         "final_state": None,
     }
@@ -110,6 +141,14 @@ def bind_candidate(
     result["policy_bundle_hash"] = policy_bundle_hash
     result["toolchain_hash"] = toolchain_hash
     result["artifact_digest"] = artifact_digest
+    result["release_fingerprint"] = None
+    result["sbom_digest"] = None
+    result["provenance_digest"] = None
+    result["attestation_digest"] = None
+    result["production_release_id"] = None
+    result["deployed_revision"] = None
+    result["artifact_identity"] = None
+    result["evidence_refs"] = {}
     return result
 
 
@@ -118,6 +157,70 @@ def bind_artifact(record: dict[str, Any], artifact_digest: str) -> dict[str, Any
         raise ValueError("artifact_digest must be a sha256 digest")
     result = copy.deepcopy(record)
     result["artifact_digest"] = artifact_digest
+    return result
+
+
+def bind_release_subject(
+    record: dict[str, Any],
+    *,
+    release_fingerprint: str,
+    sbom_digest: str,
+    provenance_digest: str,
+    attestation_digest: str,
+    artifact_identity: str,
+) -> dict[str, Any]:
+    values = {
+        "release_fingerprint": release_fingerprint,
+        "sbom_digest": sbom_digest,
+        "provenance_digest": provenance_digest,
+        "attestation_digest": attestation_digest,
+    }
+    for label, value in values.items():
+        if not DIGEST_RE.fullmatch(value):
+            raise ValueError(f"{label} must be a sha256 digest")
+    if not artifact_identity.strip():
+        raise ValueError("artifact_identity is required")
+    result = copy.deepcopy(record)
+    result.update(values)
+    result["artifact_identity"] = artifact_identity
+    return result
+
+
+def bind_production_subject(
+    record: dict[str, Any],
+    *,
+    production_release_id: str,
+    deployed_revision: str,
+) -> dict[str, Any]:
+    if not production_release_id.strip():
+        raise ValueError("production_release_id is required")
+    if not SHA_RE.fullmatch(deployed_revision):
+        raise ValueError("deployed_revision must be an exact lowercase hexadecimal revision")
+    result = copy.deepcopy(record)
+    result["production_release_id"] = production_release_id
+    result["deployed_revision"] = deployed_revision
+    return result
+
+
+def invalidate_evidence_for_subject_change(
+    evidence_records: Iterable[dict[str, Any]],
+    *,
+    old_subject: dict[str, Any],
+    new_subject: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Mark subject-bound evidence stale instead of allowing silent reuse."""
+
+    if old_subject == new_subject:
+        return copy.deepcopy(list(evidence_records))
+    result: list[dict[str, Any]] = []
+    for record in evidence_records:
+        item = copy.deepcopy(record)
+        invalidated = list(item.get("invalidated_by") or [])
+        marker = "subject_changed"
+        if marker not in invalidated:
+            invalidated.append(marker)
+        item["invalidated_by"] = sorted(set(invalidated))
+        result.append(item)
     return result
 
 
@@ -139,8 +242,18 @@ def _subject(record: dict[str, Any]) -> dict[str, str] | None:
     if any(not record.get(key) for key in required):
         return None
     subject = {key: str(record[key]) for key in required}
-    if record.get("artifact_digest"):
-        subject["artifact_digest"] = str(record["artifact_digest"])
+    for key in (
+        "artifact_digest",
+        "release_fingerprint",
+        "sbom_digest",
+        "provenance_digest",
+        "attestation_digest",
+        "production_release_id",
+        "deployed_revision",
+        "artifact_identity",
+    ):
+        if record.get(key):
+            subject[key] = str(record[key])
     return subject
 
 
@@ -187,16 +300,14 @@ def _red_green_errors(record: dict[str, Any], evidence_records: list[dict[str, A
     errors: list[str] = []
     for item in records:
         metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-        if metadata.get("bad_base_sha") != record.get("base_sha"):
-            errors.append("RED→GREEN evidence must bind bad_base_sha to the exact protected base SHA")
-        if metadata.get("candidate_head_sha") != record.get("head_sha"):
-            errors.append("RED→GREEN evidence must bind candidate_head_sha to the exact candidate SHA")
-        if metadata.get("same_oracle") is not True:
-            errors.append("RED→GREEN evidence must use the same regression oracle")
-        if metadata.get("bad_result") != "FAIL":
-            errors.append("RED→GREEN evidence must prove FAIL on the known-bad base")
-        if metadata.get("patched_result") != "PASS":
-            errors.append("RED→GREEN evidence must prove PASS on the exact candidate")
+        errors.extend(
+            validate_red_green_evidence(
+                metadata,
+                bad_base_sha=record.get("base_sha"),
+                candidate_head_sha=record.get("head_sha"),
+            )
+        )
+        errors.extend(validate_test_integrity(metadata))
     return sorted(set(errors))
 
 
@@ -260,6 +371,115 @@ def _profile_errors(record: dict[str, Any], policy: dict[str, Any], target_state
     return []
 
 
+def _metadata_records(evidence_records: Iterable[dict[str, Any]], evidence_type: str) -> list[dict[str, Any]]:
+    return [
+        item for item in evidence_records
+        if item.get("type") == evidence_type
+    ]
+
+
+def _protocol_gate_errors(
+    record: dict[str, Any],
+    target_state: str,
+    evidence_records: list[dict[str, Any]],
+    *,
+    policy: dict[str, Any],
+    problem_case: dict[str, Any] | None,
+) -> list[str]:
+    errors: list[str] = []
+    if target_state == "REGRESSION_TEST_PROVEN":
+        errors.extend(_red_green_errors(record, evidence_records))
+    elif target_state == "DIFF_FORENSICS_PASS":
+        for item in _metadata_records(evidence_records, "DIFF_FORENSICS_PASSED"):
+            errors.extend(
+                validate_diff_forensics(
+                    item.get("metadata"),
+                    planned_files=((problem_case or {}).get("change_plan") or {}).get("expected_files") or [],
+                )
+            )
+            errors.extend(validate_test_integrity(item.get("metadata")))
+    elif target_state == "REGRESSION_VALIDATION_PASS":
+        for item in _metadata_records(evidence_records, "FULL_REGRESSION_VALIDATION_PASSED"):
+            errors.extend(
+                validate_full_regression_metadata(
+                    item.get("metadata"),
+                    base_sha=record.get("base_sha"),
+                    candidate_head_sha=record.get("head_sha"),
+                )
+            )
+            errors.extend(validate_test_integrity(item.get("metadata")))
+    elif target_state == "CI_PASS":
+        for evidence_type in ("PROTECTED_CI", "REQUIRED_CHECKS_VERIFIED"):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_ci_metadata(
+                        item.get("metadata"),
+                        head_sha=record.get("head_sha"),
+                        diff_hash=record.get("diff_hash"),
+                    )
+                )
+    elif target_state == "STAGING_PASS":
+        for evidence_type in ("STAGING_SMOKE_PASSED", "ORIGINAL_PROBLEM_STAGING_VERIFIED"):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_staging_metadata(
+                        item.get("metadata"),
+                        head_sha=record.get("head_sha"),
+                        artifact_digest=record.get("artifact_digest"),
+                    )
+                )
+    elif target_state == "READY_FOR_OWNER_RELEASE":
+        for evidence_type in (
+            "RELEASE_FINGERPRINT_VERIFIED",
+            "SIGNED_RELEASE_MANIFEST",
+            "SBOM_VERIFIED",
+            "ARTIFACT_ATTESTATION_VERIFIED",
+            "BUILD_PROVENANCE_VERIFIED",
+        ):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_artifact_chain(
+                        item.get("metadata"),
+                        head_sha=record.get("head_sha"),
+                        artifact_digest=record.get("artifact_digest"),
+                    )
+                )
+        if str(record.get("risk_class") or "") in {"HIGH", "CRITICAL"}:
+            for item in _metadata_records(evidence_records, "PROGRESSIVE_EXPOSURE_PLAN"):
+                errors.extend(validate_progressive_exposure(item.get("metadata"), risk_class=record.get("risk_class")))
+    elif target_state == "PRODUCTION_RELEASED":
+        for evidence_type in (
+            "PROTECTED_RELEASE_AUTHORIZATION",
+            "PRODUCTION_RELEASE_COMPLETED",
+            "EXPECTED_DIGEST_RUNNING",
+        ):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_production_release_metadata(
+                        item.get("metadata"),
+                        head_sha=record.get("head_sha"),
+                        artifact_digest=record.get("artifact_digest"),
+                    )
+                )
+    elif target_state == "POST_DEPLOY_VERIFIED":
+        for item in _metadata_records(evidence_records, "ORIGINAL_PROBLEM_PRODUCTION_VERIFIED"):
+            errors.extend(validate_post_deploy_metadata(item.get("metadata"), artifact_digest=record.get("artifact_digest"), deployed_revision=record.get("deployed_revision")))
+        for item in _metadata_records(evidence_records, "PRODUCTION_HEALTH"):
+            errors.extend(validate_post_deploy_metadata(item.get("metadata"), artifact_digest=record.get("artifact_digest"), deployed_revision=record.get("deployed_revision")))
+    if target_state in {"SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "CHANGE_PLANNED"} and problem_case is not None:
+        if target_state == "SOURCE_OF_TRUTH_RESOLVED":
+            profile = ((policy.get("profiles") or {}).get(record.get("profile")) or {})
+            errors.extend(
+                validate_authoritative_sources(
+                    problem_case.get("authoritative_sources") or [],
+                    problem_case.get("source_conflicts") or [],
+                    required_hierarchy=profile.get("deployment_source_hierarchy") or [],
+                    authority_order=policy.get("authority_order") or [],
+                )
+            )
+    return sorted(set(errors))
+
+
 def evaluate_bug_transition(
     record: dict[str, Any],
     target_state: str,
@@ -271,6 +491,14 @@ def evaluate_bug_transition(
     evidence_schema: dict[str, Any] | None = None,
     trust_roots: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    policy_errors = validate_authoritative_lifecycle_policy(policy)
+    if policy_errors:
+        return {
+            "allowed": False,
+            "decision": "BLOCKED",
+            "target_state": target_state,
+            "reasons": policy_errors,
+        }
     schema_errors = validate_instance(record, lifecycle_schema)
     if schema_errors:
         return {"allowed": False, "decision": "BLOCKED", "target_state": target_state, "reasons": schema_errors}
@@ -297,6 +525,15 @@ def evaluate_bug_transition(
     reasons.extend(_problem_phase_errors(record, target_state, problem_case))
 
     records = list(evidence_records)
+    reasons.extend(
+        _protocol_gate_errors(
+            record,
+            target_state,
+            records,
+            policy=policy,
+            problem_case=problem_case,
+        )
+    )
     minimum, required = _gate_requirements(policy, target_state, record)
     valid_evidence: dict[str, list[str]] = {}
     invalid_evidence: dict[str, list[str]] = {}
@@ -452,6 +689,13 @@ def advance_bug_lifecycle(
         result["problem_case_fingerprint"] = problem_case_fingerprint(problem_case)
         if problem_case.get("risk") is not None:
             result["risk"] = problem_case.get("risk")
+            result["risk_class"] = problem_case.get("risk_class") or risk_class_for_level(problem_case.get("risk"))
+    if decision.get("valid_evidence"):
+        evidence_refs = copy.deepcopy(result.get("evidence_refs") or {})
+        for evidence_type, refs in decision["valid_evidence"].items():
+            current_refs = list(evidence_refs.get(evidence_type) or [])
+            evidence_refs[evidence_type] = sorted(set(current_refs + list(refs)))
+        result["evidence_refs"] = evidence_refs
     if target_state == "CLOSED":
         result["final_state"] = "CLOSED"
     elif target_state == "RESOLVED_NO_CODE":

@@ -21,6 +21,7 @@ from .diff_limits import evaluate_diff_limits
 from .distribution import build_distributions, validate_distribution_archive, verify_checksum_file
 from .errors import ZTADError
 from .evidence import evaluate_required_evidence, load_evidence_records, validate_evidence_record
+from .evidence_bundle import build_evidence_bundle, validate_evidence_bundle
 from .findings import validate_finding
 from .host_acceptance import audit_host_acceptance
 from .mesh_runtime import MeshRuntime
@@ -55,6 +56,7 @@ from .risk import classify_repository_change, classify_risk
 from .schema_validation import validate_file, validate_instance
 from .state_machine import evaluate_next_actions_from_records, evaluate_transition_from_records
 from .test_weakening import inspect_repository_test_integrity
+from .bug_protocol import validate_workshopos_message
 from .util import dump_json, hash_directory, load_data, sha256_file, sha256_json
 
 
@@ -182,6 +184,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("problem-contract", help="Generate a Change Contract only from HANDOFF_READY problem evidence")
     p.add_argument("--case", required=True)
+
+    p = sub.add_parser("build-evidence-bundle", help="Build a subject-bound bug-to-production evidence bundle")
+    p.add_argument("--case", required=True)
+    p.add_argument("--lifecycle", required=True)
+    p.add_argument("--evidence", required=True)
+
+    p = sub.add_parser("validate-evidence-bundle", help="Validate a structured evidence bundle and its records")
+    p.add_argument("--bundle", required=True)
+    p.add_argument("--trust-roots")
+
+    p = sub.add_parser("workshopos-validate-message", help="Validate the WorkshopOS test-only message boundary")
+    p.add_argument("--recipient", required=True)
+    p.add_argument("--browser-e2e", action="store_true")
+    p.add_argument("--dummy-data", action="store_true")
 
     p = sub.add_parser("release-fingerprint", help="Compute a deterministic non-authoritative candidate release fingerprint")
     p.add_argument("--release-manifest", required=True)
@@ -626,6 +642,33 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
         contract = problem_case_to_change_contract(case, schema)
         errors = validate_instance(contract, _data(_root_file("schemas/change-contract.schema.json")))
         return {"contract": contract, "errors": errors}, 0 if not errors else 2
+    if command == "build-evidence-bundle":
+        case = _data(args.case)
+        lifecycle = _data(args.lifecycle)
+        records = load_evidence_records(Path(args.evidence))
+        return build_evidence_bundle(problem_case=case, lifecycle=lifecycle, evidence_records=records), 0
+    if command == "validate-evidence-bundle":
+        bundle = _data(args.bundle)
+        bundle_schema = _data(_root_file("schemas/evidence-bundle.schema.json"))
+        evidence_schema = _data(_root_file("schemas/evidence.schema.json"))
+        roots = _data(args.trust_roots) if args.trust_roots else None
+        errors = validate_evidence_bundle(
+            bundle,
+            bundle_schema=bundle_schema,
+            evidence_schema=evidence_schema,
+            trust_roots=roots,
+        )
+        return {"valid": not errors, "errors": errors}, 0 if not errors else 2
+    if command == "workshopos-validate-message":
+        policy = _data(_root_file("policies/bug-to-production-policy.yaml"))
+        profile = (policy.get("profiles") or {}).get("workshopos")
+        errors = validate_workshopos_message(
+            args.recipient,
+            profile=profile,
+            browser_or_e2e=args.browser_e2e,
+            uses_dummy_data=args.dummy_data,
+        )
+        return {"valid": not errors, "errors": errors, "claim_boundary": "This validates test input only; it cannot authorize a production message."}, 0 if not errors else 2
     if command == "release-fingerprint":
         manifest = _data(args.release_manifest)
         result = compute_release_fingerprint(manifest, _data(_root_file("schemas/release-manifest.schema.json")))

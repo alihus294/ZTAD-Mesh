@@ -127,6 +127,8 @@ class ContinuousScheduler:
             result = {"success": False, "failure_class": "MODEL_PROVIDER_UNAVAILABLE", "error": str(exc)}
         if result.get("success"):
             requested = str(result.get("next_state") or self._default_success_state(task["state"], role))
+            if task.get("authoritative_bug_lifecycle") and requested == "DONE":
+                requested = "INTERNAL_EXECUTION_COMPLETE"
             gate_result = self.transition_gate.evaluate(task, requested, result) if self.transition_gate else {
                 "allowed": True,
                 "claim_boundary": "Ungated scheduler mode is not production-authoritative.",

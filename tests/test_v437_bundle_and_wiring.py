@@ -28,7 +28,7 @@ def test_v437_bug_lifecycle_policy_is_declared_and_wired():
     assert len(matched) == 1
     policy = matched[0]
     assert policy["mode"] == "DETERMINISTIC_AND_PLATFORM_RUNTIME"
-    assert policy["consumers"] == ["ztad.bug_lifecycle"]
+    assert policy["consumers"] == ["ztad.bug_lifecycle", "ztad.bug_protocol", "ztad.evidence_bundle"]
     assert policy["consumer_modules_available"] is True
 
 
@@ -41,5 +41,6 @@ def test_v437_release_and_security_gates_match_protocol_and_traceability():
     assert "PROTECTED_RELEASE_AUTHORIZATION" in policy["gates"]["PRODUCTION_RELEASED"]["required_evidence"]
 
     matrix = (ROOT / "traceability/TRACEABILITY_MATRIX.md").read_text(encoding="utf-8")
-    assert "Active normative requirements: **134**." in matrix
+    assert "Active normative requirements: **153**." in matrix
     assert "28. Exact fail-closed bug-to-production lifecycle | 15" in matrix
+    assert "29. Machine-enforced fail-closed protocol completion | 19" in matrix

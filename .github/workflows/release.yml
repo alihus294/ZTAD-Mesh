@@ -8,6 +8,9 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 concurrency:
   group: release-${{ github.repository }}
@@ -139,6 +142,8 @@ jobs:
           tests/test_v43_runtime_controls.py
           tests/test_v43_last_gaps.py
           tests/test_v43_final_hardening.py
+          tests/test_v439_fail_closed_protocol.py
+          tests/test_v439_release_evidence.py
 
       - name: Validate bundle and policy wiring
         if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
@@ -195,6 +200,7 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/release"
@@ -203,7 +209,70 @@ jobs:
           (
             cd "${RUNNER_TEMP}/release"
             sha256sum "zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
-              "zero-trust-agentic-delivery-marketplace-${VERSION}.zip" > CHECKSUMS.sha256
+              "zero-trust-agentic-delivery-marketplace-${VERSION}.zip" > SUBJECT_CHECKSUMS.sha256
+            python "$GITHUB_WORKSPACE/scripts/verify_release.py" SUBJECT_CHECKSUMS.sha256
+          )
+          python -B "$GITHUB_WORKSPACE/scripts/generate_release_evidence.py" \
+            --release-dir "${RUNNER_TEMP}/release" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --source-sha "${SOURCE_SHA}" \
+            --version "${VERSION}"
+
+      - name: Attest exact release provenance
+        id: provenance
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-checksums: ${{ runner.temp }}/release/SUBJECT_CHECKSUMS.sha256
+
+      - name: Attest exact release SBOM
+        id: sbom
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-checksums: ${{ runner.temp }}/release/SUBJECT_CHECKSUMS.sha256
+          sbom-path: ${{ runner.temp }}/release/SBOM.spdx.json
+
+      - name: Finalize protected release evidence
+        if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cp "${{ steps.provenance.outputs.bundle-path }}" "${RUNNER_TEMP}/release/PROVENANCE_ATTESTATION.json"
+          cp "${{ steps.sbom.outputs.bundle-path }}" "${RUNNER_TEMP}/release/SBOM_ATTESTATION.json"
+          python -B "$GITHUB_WORKSPACE/scripts/generate_release_evidence.py" \
+            --release-dir "${RUNNER_TEMP}/release" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --source-sha "${SOURCE_SHA}" \
+            --version "${VERSION}" \
+            --attestation-path "${RUNNER_TEMP}/release/PROVENANCE_ATTESTATION.json"
+          python -B "$GITHUB_WORKSPACE/scripts/verify_release_evidence.py" \
+            --release-dir "${RUNNER_TEMP}/release" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --source-sha "${SOURCE_SHA}" \
+            --version "${VERSION}" \
+            --require-protected
+          gh attestation verify \
+            "${RUNNER_TEMP}/release/zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
+            --repo "$GITHUB_REPOSITORY"
+          gh attestation verify \
+            "${RUNNER_TEMP}/release/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
+            --repo "$GITHUB_REPOSITORY"
+          (
+            cd "${RUNNER_TEMP}/release"
+            sha256sum \
+              "zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
+              "zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
+              SUBJECT_CHECKSUMS.sha256 \
+              SBOM.spdx.json \
+              PROVENANCE.json \
+              RELEASE_EVIDENCE.json \
+              PROVENANCE_ATTESTATION.json \
+              SBOM_ATTESTATION.json > CHECKSUMS.sha256
             python "$GITHUB_WORKSPACE/scripts/verify_release.py" CHECKSUMS.sha256
           )
 
@@ -249,6 +318,7 @@ jobs:
           - Canonical release identity is verified separately for source-only and packaged runtime/install surfaces.
           - Full regression suites run from both exact Plugin and Marketplace archives before tag creation/publication.
           - Plugin and Marketplace archives are deterministic, independently validated, and covered by \`CHECKSUMS.sha256\`.
+          - SBOM, provenance, protected attestations, and the release fingerprint are published and re-verified against the exact archive subjects.
 
           CI source: ${CI_RUN_URL:-manual-dispatch}
 
@@ -269,6 +339,12 @@ jobs:
             exit 1
           fi
           gh release create "$TAG" \
+            "${RUNNER_TEMP}/release/SUBJECT_CHECKSUMS.sha256" \
+            "${RUNNER_TEMP}/release/SBOM.spdx.json" \
+            "${RUNNER_TEMP}/release/PROVENANCE.json" \
+            "${RUNNER_TEMP}/release/RELEASE_EVIDENCE.json" \
+            "${RUNNER_TEMP}/release/PROVENANCE_ATTESTATION.json" \
+            "${RUNNER_TEMP}/release/SBOM_ATTESTATION.json" \
             "${RUNNER_TEMP}/release/zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
             "${RUNNER_TEMP}/release/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
             "${RUNNER_TEMP}/release/CHECKSUMS.sha256" \
@@ -298,6 +374,18 @@ jobs:
           python -B scripts/run_packaged_regressions.py \
             --archive "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
             --kind marketplace --scope install-critical
+          python -B scripts/verify_release_evidence.py \
+            --release-dir "${RUNNER_TEMP}/published" \
+            --repository "$GITHUB_REPOSITORY" \
+            --source-sha "$SOURCE_SHA" \
+            --version "$VERSION" \
+            --require-protected
+          gh attestation verify \
+            "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-plugin-${VERSION}.zip" \
+            --repo "$GITHUB_REPOSITORY"
+          gh attestation verify \
+            "${RUNNER_TEMP}/published/zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
+            --repo "$GITHUB_REPOSITORY"
           tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
           test "$tag_sha" = "$SOURCE_SHA"
           release_state="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '[.isDraft,.isPrerelease] | @tsv')"
@@ -305,6 +393,12 @@ jobs:
           asset_names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)"
           expected_names="$(printf '%s\n' \
             'CHECKSUMS.sha256' \
+            'PROVENANCE.json' \
+            'PROVENANCE_ATTESTATION.json' \
+            'RELEASE_EVIDENCE.json' \
+            'SBOM.spdx.json' \
+            'SBOM_ATTESTATION.json' \
+            'SUBJECT_CHECKSUMS.sha256' \
             "zero-trust-agentic-delivery-marketplace-${VERSION}.zip" \
             "zero-trust-agentic-delivery-plugin-${VERSION}.zip" | sort)"
           test "$asset_names" = "$expected_names"
