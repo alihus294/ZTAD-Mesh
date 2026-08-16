@@ -5,6 +5,7 @@ from ztad.agent_output import validate_agent_result
 from ztad.crypto import generate_ed25519_keypair, sign_evidence
 from ztad.evidence import evaluate_required_evidence, load_evidence_records, validate_evidence_record
 from ztad.findings import validate_finding
+from ztad.subject import subject_fingerprint
 from ztad.util import load_data, utc_now
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,9 @@ def evidence(*, trust="E2", type="LOCAL_TEST", producer="local-tool:runner", evi
         "head_sha": SHA1,
         "policy_bundle_hash": HASH_B,
         "toolchain_hash": HASH_C,
+        "subject_epoch": 0,
+        "subject_version": 1,
+        "subject_fingerprint": subject_fingerprint(subject()),
         "environment": "local-sandbox" if trust in {"E0", "E1", "E2"} else "ci",
         "command_id": "pytest",
         "exit_code": 0,
@@ -45,7 +49,7 @@ def evidence(*, trust="E2", type="LOCAL_TEST", producer="local-tool:runner", evi
 
 
 def subject():
-    return {"repository": "owner/repo", "change_contract_hash": HASH_A, "base_sha": SHA0, "head_sha": SHA1, "policy_bundle_hash": HASH_B, "toolchain_hash": HASH_C}
+    return {"repository": "owner/repo", "change_contract_hash": HASH_A, "base_sha": SHA0, "head_sha": SHA1, "policy_bundle_hash": HASH_B, "toolchain_hash": HASH_C, "subject_epoch": 0, "subject_version": 1}
 
 
 def agent_result():

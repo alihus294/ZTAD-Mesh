@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.3.10 — 2026-08-16
+
+- Added an explicit PR-head to merged-main subject model with merge provenance, post-merge CI identity, artifact identity, release identity, production revision, and subject epochs.
+- Moved authoritative bug lifecycle writes behind a controller-owned transactional SQLite ledger with append-only hash-chained events, optimistic concurrency, and export-only JSON state.
+- Enforced canonical risk monotonicity, complete active-domain profile unions, semantic classification/change-plan/blast/targeted/diff gates, registered machine-executor provenance, and distinct code-fix, no-code, and rollback closure classes.
+- Added adversarial coverage for stale subjects, wrong PR evidence, no-code lifecycle replay, unsigned protected evidence, incomplete final bundles, and domain-aware rollback closure.
+
 ## 4.3.9 — 2026-08-15
 
 - Added machine-enforced fail-closed protocol metadata for source conflicts, classification, reproduction, root cause, scope, RED-to-GREEN proof, test integrity, full regression, exact-head CI, staging, progressive exposure, production release, and post-deploy verification.

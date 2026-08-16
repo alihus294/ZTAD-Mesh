@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ztad.bug_lifecycle import evaluate_bug_transition
 from ztad.crypto import generate_ed25519_keypair, sign_evidence
+from ztad.subject import subject_fingerprint
 from ztad.util import load_data, utc_now
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,7 +70,7 @@ def _record(
     evidence_id: str,
     status: str = "PASSED",
 ) -> dict:
-    return {
+    record = {
         "evidence_id": evidence_id,
         "type": evidence_type,
         "trust_level": trust_level,
@@ -113,6 +114,53 @@ def _record(
             "protected_workflow": True,
         },
     }
+    record["protected_base_sha"] = SHA0
+    record["pr_head_sha"] = SHA1
+    record["reviewed_diff_hash"] = DIFF
+    record["subject_epoch"] = 0
+    record["subject_version"] = 1
+    record["subject_fingerprint"] = subject_fingerprint(record)
+    if evidence_type in {
+        "TARGETED_VALIDATION_PASSED",
+        "SECURITY_VALIDATION_PASSED",
+        "SECRETS_SCAN_PASSED",
+        "FAIL_CLOSED_BOUNDARY_PASSED",
+    }:
+        record["producer"] = "controller:test-executor"
+        record["metadata"].update({
+            "executor_id": "executor:protected-test",
+            "command_id": "pytest",
+            "argv_fingerprint": "sha256:" + "4" * 64,
+            "working_directory": str(ROOT),
+            "start_at": "2026-08-15T10:00:00Z",
+            "end_at": "2026-08-15T10:00:01Z",
+            "exit_code": 0,
+            "stdout_hash": "sha256:" + "5" * 64,
+            "stderr_hash": "sha256:" + "6" * 64,
+            "check_configuration_hash": "sha256:" + "7" * 64,
+            "toolchain_hash": TOOLCHAIN,
+            "receipt_id": "receipt-protected-test",
+            "producer_identity": "controller:test-executor",
+            "result_artifact_hash": "sha256:" + "8" * 64,
+            "subject_fingerprint": record["subject_fingerprint"],
+            "subject_epoch": 0,
+        })
+    if evidence_type == "TARGETED_VALIDATION_PASSED":
+        record["metadata"]["semantic_case_matrix"] = [
+            {"case": name, "status": "PASS"}
+            for name in (
+                "original_reproduction", "normal_case", "nearest_boundary", "invalid_input",
+                "empty_null_missing_input", "repeated_operation", "retry_behavior", "stale_state", "error_path",
+                "authorization_denial", "tenant_crossing_denial", "id_tampering_denial",
+                "provider_failure", "provider_reconciliation", "provider_idempotency",
+                "idempotency", "financial_duplicate_prevention", "ledger_consistency",
+                "database_migration", "database_recovery", "compatibility_matrix",
+                "legal_state_machine", "duplicate_prevention", "immutability",
+                "concurrency", "no_duplicate_durable_side_effect", "secrets_scan", "fail_closed_boundary",
+            )
+        ]
+        record["metadata"]["original_reproduction_passed"] = True
+    return record
 
 
 def _key(tmp_path: Path, name: str, *, level: str, producer: str, environment: str, types: list[str]):
@@ -158,12 +206,26 @@ def test_security_domain_is_a_mandatory_targeted_validation_gate():
         environment="local",
         evidence_id="ev-security-validation-001",
     )
+    secrets = _record(
+        "SECRETS_SCAN_PASSED",
+        trust_level="E2",
+        producer="tool:security-checks",
+        environment="local",
+        evidence_id="ev-secrets-scan-001",
+    )
+    boundary = _record(
+        "FAIL_CLOSED_BOUNDARY_PASSED",
+        trust_level="E2",
+        producer="tool:security-checks",
+        environment="local",
+        evidence_id="ev-fail-closed-boundary-001",
+    )
     permitted = evaluate_bug_transition(
         lifecycle,
         "TARGETED_VALIDATION_PASS",
         policy=POLICY,
         lifecycle_schema=LIFECYCLE_SCHEMA,
-        evidence_records=[targeted, security],
+        evidence_records=[targeted, security, secrets, boundary],
         evidence_schema=EVIDENCE_SCHEMA,
     )
     assert permitted["allowed"], permitted["reasons"]

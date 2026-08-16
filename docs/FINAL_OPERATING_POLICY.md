@@ -1,4 +1,4 @@
-# Final Operating Policy — ZTAD Mesh 4.3.9
+# Final Operating Policy — ZTAD Mesh 4.3.10
 
 1. Models propose; deterministic tools, protected controllers, and protected platforms create evidence and authority.
 2. Every reported defect MUST begin as `UNVERIFIED_REPORT` and MUST use the authoritative bug-to-production lifecycle. Internal scheduler `DONE` MUST NOT close a bug case.

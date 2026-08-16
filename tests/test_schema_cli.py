@@ -84,8 +84,18 @@ def test_cli_problem_contract_dispatches_to_canonical_validator(tmp_path):
     case.update({
         "state": "HANDOFF_READY",
         "authoritative_sources": [{"source": "src", "authority": "EXECUTABLE_SOURCE", "authority_reason": "Executable source controls observed behavior.", "evidence_ref": "ev-source"}],
-        "classification": "CONFIRMED_BUG",
-        "classification_evidence": ["ev-classification"],
+            "classification": "CONFIRMED_BUG",
+            "classification_evidence": ["ev-classification"],
+            "classification_record": {
+                "evidence": ["ev-classification"],
+                "reproduction_status": "REPRODUCED",
+                "authoritative_expected_behavior": "X produces Z",
+                "competing_explanations_tested": ["cache"],
+                "environment_findings": ["local base"],
+                "unresolved_ambiguities": [],
+                "source_conflicts": [],
+                "implementation_justified": True,
+            },
         "reproduction": {
             "preconditions": ["known bad base"], "action": "run regression", "input": None,
             "expected": "Z", "actual": "Y", "environment": "local", "deterministic": True,
@@ -97,7 +107,16 @@ def test_cli_problem_contract_dispatches_to_canonical_validator(tmp_path):
         },
         "rejected_hypotheses": [],
         "hypothesis_tests": [{"hypothesis": "cache", "test": "invalidate cache", "result": "not causal", "evidence_refs": ["ev-cache"]}],
-        "blast_radius": {"direct": ["src/example.py"], "adjacent": ["tests"], "security_boundaries": [], "data_boundaries": []},
+            "blast_radius": {
+                "direct": ["src/example.py"], "adjacent": ["tests"], "security_boundaries": [], "data_boundaries": [],
+                "coverage": {
+                    "direct_components": ["src/example.py"], "adjacent_components": ["tests"], "callers_callees": ["oracle"],
+                    "api_contracts": ["local"], "database_data_boundaries": ["none"], "tenant_auth_boundaries": ["none"],
+                    "financial_zatca_boundaries": ["none"], "provider_boundaries": ["none"], "concurrency_idempotency_boundaries": ["none"],
+                    "deployment_infra_boundaries": ["none"], "tests": ["pytest"], "observability": ["output"],
+                    "migration_rollback_impact": ["restore"], "invariants": ["unchanged"], "validation_depth": ["base and candidate"],
+                },
+            },
         "invariants": ["Unrelated behavior remains unchanged."],
         "risk": "R1",
         "regression_baseline": {
@@ -108,7 +127,11 @@ def test_cli_problem_contract_dispatches_to_canonical_validator(tmp_path):
             "root_cause_summary": "wrong condition", "intended_fix": "correct the condition",
             "expected_files": ["src/example.py", "tests/test_example.py"], "tests": ["pytest tests/test_example.py"],
             "forbidden_scope": ["infra/production"], "database_impact": "none", "external_side_effects": "none",
-            "rollback_or_containment": "restore the prior verified artifact",
+                "rollback_or_containment": "restore the prior verified artifact",
+                "file_reasons": {
+                    "src/example.py": {"why": "Fix the branch.", "root_cause_mechanism": "Wrong condition.", "validation": "The regression oracle."},
+                    "tests/test_example.py": {"why": "Add the oracle.", "root_cause_mechanism": "Exercises the branch.", "validation": "Fails on base and passes on candidate."},
+                },
         },
         "external_dependencies": [],
     })

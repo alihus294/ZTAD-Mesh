@@ -11,6 +11,7 @@ from .bug_protocol import (
     NON_CODE_CLASSIFICATIONS,
     derive_risk_class,
     validate_authoritative_sources,
+    validate_blast_radius,
     validate_change_plan,
     validate_classification_record,
     validate_reproduction,
@@ -36,6 +37,8 @@ PROBLEM_STATES = (
     "RESOLVED_NO_CODE",
     "QUARANTINED",
 )
+
+ORIGINS = {"FEATURE", "REPORTED_DEFECT", "INCIDENT", "MAINTENANCE", "REFACTOR", "OTHER"}
 
 CODE_CLASSIFICATIONS = set(IMPLEMENTATION_CLASSIFICATIONS)
 
@@ -136,6 +139,7 @@ def initialize_problem_case(
         "schema_version": 1,
         "case_id": case_id or generated_case_id,
         "state": "UNVERIFIED_REPORT",
+        "origin": "REPORTED_DEFECT",
         "repository": inspected["repository"],
         "report": report,
         "original_report_verbatim": report,
@@ -169,7 +173,29 @@ def initialize_problem_case(
         "root_cause": None,
         "hypothesis_tests": [],
         "rejected_hypotheses": [],
-        "blast_radius": {"direct": [], "adjacent": [], "security_boundaries": [], "data_boundaries": []},
+        "blast_radius": {
+            "direct": [],
+            "adjacent": [],
+            "security_boundaries": [],
+            "data_boundaries": [],
+            "coverage": {
+                "direct_components": [],
+                "adjacent_components": [],
+                "callers_callees": [],
+                "api_contracts": [],
+                "database_data_boundaries": [],
+                "tenant_auth_boundaries": [],
+                "financial_zatca_boundaries": [],
+                "provider_boundaries": [],
+                "concurrency_idempotency_boundaries": [],
+                "deployment_infra_boundaries": [],
+                "tests": [],
+                "observability": [],
+                "migration_rollback_impact": [],
+                "invariants": [],
+                "validation_depth": [],
+            },
+        },
         "invariants": [],
         "risk": None,
         "risk_class": None,
@@ -189,7 +215,12 @@ def _require(condition: bool, message: str, errors: list[str]) -> None:
         errors.append(message)
 
 
-def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) -> list[str]:
+def semantic_errors(
+    case: dict[str, Any],
+    *,
+    target_state: str | None = None,
+    policy: dict[str, Any] | None = None,
+) -> list[str]:
     state = target_state or str(case.get("state") or "")
     errors: list[str] = []
     if state not in PROBLEM_STATES:
@@ -231,8 +262,15 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
         _require(bool((case.get("blast_radius") or {}).get("direct")), "blast radius must contain direct surfaces", errors)
         _require(bool(case.get("invariants")), "at least one invariant is required", errors)
         _require(case.get("risk") in {"R0", "R1", "R2", "R3", "R4"}, "risk classification is required", errors)
+        if case.get("origin") not in ORIGINS:
+            errors.append("origin must be one of the declared work origins")
+        errors.extend(validate_blast_radius(case.get("blast_radius"), domains=(case.get("domains") or [])))
         if case.get("risk_class") is not None:
-            expected_class = derive_risk_class(risk=case.get("risk"), domains=(case.get("blast_radius") or {}).get("security_boundaries", []))
+            expected_class = derive_risk_class(
+                risk=case.get("risk"),
+                domains=case.get("domains") or (case.get("blast_radius") or {}).get("security_boundaries", []),
+                policy=policy,
+            )
             _require(case.get("risk_class") in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}, "risk_class is invalid", errors)
             if case.get("risk_class") in {"LOW", "MEDIUM"} and expected_class in {"HIGH", "CRITICAL"}:
                 errors.append("risk_class cannot downgrade deterministic domain risk")
@@ -264,11 +302,20 @@ def semantic_errors(case: dict[str, Any], *, target_state: str | None = None) ->
     return sorted(set(errors))
 
 
-def validate_problem_case(case: dict[str, Any], schema: dict[str, Any]) -> list[str]:
-    return sorted(set(validate_instance(case, schema) + semantic_errors(case)))
+def validate_problem_case(
+    case: dict[str, Any],
+    schema: dict[str, Any],
+    policy: dict[str, Any] | None = None,
+) -> list[str]:
+    return sorted(set(validate_instance(case, schema) + semantic_errors(case, policy=policy)))
 
 
-def can_transition(case: dict[str, Any], target_state: str, schema: dict[str, Any]) -> dict[str, Any]:
+def can_transition(
+    case: dict[str, Any],
+    target_state: str,
+    schema: dict[str, Any],
+    policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     current = str(case.get("state") or "")
     reasons: list[str] = []
     if target_state not in TRANSITIONS.get(current, set()):
@@ -276,7 +323,7 @@ def can_transition(case: dict[str, Any], target_state: str, schema: dict[str, An
     candidate = copy.deepcopy(case)
     candidate["state"] = target_state
     reasons.extend(validate_instance(candidate, schema))
-    reasons.extend(semantic_errors(candidate, target_state=target_state))
+    reasons.extend(semantic_errors(candidate, target_state=target_state, policy=policy))
     return {
         "allowed": not reasons,
         "current_state": current,
@@ -287,8 +334,13 @@ def can_transition(case: dict[str, Any], target_state: str, schema: dict[str, An
     }
 
 
-def advance_problem_case(case: dict[str, Any], target_state: str, schema: dict[str, Any]) -> dict[str, Any]:
-    decision = can_transition(case, target_state, schema)
+def advance_problem_case(
+    case: dict[str, Any],
+    target_state: str,
+    schema: dict[str, Any],
+    policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    decision = can_transition(case, target_state, schema, policy=policy)
     if not decision["allowed"]:
         raise ValueError("; ".join(decision["reasons"]))
     result = copy.deepcopy(case)
@@ -296,8 +348,12 @@ def advance_problem_case(case: dict[str, Any], target_state: str, schema: dict[s
     return result
 
 
-def problem_case_to_change_contract(case: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
-    errors = validate_problem_case(case, schema)
+def problem_case_to_change_contract(
+    case: dict[str, Any],
+    schema: dict[str, Any],
+    policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    errors = validate_problem_case(case, schema, policy=policy)
     if errors:
         raise ValueError("Invalid problem case: " + "; ".join(errors))
     if case.get("state") != "HANDOFF_READY":
@@ -309,6 +365,15 @@ def problem_case_to_change_contract(case: dict[str, Any], schema: dict[str, Any]
     baseline = case["regression_baseline"]
     expected = case.get("expected_behavior") or "The proven reported problem no longer reproduces under the recorded regression oracle."
     expected_files = list(dict.fromkeys(plan.get("expected_files") or (case.get("blast_radius") or {}).get("direct") or ["."]))
+    planned_file_reasons = plan.get("file_reasons") or {}
+    file_reasons = {
+        path: planned_file_reasons.get(path) or {
+            "why": f"This file is in the approved impact surface for {case['case_id']}.",
+            "root_cause_mechanism": str(plan.get("root_cause_summary") or "Addresses the proven root cause."),
+            "validation": "; ".join(str(item) for item in (plan.get("tests") or [])),
+        }
+        for path in expected_files
+    }
     invariants = list(dict.fromkeys(case.get("invariants") or ["No unrelated behavior changes outside the bounded change plan."]))
     seed = int(problem_case_fingerprint(case).removeprefix("sha256:")[:12], 16) % 1_000_000_000
     change_id = f"PROBLEM-{seed}"
@@ -321,6 +386,14 @@ def problem_case_to_change_contract(case: dict[str, Any], schema: dict[str, Any]
     ]
     return {
         "schema_version": 1,
+        "origin": "REPORTED_DEFECT",
+        "bug_lifecycle_case_id": case["case_id"],
+        "authoritative_lifecycle_handoff": {
+            "case_id": case["case_id"],
+            "state": case["state"],
+            "problem_case_fingerprint": problem_case_fingerprint(case),
+            "authority_store": "controller-owned-sqlite",
+        },
         "change_id": change_id,
         "title": f"Problem fix: {case['case_id']}",
         "outcome": {"user_or_system_value": expected, "success_metric": None},
@@ -332,6 +405,8 @@ def problem_case_to_change_contract(case: dict[str, Any], schema: dict[str, Any]
         },
         "scope": {
             "expected_components": expected_files,
+            "file_reasons": file_reasons,
+            "domains": list(dict.fromkeys(str(item).upper() for item in (case.get("domains") or []))),
             "prohibited_components": list(plan.get("forbidden_scope") or []),
             "public_contract_change": False,
             "data_migration_expected": "migration" in str(plan.get("database_impact", "")).lower(),

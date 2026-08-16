@@ -1,10 +1,50 @@
-# Autonomous Fail-Closed Bug-to-Production Protocol — ZTAD Mesh 4.3.9
+# Autonomous Fail-Closed Bug-to-Production Protocol — ZTAD Mesh 4.3.10
 
 ## Purpose
 
 This document is the normative ZTAD implementation of the WorkshopOS Fail-Closed Bug-to-Production Protocol v1. It is optimized for a solo owner who may not be a programmer. Routine technical decisions belong to the agent/controller; owner involvement is limited to irreducible business intent, legal/compliance decisions, irreversible authorization, or protected production authority the agent does not possess.
 
 The governing rule is: **no state advances because a model is confident. Every transition requires the exact evidence defined by policy and bound to the correct subject.** Missing, conflicting, incomplete, stale, or invalid evidence fails closed.
+
+## Subject identity and provenance
+
+The lifecycle subject is a structured provenance tuple, never a single mutable head SHA:
+
+```text
+protected_base_sha
+→ pr_head_sha
+→ reviewed_diff_hash
+→ merged_main_sha + merge_method + merge_provenance
+→ post_merge_ci_run_id
+→ change_contract_hash + policy_bundle_hash + toolchain_hash
+→ artifact_digest + artifact_identity + release_fingerprint
+→ sbom_digest + provenance_digest + attestation_digest
+→ production_release_id + deployed_revision
+```
+
+The PR head and merged-main SHA are allowed to differ. A squash, rebase, or merge transition requires a protected transformation record containing the reviewed PR head, reviewed diff hash, merged-main SHA, and transformation method. PR review and pre-merge CI evidence proves only the reviewed PR subject. Artifact, staging, release, production, and runtime evidence must bind the exact merged-main subject and its post-merge CI. A production validator must compare the deployed revision with the validated merged-main subject and artifact chain; it must never require deployed-main to equal an obsolete PR head.
+
+Every material subject mutation increments `subject_epoch` and changes `subject_fingerprint`. Candidate, reviewed diff, contract, policy, toolchain, merged-main, artifact, release, and deployed-revision changes invalidate incompatible evidence and approvals. The controller resets the lifecycle to the earliest state that must be reproven, or writes `ROLLBACK_REQUIRED` after production exposure. Historical evidence remains retained but cannot satisfy a current gate.
+
+## Authoritative lifecycle ledger
+
+The controller-owned SQLite ledger is the security authority. JSON lifecycle files are verified exports only and carry an explicit claim boundary. Each ledger event is append-only and records the actor, timestamp, prior state, requested state, decision, required and accepted evidence IDs, rejected evidence, exact subject fingerprint and epoch, policy and toolchain hashes, risk and domain snapshots, prior event hash, and current state hash. Writes use an optimistic version check inside a durable transaction. Reads verify the global sequence and hash chain; reordered, deleted, replayed, tampered, stale, or unauthorized writes fail closed.
+
+The scheduler's `DONE`, merge completion, deployment-command success, and model output are subordinate execution facts. They cannot write `CLOSED`, `POST_DEPLOY_VERIFIED`, production authority, or a no-code resolution into the authoritative ledger.
+
+## Risk, domains, and evidence trust
+
+One deterministic risk engine computes the effective level as the maximum of previous effective risk, requested risk, contract risk, path risk, operation risk, domain minimum, actual-diff risk, and runtime or platform escalation. The mapping is `R0/R1 → LOW`, `R2 → MEDIUM`, `R3 → HIGH`, and `R4 → CRITICAL`; automatic downgrade is prohibited. All active domain-profile checks are unioned across every declared domain, including in hotfix mode. Progressive-exposure requirements use the effective risk, not only the submitted label.
+
+E0 and E1 are context only. E2 is local deterministic evidence and cannot grant protected authority. E3 through E6 require the configured trust root, valid signature or attestation, affirmative status, exact subject, non-expiry, valid producer class, and non-invalidation. Machine execution evidence additionally requires a registered executor, exact command and configuration fingerprints, working directory, timestamps, exit code, output hashes, immutable receipt, toolchain hash, result artifact hash, and subject epoch. A model-authored JSON record cannot manufacture a deterministic execution result.
+
+## Terminal classes and exceptional flows
+
+`RESOLVED_NO_CODE` is a distinct terminal class. It requires explicit non-code classification and authoritative proof, but does not require code-fix, artifact, staging, production, or post-deploy fields. Its lifecycle still replays through intake, source resolution, and classification before the terminal decision.
+
+Rollback closure is a separate terminal class. App health alone is insufficient: database, financial, ZATCA, auth/tenant, provider, concurrency, and security domains require their corresponding reconciliation or containment proof. A deployment receipt never proves correctness. `PRODUCTION_RELEASED`, `POST_DEPLOY_VERIFIED`, and `CLOSED` remain separate claims.
+
+Incident intake may contain the active exposure first. The controller may contain or roll back immediately, retain the original incident subject, and then require the full root-cause and remediation lifecycle. Database work may span `expand → compatible deploy → migrate/backfill → verify → contract`; each release subject retains its own compatibility and migration evidence. Performance-regression cases require baseline and candidate subjects, workload identity, environment, sample count, warmup, variance, threshold policy, regression budget, and result hashes.
 
 ## Authority hierarchy
 
@@ -142,7 +182,7 @@ A required failing check cannot be ignored as “pre-existing” unless failure 
 
 `STAGING_PASS` uses the exact validated candidate/artifact. Staging uses separate/synthetic data, avoids real customer PII and unintended financial/ZATCA/provider side effects, verifies health, reproduces the original scenario, proves the bug absent, runs affected and adjacent critical workflows, inspects logs/errors, and verifies invariants.
 
-Hotfix mode may reduce breadth but does not skip lifecycle states. Database, auth/tenant, financial, ZATCA, and security changes retain full high-risk gates.
+Hotfix mode does not skip lifecycle states or reduce mandatory high-risk validation breadth. Database, auth/tenant, financial, ZATCA, provider, concurrency, and security changes retain their complete profile gates.
 
 ## Ready for owner release
 

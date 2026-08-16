@@ -17,6 +17,7 @@ if str(TOOLKIT) not in sys.path:
 def valid_contract(*, risk: str = "R0", data_class: str = "C0", criticality: str = "tier_3", components: list[str] | None = None) -> dict[str, Any]:
     return {
         "schema_version": 1,
+        "origin": "FEATURE",
         "change_id": "FEAT-100",
         "title": "Deliver a bounded verified feature",
         "outcome": {"user_or_system_value": "Provide a measurable system behavior", "success_metric": "acceptance passes"},

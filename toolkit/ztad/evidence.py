@@ -10,13 +10,23 @@ from .crypto import verify_evidence_signature
 from .errors import ConfigurationError
 from .schema_validation import validate_instance
 from .util import atomic_write, load_data
+from .subject import SUBJECT_FIELDS, subject_fingerprint, subject_from_record
+from .trust import trust_root_payload
 
 
 TRUST_ORDER = {"E0": 0, "E1": 1, "E2": 2, "E3": 3, "E4": 4, "E5": 5, "E6": 6}
 AUTHORITATIVE_MINIMUM = "E3"
 AFFIRMATIVE_STATUSES = {"PASSED", "SUCCESS", "VERIFIED", "APPROVED", "COMPLETED", "READY", "ACTIVE"}
 
-SUBJECT_REQUIRED_FIELDS = ("repository", "change_contract_hash", "base_sha", "head_sha", "policy_bundle_hash", "toolchain_hash")
+SUBJECT_REQUIRED_FIELDS = (
+    "repository",
+    "protected_base_sha",
+    "pr_head_sha",
+    "reviewed_diff_hash",
+    "change_contract_hash",
+    "policy_bundle_hash",
+    "toolchain_hash",
+)
 SUBJECT_OPTIONAL_FIELDS = (
     "artifact_digest",
     "release_fingerprint",
@@ -26,6 +36,12 @@ SUBJECT_OPTIONAL_FIELDS = (
     "production_release_id",
     "deployed_revision",
     "artifact_identity",
+    "merged_main_sha",
+    "merge_method",
+    "merge_provenance",
+    "post_merge_ci_run_id",
+    "subject_epoch",
+    "subject_version",
 )
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40,64}$")
 DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -35,16 +51,18 @@ def validate_evidence_subject(subject: dict[str, Any] | None) -> list[str]:
     errors: list[str] = []
     if not isinstance(subject, dict):
         return ["Evidence subject must be an object"]
+    subject = subject_from_record(subject)
     missing = [field for field in SUBJECT_REQUIRED_FIELDS if not subject.get(field)]
     if missing:
         errors.append("Evidence subject lacks required fields: " + ", ".join(missing))
     if subject.get("repository") is not None and not isinstance(subject.get("repository"), str):
         errors.append("Evidence subject repository must be a string")
-    for field in ("base_sha", "head_sha"):
+    for field in ("protected_base_sha", "pr_head_sha", "merged_main_sha", "deployed_revision"):
         value = subject.get(field)
         if value is not None and (not isinstance(value, str) or not SHA_PATTERN.fullmatch(value)):
             errors.append(f"Evidence subject {field} must be an exact lowercase hexadecimal revision")
     for field in (
+        "reviewed_diff_hash",
         "change_contract_hash",
         "policy_bundle_hash",
         "toolchain_hash",
@@ -61,10 +79,140 @@ def validate_evidence_subject(subject: dict[str, Any] | None) -> list[str]:
         not isinstance(subject.get("artifact_identity"), str) or not subject.get("artifact_identity").strip()
     ):
         errors.append("Evidence subject artifact_identity must be a non-empty string")
+    if subject.get("merge_method") is not None and subject.get("merge_method") not in {"MERGE", "SQUASH", "REBASE", "FAST_FORWARD"}:
+        errors.append("Evidence subject merge_method is unsupported")
+    if subject.get("merged_main_sha"):
+        provenance = subject.get("merge_provenance")
+        if not isinstance(provenance, dict):
+            errors.append("Merged-main evidence requires merge_provenance")
+        if not subject.get("post_merge_ci_run_id"):
+            errors.append("Merged-main evidence requires post_merge_ci_run_id")
+    active = subject.get("merged_main_sha") or subject.get("pr_head_sha")
+    if subject.get("deployed_revision") and active and subject.get("deployed_revision") != active:
+        errors.append("Evidence subject deployed_revision must equal the active merged-main or candidate revision")
+    if subject.get("subject_epoch") is not None and (not isinstance(subject.get("subject_epoch"), int) or subject.get("subject_epoch") < 0):
+        errors.append("Evidence subject subject_epoch must be a non-negative integer")
     allowed = set(SUBJECT_REQUIRED_FIELDS) | set(SUBJECT_OPTIONAL_FIELDS)
     extra = sorted(set(subject) - allowed)
     if extra:
         errors.append("Evidence subject has unsupported fields: " + ", ".join(extra))
+    return sorted(set(errors))
+
+
+MACHINE_EXECUTOR_EVIDENCE_TYPES = {
+    "REGRESSION_RED_GREEN_PROVEN",
+    "TARGETED_VALIDATION_PASSED",
+    "FULL_REGRESSION_VALIDATION_PASSED",
+    "DIFF_FORENSICS_PASSED",
+    "SECURITY_VALIDATION_PASSED",
+    "SECRETS_SCAN_PASSED",
+    "FAIL_CLOSED_BOUNDARY_PASSED",
+    "MIGRATION_NECESSITY_PROVEN",
+    "MIGRATION_LEDGER_HISTORY_GUARD_PASSED",
+    "FRESH_DB_REBUILD_PASSED",
+    "DATABASE_RECOVERY_PLAN_VERIFIED",
+    "OLD_APP_NEW_SCHEMA_COMPATIBILITY",
+    "NEW_APP_OLD_SCHEMA_COMPATIBILITY",
+    "RLS_TENANT_DATA_SAFETY_PASSED",
+    "BOUNDED_MIGRATION_BACKFILL_PASSED",
+    "AUTHZ_TENANT_MATRIX_PASSED",
+    "SERVER_SIDE_AUTHORIZATION_PASSED",
+    "TENANT_CROSSING_DENIED",
+    "ID_TAMPERING_DENIED",
+    "PROTECTED_DATA_LEAKAGE_CHECK_PASSED",
+    "FINANCIAL_INVARIANTS_PASSED",
+    "IDEMPOTENCY_PASSED",
+    "CONCURRENCY_INVARIANTS_PASSED",
+    "LEDGER_CONSISTENCY_PASSED",
+    "NO_DUPLICATE_FINANCIAL_SIDE_EFFECT",
+    "ROUNDING_TAX_VAT_ZERO_VALUE_PASSED",
+    "FINAL_STATE_REFUND_SEMANTICS_PASSED",
+    "ZATCA_INVARIANTS_PASSED",
+    "ZATCA_LEGAL_STATE_MACHINE_PASSED",
+    "ZATCA_DUPLICATE_PREVENTION_PASSED",
+    "ZATCA_IMMUTABILITY_PASSED",
+    "ZATCA_SANDBOX_ONLY_TEST_PASSED",
+    "ZATCA_CLEARANCE_REPORTING_RETRY_CERTIFICATE_PASSED",
+    "ZATCA_SIGNED_DOCUMENT_CUTOVER_PASSED",
+    "PROVIDER_SEMANTICS_PASSED",
+    "PROVIDER_STATE_RECONCILIATION_PASSED",
+    "PROVIDER_IDEMPOTENCY_PASSED",
+    "PROVIDER_SAFE_OUTAGE_PASSED",
+    "PROVIDER_CONTRACT_FAILURE_RECONCILIATION_PASSED",
+    "PARALLEL_REPRODUCTION_PASSED",
+    "NO_DUPLICATE_DURABLE_SIDE_EFFECT",
+}
+REGISTERED_EXECUTOR_PRODUCERS = frozenset({
+    "controller:test-executor",
+    "controller:validation",
+    "platform:protected-ci",
+    "platform:protected-validation",
+})
+
+
+def validate_machine_evidence_provenance(record: dict[str, Any], *, subject: dict[str, Any] | None = None) -> list[str]:
+    """Reject model-authored JSON that merely claims deterministic execution."""
+
+    evidence_type = str(record.get("type") or "")
+    if evidence_type not in MACHINE_EXECUTOR_EVIDENCE_TYPES:
+        return []
+    errors: list[str] = []
+    producer = str(record.get("producer") or "")
+    if producer not in REGISTERED_EXECUTOR_PRODUCERS:
+        errors.append("Machine evidence must come from a registered deterministic executor/controller")
+    metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+    required = (
+        "executor_id",
+        "command_id",
+        "argv_fingerprint",
+        "working_directory",
+        "start_at",
+        "end_at",
+        "exit_code",
+        "stdout_hash",
+        "stderr_hash",
+        "check_configuration_hash",
+        "toolchain_hash",
+        "receipt_id",
+        "producer_identity",
+        "result_artifact_hash",
+        "subject_fingerprint",
+        "subject_epoch",
+    )
+    for field in required:
+        if metadata.get(field) in (None, ""):
+            errors.append(f"Machine evidence requires immutable provenance field {field}")
+    if metadata.get("exit_code") != record.get("exit_code"):
+        errors.append("Machine evidence exit_code does not match the receipt")
+    if not isinstance(metadata.get("exit_code"), int) or isinstance(metadata.get("exit_code"), bool):
+        errors.append("Machine evidence exit_code must be an integer")
+    if record.get("command_id") is not None and metadata.get("command_id") != record.get("command_id"):
+        errors.append("Machine evidence command_id does not match the receipt")
+    if metadata.get("producer_identity") != producer:
+        errors.append("Machine evidence producer_identity does not match the producer")
+    if record.get("toolchain_hash") is not None and metadata.get("toolchain_hash") != record.get("toolchain_hash"):
+        errors.append("Machine evidence toolchain_hash does not match the subject record")
+    for field in ("argv_fingerprint", "stdout_hash", "stderr_hash", "check_configuration_hash", "result_artifact_hash", "toolchain_hash"):
+        if metadata.get(field) is not None and not DIGEST_PATTERN.fullmatch(str(metadata.get(field))):
+            errors.append(f"Machine evidence {field} must be a sha256 digest")
+    start = _parse_time(metadata.get("start_at"))
+    end = _parse_time(metadata.get("end_at"))
+    if start is None:
+        errors.append("Machine evidence start_at is invalid")
+    if end is None:
+        errors.append("Machine evidence end_at is invalid")
+    if start is not None and end is not None and end < start:
+        errors.append("Machine evidence end_at must not precede start_at")
+    if subject is not None:
+        expected_fp = subject_fingerprint(subject)
+        if metadata.get("subject_fingerprint") != expected_fp:
+            errors.append("Machine evidence subject_fingerprint mismatch")
+        if metadata.get("subject_epoch") != int(subject.get("subject_epoch") or 0):
+            errors.append("Machine evidence subject_epoch mismatch")
+    if record.get("subject_fingerprint") is not None and metadata.get("subject_fingerprint") != record.get("subject_fingerprint"):
+        errors.append("Machine evidence record and metadata subject_fingerprint mismatch")
+    if metadata.get("manual") is True or metadata.get("model_authored") is True:
+        errors.append("Model-authored or manually authored machine evidence is not authoritative")
     return sorted(set(errors))
 
 
@@ -102,12 +250,14 @@ def validate_evidence_record(
     schema: dict[str, Any] | None = None,
     subject: dict[str, str] | None = None,
     minimum_trust: str = "E3",
-    trust_roots: dict[str, Any] | None = None,
+    trust_roots: Any = None,
     require_authoritative_signature: bool = True,
     require_affirmative_status: bool = False,
     now: datetime | None = None,
 ) -> list[str]:
     errors: list[str] = []
+    if minimum_trust not in TRUST_ORDER:
+        return [f"Unknown minimum evidence trust level: {minimum_trust}"]
     if schema is not None:
         errors.extend(validate_instance(evidence, schema))
     if evidence.get("invalidated_by"):
@@ -116,18 +266,29 @@ def validate_evidence_record(
     if trust not in TRUST_ORDER or TRUST_ORDER[trust] < TRUST_ORDER.get(minimum_trust, 3):
         errors.append(f"Evidence trust level {trust} is below required {minimum_trust}")
     if subject:
-        for key in (
-            "repository",
-            "change_contract_hash",
-            "base_sha",
-            "head_sha",
-            "policy_bundle_hash",
-            "toolchain_hash",
-            *SUBJECT_OPTIONAL_FIELDS,
-        ):
-            expected = subject.get(key)
-            if expected is not None and evidence.get(key) != expected:
-                errors.append(f"Evidence subject mismatch for {key}: expected {expected}, got {evidence.get(key)}")
+        expected_subject = subject_from_record(subject)
+        actual_subject = subject_from_record(evidence)
+        for key in SUBJECT_FIELDS:
+            expected = expected_subject.get(key)
+            if expected is None:
+                continue
+            raw_actual = evidence.get(key)
+            if key in {"subject_epoch", "subject_version"} and raw_actual is None:
+                if TRUST_ORDER.get(trust, 0) < TRUST_ORDER["E3"]:
+                    continue
+                errors.append(f"Evidence subject mismatch for {key}: the protected record must carry the field explicitly")
+                continue
+            actual = actual_subject.get(key)
+            if actual != expected:
+                errors.append(f"Evidence subject mismatch for {key}: expected {expected}, got {actual}")
+        expected_fingerprint = subject_fingerprint(expected_subject)
+        actual_fingerprint = evidence.get("subject_fingerprint")
+        if TRUST_ORDER.get(trust, -1) >= TRUST_ORDER["E3"] and actual_fingerprint != expected_fingerprint:
+            errors.append("Evidence subject_fingerprint must match the exact protected subject")
+        elif actual_fingerprint is not None and actual_fingerprint != subject_fingerprint(actual_subject):
+            errors.append("Evidence subject_fingerprint does not match the evidence subject")
+    elif evidence.get("subject_fingerprint") is not None and evidence.get("subject_fingerprint") != subject_fingerprint(subject_from_record(evidence)):
+        errors.append("Evidence subject_fingerprint does not match the evidence subject")
     producer = str(evidence.get("producer", ""))
     if producer.startswith("agent:") and TRUST_ORDER.get(trust, 0) >= TRUST_ORDER[AUTHORITATIVE_MINIMUM]:
         errors.append("Agent-produced evidence cannot have authoritative trust")
@@ -135,6 +296,7 @@ def validate_evidence_record(
         errors.append("Affirmative evidence cannot have a non-zero exit code")
     if require_affirmative_status and not evidence_affirms(evidence):
         errors.append("Evidence status is not affirmative for the asserted gate claim")
+    errors.extend(validate_machine_evidence_provenance(evidence, subject=subject))
 
     current = now or datetime.now(timezone.utc)
     created = _parse_time(evidence.get("created_at"))
@@ -150,11 +312,15 @@ def validate_evidence_record(
     if created is not None and expires is not None and expires <= created:
         errors.append("Evidence expires_at must be later than created_at")
 
-    if TRUST_ORDER.get(trust, 0) >= TRUST_ORDER[AUTHORITATIVE_MINIMUM] and require_authoritative_signature:
+    if TRUST_ORDER.get(trust, 0) >= TRUST_ORDER[AUTHORITATIVE_MINIMUM]:
         if trust_roots is None:
             errors.append("Authoritative evidence cannot be accepted without configured trust roots")
         else:
-            errors.extend(verify_evidence_signature(evidence, trust_roots))
+            payload = trust_root_payload(trust_roots)
+            if payload is None:
+                errors.append("Configured trust roots are not a usable root set")
+            else:
+                errors.extend(verify_evidence_signature(evidence, payload))
     return sorted(set(errors))
 
 
@@ -229,7 +395,7 @@ def evaluate_required_evidence(
     subject: dict[str, str],
     schema: dict[str, Any] | None = None,
     minimum_trust: str = "E3",
-    trust_roots: dict[str, Any] | None = None,
+    trust_roots: Any = None,
     require_authoritative_signature: bool = True,
 ) -> dict[str, Any]:
     records_list = list(records)
@@ -237,11 +403,20 @@ def evaluate_required_evidence(
     invalid: dict[str, list[str]] = {}
     seen_ids: set[str] = set()
     duplicate_ids: list[str] = []
+    seen_receipts: set[tuple[str, str]] = set()
+    duplicate_receipts: list[str] = []
     for record in records_list:
         evidence_id = str(record.get("evidence_id", "<missing>"))
         if evidence_id in seen_ids:
             duplicate_ids.append(evidence_id)
         seen_ids.add(evidence_id)
+        metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+        receipt_id = metadata.get("receipt_id")
+        if receipt_id not in (None, ""):
+            receipt_key = (str(receipt_id), str(record.get("type") or ""))
+            if receipt_key in seen_receipts:
+                duplicate_receipts.append(receipt_key[0])
+            seen_receipts.add(receipt_key)
         errors = validate_evidence_record(
             record,
             schema=schema,
@@ -258,10 +433,13 @@ def evaluate_required_evidence(
     missing = [item for item in required_types if not valid_by_type.get(item)]
     if duplicate_ids:
         invalid["<duplicates>"] = ["Duplicate evidence IDs: " + ", ".join(sorted(set(duplicate_ids)))]
+    if duplicate_receipts:
+        invalid["<duplicate_receipts>"] = ["Duplicate machine receipt IDs: " + ", ".join(sorted(set(duplicate_receipts)))]
     return {
-        "passed": not missing and not duplicate_ids,
+        "passed": not missing and not duplicate_ids and not duplicate_receipts,
         "missing_types": missing,
         "valid_evidence": valid_by_type,
         "invalid_evidence": invalid,
         "duplicate_evidence_ids": sorted(set(duplicate_ids)),
+        "duplicate_receipt_ids": sorted(set(duplicate_receipts)),
     }

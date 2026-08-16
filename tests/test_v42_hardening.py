@@ -25,6 +25,7 @@ from ztad.providers import (
 )
 from ztad.repository import GitRepository
 from ztad.util import canonical_json, sha256_bytes, utc_now
+from ztad.subject import subject_fingerprint
 
 from conftest import init_git_repo, valid_contract
 
@@ -204,9 +205,12 @@ def test_approval_derived_from_stored_run_identity(tmp_path):
     generate_ed25519_keypair(private, public)
     subject = {
         "repository": "owner/repo", "change_contract_hash": "sha256:" + "b" * 64,
-        "base_sha": "c" * 40, "head_sha": head, "policy_bundle_hash": "sha256:" + "e" * 64,
+        "base_sha": "c" * 40, "head_sha": head, "protected_base_sha": "c" * 40, "pr_head_sha": head,
+        "reviewed_diff_hash": "sha256:" + "1" * 64, "policy_bundle_hash": "sha256:" + "e" * 64,
         "toolchain_hash": "sha256:" + "f" * 64,
+        "subject_epoch": 0, "subject_version": 1,
     }
+    subject["subject_fingerprint"] = subject_fingerprint(subject)
     result = issue_supervisor_approval_evidence(
         store=store, task_id=task["task_id"], reviewer_run_id="review-run",
         head_sha=head, diff_hash="sha256:" + "1" * 64, evidence_refs=["ci"],

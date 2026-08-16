@@ -4,9 +4,22 @@
   "title": "ZTAD Change Contract",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "change_id", "title", "outcome", "requirements", "scope", "quality_attributes", "verification", "release", "governance", "budget"],
+  "required": ["schema_version", "origin", "change_id", "title", "outcome", "requirements", "scope", "quality_attributes", "verification", "release", "governance", "budget"],
   "properties": {
     "schema_version": {"const": 1},
+    "origin": {"enum": ["FEATURE", "REPORTED_DEFECT", "INCIDENT", "MAINTENANCE", "REFACTOR", "OTHER"]},
+    "bug_lifecycle_case_id": {"type": ["string", "null"]},
+    "authoritative_lifecycle_handoff": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["case_id", "state", "problem_case_fingerprint", "authority_store"],
+      "properties": {
+        "case_id": {"type": "string", "minLength": 1},
+        "state": {"enum": ["HANDOFF_READY", "CHANGE_PLANNED"]},
+        "problem_case_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "authority_store": {"const": "controller-owned-sqlite"}
+      }
+    },
     "change_id": {"type": "string", "pattern": "^[A-Z][A-Z0-9_-]{1,31}-[0-9]{1,10}$"},
     "title": {"type": "string", "minLength": 3, "maxLength": 160},
     "outcome": {
@@ -48,6 +61,29 @@
       "required": ["expected_components", "prohibited_components", "public_contract_change", "data_migration_expected", "service_criticality", "data_classification"],
       "properties": {
         "expected_components": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "file_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {"type": "string", "minLength": 1},
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["why", "root_cause_mechanism", "validation"],
+                "properties": {
+                  "why": {"type": "string", "minLength": 1},
+                  "root_cause_mechanism": {"type": "string", "minLength": 1},
+                  "validation": {"type": "string", "minLength": 1}
+                }
+              }
+            ]
+          }
+        },
+        "domains": {
+          "type": "array",
+          "items": {"enum": ["GENERAL", "DATABASE", "AUTH_TENANT", "FINANCIAL", "ZATCA", "PROVIDER", "CONCURRENCY", "SECURITY"]},
+          "uniqueItems": true
+        },
         "prohibited_components": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "public_contract_change": {"type": "boolean"},
         "data_migration_expected": {"type": "boolean"},

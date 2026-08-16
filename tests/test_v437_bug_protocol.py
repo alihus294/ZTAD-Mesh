@@ -13,6 +13,7 @@ from ztad.bug_lifecycle import (
 )
 from ztad.problem import initialize_problem_case, problem_case_fingerprint
 from ztad.util import load_data, utc_now
+from ztad.subject import subject_fingerprint
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = load_data(ROOT / "policies/bug-to-production-policy.yaml")
@@ -63,6 +64,26 @@ def _repo(tmp_path: Path) -> Path:
     return repo
 
 
+def _blast_coverage() -> dict:
+    return {
+        "direct_components": ["app.py"],
+        "adjacent_components": ["tests"],
+        "callers_callees": ["test oracle"],
+        "api_contracts": ["local behavior"],
+        "database_data_boundaries": ["none"],
+        "tenant_auth_boundaries": ["none"],
+        "financial_zatca_boundaries": ["none"],
+        "provider_boundaries": ["none"],
+        "concurrency_idempotency_boundaries": ["none"],
+        "deployment_infra_boundaries": ["none"],
+        "tests": ["pytest tests/test_bug.py"],
+        "observability": ["test output"],
+        "migration_rollback_impact": ["restore prior artifact"],
+        "invariants": ["unrelated behavior remains unchanged"],
+        "validation_depth": ["base and candidate oracle"],
+    }
+
+
 def _proven_problem_case(tmp_path: Path) -> dict:
     case = initialize_problem_case(
         _repo(tmp_path),
@@ -77,6 +98,16 @@ def _proven_problem_case(tmp_path: Path) -> dict:
         ],
         "classification": "CONFIRMED_BUG",
         "classification_evidence": ["ev-classification"],
+        "classification_record": {
+            "evidence": ["ev-classification"],
+            "reproduction_status": "REPRODUCED",
+            "authoritative_expected_behavior": "X must produce Z.",
+            "competing_explanations_tested": ["cache hypothesis"],
+            "environment_findings": ["local base fixture"],
+            "unresolved_ambiguities": [],
+            "source_conflicts": [],
+            "implementation_justified": True,
+        },
         "reproduction": {
             "preconditions": ["base fixture"],
             "action": "run regression",
@@ -108,6 +139,7 @@ def _proven_problem_case(tmp_path: Path) -> dict:
             "adjacent": ["tests"],
             "security_boundaries": [],
             "data_boundaries": [],
+            "coverage": _blast_coverage(),
         },
         "invariants": ["Unrelated behavior remains unchanged."],
         "risk": "R1",
@@ -129,6 +161,18 @@ def _proven_problem_case(tmp_path: Path) -> dict:
             "database_impact": "none",
             "external_side_effects": "none",
             "rollback_or_containment": "restore the prior verified artifact",
+            "file_reasons": {
+                "app.py": {
+                    "why": "The faulty branch is in the implementation file.",
+                    "root_cause_mechanism": "The branch selects Y instead of Z.",
+                    "validation": "The exact regression oracle proves the corrected result.",
+                },
+                "tests/test_bug.py": {
+                    "why": "The regression oracle must encode the reported defect.",
+                    "root_cause_mechanism": "The oracle exercises the faulty branch.",
+                    "validation": "The same oracle fails on base and passes on candidate.",
+                },
+            },
         },
     })
     return case
@@ -161,17 +205,51 @@ def _bound_lifecycle(tmp_path: Path) -> tuple[dict, dict]:
 
 
 def _evidence(lifecycle: dict, evidence_type: str, *, metadata: dict | None = None) -> dict:
+    machine_metadata = {}
+    producer = "tool:ztad-test"
+    if evidence_type in {
+        "REGRESSION_RED_GREEN_PROVEN",
+        "TARGETED_VALIDATION_PASSED",
+        "FULL_REGRESSION_VALIDATION_PASSED",
+        "DIFF_FORENSICS_PASSED",
+        "SECURITY_VALIDATION_PASSED",
+        "SECRETS_SCAN_PASSED",
+        "FAIL_CLOSED_BOUNDARY_PASSED",
+    }:
+        producer = "controller:test-executor"
+        machine_metadata = {
+            "executor_id": "executor:test",
+            "command_id": "pytest",
+            "argv_fingerprint": "sha256:" + "1" * 64,
+            "working_directory": str(ROOT),
+            "start_at": "2026-08-15T10:00:00Z",
+            "end_at": "2026-08-15T10:00:01Z",
+            "exit_code": 0,
+            "stdout_hash": "sha256:" + "2" * 64,
+            "stderr_hash": "sha256:" + "3" * 64,
+            "check_configuration_hash": "sha256:" + "4" * 64,
+            "toolchain_hash": lifecycle["toolchain_hash"],
+            "receipt_id": "receipt:test",
+            "producer_identity": "controller:test-executor",
+            "result_artifact_hash": "sha256:" + "5" * 64,
+            "subject_fingerprint": subject_fingerprint(lifecycle),
+            "subject_epoch": int(lifecycle.get("subject_epoch") or 0),
+        }
+        machine_metadata.update(metadata or {})
     return {
         "evidence_id": "ev-" + evidence_type.lower().replace("_", "-"),
         "type": evidence_type,
         "trust_level": "E2",
-        "producer": "tool:ztad-test",
+        "producer": producer,
         "repository": lifecycle["repository"],
         "change_contract_hash": lifecycle["change_contract_hash"],
         "base_sha": lifecycle["base_sha"],
         "head_sha": lifecycle["head_sha"],
+        "diff_hash": lifecycle["diff_hash"],
         "policy_bundle_hash": lifecycle["policy_bundle_hash"],
         "toolchain_hash": lifecycle["toolchain_hash"],
+        "subject_epoch": int(lifecycle.get("subject_epoch") or 0),
+        "subject_version": int(lifecycle.get("subject_version") or 1),
         "environment": "local",
         "command_id": "pytest",
         "exit_code": 0,
@@ -182,7 +260,7 @@ def _evidence(lifecycle: dict, evidence_type: str, *, metadata: dict | None = No
         "expires_at": None,
         "invalidated_by": [],
         "signature_or_attestation": None,
-        "metadata": metadata or {},
+        "metadata": machine_metadata if machine_metadata else (metadata or {}),
     }
 
 
@@ -341,7 +419,7 @@ def test_missing_post_deploy_proof_after_production_requires_rollback(tmp_path):
     assert result["decision"] == "ROLLBACK_REQUIRED"
 
 
-def test_closed_is_only_available_after_post_deploy_verified(tmp_path):
+def test_closed_requires_post_deploy_health_and_observation_proof(tmp_path):
     lifecycle, case = _bound_lifecycle(tmp_path)
     lifecycle = bind_artifact(lifecycle, "sha256:" + "a" * 64)
     lifecycle["state"] = "POST_DEPLOY_VERIFIED"
@@ -354,19 +432,19 @@ def test_closed_is_only_available_after_post_deploy_verified(tmp_path):
         problem_case=case,
         evidence_schema=EVIDENCE_SCHEMA,
     )
-    assert closed["state"] == "CLOSED"
-    assert closed["final_state"] == "CLOSED"
+    assert closed["state"] == "ROLLBACK_REQUIRED"
+    assert any("Missing evidence" in item for item in closed["blockers"])
 
 
 def test_high_risk_domain_profiles_add_mandatory_targeted_evidence():
     gate = POLICY["gates"]["TARGETED_VALIDATION_PASS"]["by_domain"]
     assert "MIGRATION_LEDGER_HISTORY_GUARD_PASSED" in gate["DATABASE"]
-    assert gate["AUTH_TENANT"] == ["AUTHZ_TENANT_MATRIX_PASSED"]
-    assert gate["FINANCIAL"] == ["FINANCIAL_INVARIANTS_PASSED"]
-    assert gate["ZATCA"] == ["ZATCA_INVARIANTS_PASSED"]
-    assert gate["PROVIDER"] == ["PROVIDER_SEMANTICS_PASSED"]
-    assert gate["CONCURRENCY"] == ["CONCURRENCY_INVARIANTS_PASSED"]
-    assert gate["SECURITY"] == ["SECURITY_VALIDATION_PASSED"]
+    assert {"AUTHZ_TENANT_MATRIX_PASSED", "SERVER_SIDE_AUTHORIZATION_PASSED", "TENANT_CROSSING_DENIED", "ID_TAMPERING_DENIED"}.issubset(gate["AUTH_TENANT"])
+    assert {"FINANCIAL_INVARIANTS_PASSED", "IDEMPOTENCY_PASSED", "LEDGER_CONSISTENCY_PASSED", "NO_DUPLICATE_FINANCIAL_SIDE_EFFECT"}.issubset(gate["FINANCIAL"])
+    assert {"ZATCA_INVARIANTS_PASSED", "ZATCA_LEGAL_STATE_MACHINE_PASSED", "ZATCA_DUPLICATE_PREVENTION_PASSED", "ZATCA_IMMUTABILITY_PASSED"}.issubset(gate["ZATCA"])
+    assert {"PROVIDER_SEMANTICS_PASSED", "PROVIDER_STATE_RECONCILIATION_PASSED", "PROVIDER_IDEMPOTENCY_PASSED", "PROVIDER_SAFE_OUTAGE_PASSED"}.issubset(gate["PROVIDER"])
+    assert {"CONCURRENCY_INVARIANTS_PASSED", "PARALLEL_REPRODUCTION_PASSED", "NO_DUPLICATE_DURABLE_SIDE_EFFECT"}.issubset(gate["CONCURRENCY"])
+    assert {"SECURITY_VALIDATION_PASSED", "SECRETS_SCAN_PASSED", "FAIL_CLOSED_BOUNDARY_PASSED"}.issubset(gate["SECURITY"])
 
 
 def test_staging_is_runtime_evidence_and_owner_release_requires_protected_supervisor():

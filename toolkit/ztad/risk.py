@@ -10,7 +10,19 @@ from .path_security import path_matches, filesystem_case_insensitive, normalize_
 from .util import load_data
 
 RISK_ORDER = {"R0": 0, "R1": 1, "R2": 2, "R3": 3, "R4": 4}
+RISK_CLASS_TO_LEVEL = {"LOW": "R1", "MEDIUM": "R2", "HIGH": "R3", "CRITICAL": "R4"}
+RISK_TO_CLASS = {"R0": "LOW", "R1": "LOW", "R2": "MEDIUM", "R3": "HIGH", "R4": "CRITICAL"}
 SCORE_TO_RISK = ((2, "R0"), (6, "R1"), (11, "R2"), (16, "R3"), (22, "R4"))
+KNOWN_DOMAINS = frozenset({
+    "GENERAL",
+    "DATABASE",
+    "AUTH_TENANT",
+    "FINANCIAL",
+    "ZATCA",
+    "PROVIDER",
+    "CONCURRENCY",
+    "SECURITY",
+})
 
 
 @dataclass(frozen=True)
@@ -37,12 +49,58 @@ class RiskResult:
             "blockers": self.blockers,
             "unknowns": self.unknowns,
             "agent_may_downgrade": False,
+            "effective_risk": self.risk,
         }
 
 
+def effective_risk(
+    *,
+    previous: str = "R0",
+    requested: str = "R0",
+    contract: str = "R0",
+    path: str = "R0",
+    operation: str = "R0",
+    domain_minimum: str = "R0",
+    actual_diff: str = "R0",
+    runtime: str = "R0",
+) -> str:
+    """Canonical monotonic risk join used by all delivery decisions."""
+
+    values = (previous, requested, contract, path, operation, domain_minimum, actual_diff, runtime)
+    unknown = [value for value in values if value not in RISK_ORDER]
+    if unknown:
+        raise ValueError("Unknown risk level: " + ", ".join(sorted(set(unknown))))
+    return max(values, key=RISK_ORDER.__getitem__)
+
+
+def risk_class_to_level(value: str | None) -> str:
+    normalized = str(value or "LOW").upper()
+    if normalized in RISK_ORDER:
+        return normalized
+    if normalized in RISK_CLASS_TO_LEVEL:
+        return RISK_CLASS_TO_LEVEL[normalized]
+    raise ValueError("Unknown risk class: " + normalized)
+
+
+def risk_level_to_class(value: str | None) -> str:
+    normalized = str(value or "R0").upper()
+    if normalized not in RISK_TO_CLASS:
+        raise ValueError("Unknown risk level: " + normalized)
+    return RISK_TO_CLASS[normalized]
+
+
+def assert_monotonic_risk(previous: str, current: str) -> None:
+    if previous not in RISK_ORDER or current not in RISK_ORDER:
+        raise ValueError("Unknown risk level in monotonicity check")
+    if RISK_ORDER[current] < RISK_ORDER[previous]:
+        raise ValueError(f"Risk downgrade is prohibited: {previous} -> {current}")
+
+
 def max_risk(*levels: str) -> str:
-    valid = [level for level in levels if level in RISK_ORDER]
-    return max(valid, key=lambda value: RISK_ORDER[value]) if valid else "R0"
+    unknown = [level for level in levels if level not in RISK_ORDER]
+    if unknown:
+        raise ValueError("Unknown risk level: " + ", ".join(sorted(set(unknown))))
+    return max(levels, key=lambda value: RISK_ORDER[value]) if levels else "R0"
 
 
 def score_to_risk(score: int) -> str:
@@ -211,8 +269,44 @@ def classify_risk(
 
     score = sum(dimensions.values())
     score_risk = score_to_risk(score)
-    risk = max_risk(score_risk, hard_minimum)
-    blocked = bool(blockers)
+    domain_minimum = "R0"
+    declared_domains = {
+        str(item).upper()
+        for item in (
+            contract.get("domains") or
+            scope.get("domains") or
+            ((contract.get("governance") or {}).get("domains") or [])
+        )
+    }
+    unknown_domains = sorted(declared_domains - KNOWN_DOMAINS)
+    if unknown_domains:
+        blockers.append("Unknown change domains require explicit classification")
+        unknowns.extend("unknown_domain:" + item for item in unknown_domains)
+    domain_text = " ".join(str(value) for value in [contract.get("title", ""), contract.get("scope", {}), contract.get("requirements", {})]).casefold()
+    for domain, profile in (policy.get("domain_profiles") or {}).items():
+        normalized_domain = str(domain).upper()
+        markers = (str(normalized_domain).casefold(),)
+        if normalized_domain in declared_domains or any(marker in domain_text for marker in markers):
+            minimum_class = str((profile or {}).get("minimum_risk_class") or "HIGH").upper()
+            domain_minimum = max_risk(domain_minimum, RISK_CLASS_TO_LEVEL.get(minimum_class, "R3"))
+    governance = contract.get("governance") or {}
+    previous = str(governance.get("previous_effective_risk") or "R0").upper()
+    policy_risk = str(governance.get("policy_risk") or "R0").upper()
+    operation_risk = "R4" if detected_ops else "R0"
+    risk = effective_risk(
+        previous=previous,
+        requested=requested,
+        contract=max_risk(score_risk, policy_risk),
+        path=hard_minimum,
+        operation=operation_risk,
+        domain_minimum=domain_minimum,
+        actual_diff=hard_minimum,
+        runtime=str(contract.get("runtime_risk") or "R0").upper(),
+    )
+    # Unknown metadata is a blocking condition even when a policy elects to
+    # assign a conservative numerical floor.  A risk number alone is not
+    # permission to proceed with an unclassified change.
+    blocked = bool(blockers or unknowns)
     if (blockers or unknowns) and policy.get("unknown_value_policy", "highest_plausible") == "highest_plausible":
         risk = max_risk(risk, "R2")
     return RiskResult(

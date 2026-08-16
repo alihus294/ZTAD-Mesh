@@ -37,6 +37,28 @@
       "pattern": "^[0-9a-f]{40,64}$",
       "type": ["string", "null"]
     },
+    "protected_base_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": ["string", "null"]
+    },
+    "pr_head_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": ["string", "null"]
+    },
+    "reviewed_diff_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "merged_main_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": ["string", "null"]
+    },
+    "merge_method": {
+      "enum": [null, "MERGE", "SQUASH", "REBASE", "FAST_FORWARD"],
+      "type": ["string", "null"]
+    },
+    "merge_provenance": {"type": ["object", "null"]},
+    "post_merge_ci_run_id": {"type": ["string", "null"]},
     "blocked_target": {
       "enum": [null, "UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "RESOLVED_NO_CODE"],
       "type": ["string", "null"]
@@ -50,6 +72,10 @@
       "items": {"type": "string"},
       "type": "array",
       "uniqueItems": true
+    },
+    "closure_class": {
+      "enum": [null, "CODE_FIX", "ROLLBACK_CLOSURE", "RESOLVED_NO_CODE"],
+      "type": ["string", "null"]
     },
     "attestation_digest": {
       "pattern": "^sha256:[0-9a-f]{64}$",
@@ -84,13 +110,26 @@
       "type": "object"
     },
     "final_state": {
-      "enum": [null, "CLOSED", "RESOLVED_NO_CODE"],
+      "enum": [null, "CLOSED", "RESOLVED_NO_CODE", "ROLLBACK_REQUIRED"],
       "type": ["string", "null"]
     },
     "head_sha": {
       "pattern": "^[0-9a-f]{40,64}$",
       "type": ["string", "null"]
     },
+    "subject_epoch": {"minimum": 0, "type": "integer"},
+    "subject_version": {"minimum": 1, "type": "integer"},
+    "subject_fingerprint": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "authority_store": {"type": ["string", "null"]},
+    "subject_mutations": {"type": "array", "items": {"type": "object"}},
+    "historical_evidence_refs": {
+      "type": "object",
+      "additionalProperties": {"type": "array", "items": {"type": "string"}}
+    },
+    "risk_history": {"type": "array", "items": {"type": "object"}},
+    "lifecycle_events": {"type": "array", "items": {"type": "object"}},
+    "lifecycle_export": {"type": "boolean"},
+    "claim_boundary": {"type": "string"},
     "last_completed_state": {
       "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "RESOLVED_NO_CODE"]
     },
@@ -125,11 +164,19 @@
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": ["string", "null"]
     },
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "state": {
       "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "BLOCKED", "ROLLBACK_REQUIRED", "RESOLVED_NO_CODE"]
     },
     "scheduler_state": {"type": ["string", "null"]},
+    "store_record_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "store_version": {
+      "minimum": 1,
+      "type": "integer"
+    },
     "sbom_digest": {
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": ["string", "null"]

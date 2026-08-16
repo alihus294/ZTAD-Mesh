@@ -1,4 +1,4 @@
-# ZTAD Mesh 4.3.9 — Normative Master Plan
+# ZTAD Mesh 4.3.10 — Normative Master Plan
 
 ## 1. Mission
 
@@ -617,7 +617,7 @@ UNVERIFIED_REPORT
 - `CLOSED` MUST NOT be reachable from an internal scheduler `DONE`, merge completion, model statement, deployment-command success, or a readiness result such as `PRODUCTION_VERIFIED`.
 - Missing mandatory evidence before production MUST result in `BLOCKED` for the affected transition.
 - Missing, conflicting, or unhealthy mandatory evidence after production exposure MUST result in `ROLLBACK_REQUIRED` or containment.
-- Hotfix mode MAY reduce validation breadth but MUST NOT skip lifecycle states, and database/auth/tenant/financial/ZATCA/security changes retain their high-risk gates.
+- Hotfix mode MUST NOT reduce mandatory high-risk validation breadth or skip lifecycle states, and database/auth/tenant/financial/ZATCA/provider/concurrency/security changes retain their complete profile gates.
 - The WorkshopOS profile MUST use only `DEPLOYMENT.md → infra/docs/runbook.md → .github/workflows/deploy.yml` as its canonical production path.
 
 ## 29. Machine-enforced fail-closed protocol completion
@@ -642,3 +642,36 @@ The implementation of the bug-to-production protocol MUST preserve the following
 - Missing external authority MUST produce `WAITING_EXTERNAL_DEPENDENCY` for the affected task, unsafe work MUST be quarantined, transient execution failures MAY use bounded `AUTO_REPAIR`, strategy failures MUST use `AUTO_REPLAN`, unrelated safe work MUST continue, and post-exposure uncertainty MUST produce `ROLLBACK_REQUIRED`.
 - WorkshopOS profile data MUST restrict test-only messages to `0594269477`, require dummy data for browser/E2E tests, and permit only `DEPLOYMENT.md → infra/docs/runbook.md → .github/workflows/deploy.yml` as the canonical production chain.
 - The final evidence bundle MUST preserve the original report, classification, evidence chain, exact subject fingerprint, all mandatory gate records, release artifacts, production identity, post-deploy proof, and final state; local reports MUST declare their host and external capability limits.
+
+## 30. Immutable delivery subject and invalidation
+
+- The authoritative subject MUST model protected base, PR head, reviewed diff, merged-main revision, merge method, merge provenance, post-merge CI, contract, policy, toolchain, artifact, release, SBOM, provenance, attestation, production release, deployed revision, artifact identity, subject epoch, and subject version.
+- PR-head and merged-main identity MUST remain distinct; squash, rebase, merge, and fast-forward transitions MUST carry an exact protected transformation record.
+- PR review and pre-merge CI evidence MUST NOT prove a merged-main, artifact, staging, production, or runtime claim without exact post-merge evidence.
+- Every material subject mutation MUST increment subject epoch, change the subject fingerprint, invalidate incompatible evidence and approvals, and reset the authoritative lifecycle to the earliest state requiring revalidation.
+- A material subject mutation after production exposure MUST write `ROLLBACK_REQUIRED` or containment and MUST NOT silently preserve a completed gate.
+
+## 31. Controller-owned lifecycle authority
+
+- The authoritative lifecycle MUST be stored in a controller-owned durable transactional ledger rather than a mutable model-writable JSON file.
+- Ledger events MUST be append-only, globally sequenced, hash-chained, actor-bound, subject-bound, policy-bound, toolchain-bound, risk-bound, domain-bound, and protected by optimistic concurrency.
+- Every ledger read MUST verify event order, previous hashes, record hashes, state hashes, denormalized columns, case versions, subject epochs, and current-state consistency.
+- JSON lifecycle files MAY be exported for interoperability but MUST state that the controller ledger remains authoritative.
+- A scheduler terminal state, deployment command, model statement, or mutable export MUST NOT write authoritative `CLOSED`, `POST_DEPLOY_VERIFIED`, or `RESOLVED_NO_CODE`.
+
+## 32. Canonical risk, domain, and evidence enforcement
+
+- One deterministic risk engine MUST compute effective risk as the maximum of previous effective, requested, contract, path, operation, domain minimum, actual-diff, and runtime/platform escalation.
+- Risk mapping MUST remain `R0/R1 = LOW`, `R2 = MEDIUM`, `R3 = HIGH`, and `R4 = CRITICAL`; effective risk MUST never decrease automatically.
+- Every declared domain MUST contribute the union of all active policy-profile checks at the applicable gates, and hotfix mode MUST retain the full union.
+- Progressive-exposure requirements MUST be selected from effective risk and MUST include write gates and owner stop conditions where policy requires them.
+- E3 through E6 evidence MUST require valid configured trust roots, signatures or attestations, affirmative status, exact subject, producer authorization, expiry checks, and non-invalidation.
+- Machine-execution evidence MUST include registered executor identity, exact command/configuration fingerprints, timestamps, exit/output hashes, immutable receipt, result artifact hash, toolchain hash, and subject epoch.
+
+## 33. Terminal classes and exceptional release flows
+
+- `RESOLVED_NO_CODE` MUST be a distinct non-code terminal class with authoritative proof and MUST NOT require fake code-fix, artifact, staging, production, or post-deploy evidence.
+- Rollback closure MUST require protected rollback completion and post-rollback health plus every applicable database, financial, ZATCA, auth/tenant, provider, concurrency, and security reconciliation or containment check.
+- Incident containment MAY precede diagnosis, but the original incident subject and subsequent root-cause/remediation lifecycle MUST be retained.
+- Database multi-release changes MUST model `expand → compatible deploy → migrate/backfill → verify → contract`, with separate exact evidence for every release subject.
+- Performance-regression closure MUST bind baseline and candidate subjects, workload, environment, sample count, warmup, variance, threshold policy, regression budget, and result hashes.

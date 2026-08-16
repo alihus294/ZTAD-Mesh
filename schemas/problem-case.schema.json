@@ -8,6 +8,7 @@
     "schema_version",
     "case_id",
     "state",
+    "origin",
     "repository",
     "report",
     "observed_at",
@@ -59,6 +60,9 @@
         "RESOLVED_NO_CODE",
         "QUARANTINED"
       ]
+    },
+    "origin": {
+      "enum": ["FEATURE", "REPORTED_DEFECT", "INCIDENT", "MAINTENANCE", "REFACTOR", "OTHER"]
     },
     "repository": {
       "type": "string",
@@ -292,7 +296,11 @@
         "evidence",
         "reproduction_status",
         "authoritative_expected_behavior",
-        "competing_explanations_tested"
+        "competing_explanations_tested",
+        "environment_findings",
+        "unresolved_ambiguities",
+        "source_conflicts",
+        "implementation_justified"
       ],
       "properties": {
         "evidence": {
@@ -309,6 +317,21 @@
         "competing_explanations_tested": {
           "type": "array",
           "items": {"type": "string"}
+        },
+        "environment_findings": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "unresolved_ambiguities": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "source_conflicts": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "implementation_justified": {
+          "type": "boolean"
         }
       }
     },
@@ -491,7 +514,8 @@
         "direct",
         "adjacent",
         "security_boundaries",
-        "data_boundaries"
+        "data_boundaries",
+        "coverage"
       ],
       "properties": {
         "direct": {
@@ -553,6 +577,46 @@
         "concurrency": {
           "type": "array",
           "items": {"type": "string"}
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "direct_components",
+            "adjacent_components",
+            "callers_callees",
+            "api_contracts",
+            "database_data_boundaries",
+            "tenant_auth_boundaries",
+            "financial_zatca_boundaries",
+            "provider_boundaries",
+            "concurrency_idempotency_boundaries",
+            "deployment_infra_boundaries",
+            "tests",
+            "observability",
+            "migration_rollback_impact",
+            "invariants",
+            "validation_depth"
+          ],
+          "properties": {
+            "direct_components": {"type": "array", "items": {"type": "string"}},
+            "adjacent_components": {"type": "array", "items": {"type": "string"}},
+            "callers_callees": {"type": "array", "items": {"type": "string"}},
+            "api_contracts": {"type": "array", "items": {"type": "string"}},
+            "database_data_boundaries": {"type": "array", "items": {"type": "string"}},
+            "tenant_auth_boundaries": {"type": "array", "items": {"type": "string"}},
+            "financial_zatca_boundaries": {"type": "array", "items": {"type": "string"}},
+            "provider_boundaries": {"type": "array", "items": {"type": "string"}},
+            "concurrency_idempotency_boundaries": {"type": "array", "items": {"type": "string"}},
+            "deployment_infra_boundaries": {"type": "array", "items": {"type": "string"}},
+            "tests": {"type": "array", "items": {"type": "string"}},
+            "observability": {"type": "array", "items": {"type": "string"}},
+            "migration_rollback_impact": {"type": "array", "items": {"type": "string"}},
+            "invariants": {"type": "array", "items": {"type": "string"}},
+            "validation_depth": {"type": "array", "items": {"type": "string"}},
+            "unknown_material_coupling": {"type": "boolean"},
+            "unknown_coupling_action": {"enum": ["EXPAND_CONTEXT", "ESCALATE_BLOCK"]}
+          }
         }
       }
     },
@@ -580,6 +644,13 @@
     "risk_class": {
       "type": ["string", "null"],
       "enum": [null, "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    },
+    "domains": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["GENERAL", "DATABASE", "AUTH_TENANT", "FINANCIAL", "ZATCA", "PROVIDER", "CONCURRENCY", "SECURITY"]
+      }
     },
     "regression_baseline": {
       "type": [
@@ -657,7 +728,8 @@
         "forbidden_scope",
         "database_impact",
         "external_side_effects",
-        "rollback_or_containment"
+        "rollback_or_containment",
+        "file_reasons"
       ],
       "properties": {
         "root_cause_summary": {
@@ -695,7 +767,21 @@
         },
         "file_reasons": {
           "type": "object",
-          "additionalProperties": {"type": "string"}
+          "additionalProperties": {
+            "oneOf": [
+              {"type": "string", "minLength": 1},
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["why", "root_cause_mechanism", "validation"],
+                "properties": {
+                  "why": {"type": "string", "minLength": 1},
+                  "root_cause_mechanism": {"type": "string", "minLength": 1},
+                  "validation": {"type": "string", "minLength": 1}
+                }
+              }
+            ]
+          }
         },
         "scope_expansion": {
           "type": "array",

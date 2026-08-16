@@ -175,6 +175,74 @@ class GitRepository:
             argv.extend(safe_relative_path(path) for path in paths)
         return self._run(argv).stdout
 
+    def diff_bytes(self, base: str, head: str) -> bytes:
+        return self._run_bytes(
+            ["diff", "--binary", "--no-ext-diff", "--no-textconv", self.rev_parse(base), self.rev_parse(head), "--"]
+        ).stdout
+
+    def worktree_diff_bytes(self, base: str) -> bytes:
+        return self._run_bytes(
+            ["diff", "--binary", "--no-ext-diff", "--no-textconv", self.rev_parse(base), "--"]
+        ).stdout
+
+    def staged_diff_bytes(self) -> bytes:
+        """Return the index-versus-HEAD patch, including binary and mode data."""
+
+        return self._run_bytes(
+            ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "--"]
+        ).stdout
+
+    def unstaged_diff_bytes(self) -> bytes:
+        """Return the worktree-versus-index patch, including binary and mode data."""
+
+        return self._run_bytes(
+            ["diff", "--binary", "--no-ext-diff", "--no-textconv", "--"]
+        ).stdout
+
+    def worktree_changed_paths(self, base: str) -> list[dict[str, str | None]]:
+        resolved_base = self.rev_parse(base)
+        result = self._run(["diff", "--name-status", "-z", "--find-renames", resolved_base, "--"])
+        fields = result.stdout.split("\x00")
+        if fields and fields[-1] == "":
+            fields.pop()
+        changed: list[dict[str, str | None]] = []
+        index = 0
+        while index < len(fields):
+            status = fields[index]
+            index += 1
+            if status.startswith(("R", "C")):
+                if index + 1 >= len(fields):
+                    raise RepositoryError("Malformed worktree diff name-status output")
+                old_path = safe_relative_path(fields[index])
+                new_path = safe_relative_path(fields[index + 1])
+                index += 2
+                changed.append({"path": new_path, "status": status, "old_path": old_path})
+            else:
+                if index >= len(fields):
+                    raise RepositoryError("Malformed worktree diff name-status output")
+                changed.append({"path": safe_relative_path(fields[index]), "status": status, "old_path": None})
+                index += 1
+        status_result = self._run(["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+        status_fields = [item for item in status_result.stdout.split("\x00") if item]
+        known = {str(item["path"]) for item in changed}
+        for item in status_fields:
+            if len(item) < 3:
+                raise RepositoryError("Malformed worktree status output")
+            status = item[:2]
+            path = item[3:]
+            if status == "??":
+                relative = safe_relative_path(path)
+                if relative not in known:
+                    changed.append({"path": relative, "status": status, "old_path": None})
+        return sorted(
+            changed,
+            key=lambda item: (
+                str(item.get("path") or ""),
+                str(item.get("old_path") or ""),
+                str(item.get("status") or ""),
+            ),
+        )
+
     def show_bytes(self, revision: str, path: str) -> bytes:
         result = self._run_bytes(["show", f"{self.rev_parse(revision)}:{safe_relative_path(path)}"], check=False)
         if result.returncode != 0:

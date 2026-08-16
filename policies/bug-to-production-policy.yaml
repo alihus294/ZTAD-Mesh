@@ -1,6 +1,18 @@
 version: 1
 protocol: WorkshopOS-Fail-Closed-Bug-to-Production-v1
+protocol_revision: 2
 mode: FAIL_CLOSED
+mandatory_fields:
+- risk_classes
+- deterministic_escalation
+- domain_profiles.required_checks
+- gates.by_risk
+- progressive_exposure
+- hotfix
+- artifact_chain
+- gates.READY_FOR_OWNER_RELEASE
+- gates.ROLLBACK_CLOSURE
+- profiles
 authority_order:
 - GOVERNING_INSTRUCTION
 - EXECUTABLE_SOURCE
@@ -56,6 +68,8 @@ domain_profiles:
     - DATABASE_RECOVERY_PLAN_VERIFIED
     - OLD_APP_NEW_SCHEMA_COMPATIBILITY
     - NEW_APP_OLD_SCHEMA_COMPATIBILITY
+    - RLS_TENANT_DATA_SAFETY_PASSED
+    - BOUNDED_MIGRATION_BACKFILL_PASSED
   AUTH_TENANT:
     minimum_risk_class: HIGH
     required_checks:
@@ -63,6 +77,7 @@ domain_profiles:
     - SERVER_SIDE_AUTHORIZATION_PASSED
     - TENANT_CROSSING_DENIED
     - ID_TAMPERING_DENIED
+    - PROTECTED_DATA_LEAKAGE_CHECK_PASSED
   FINANCIAL:
     minimum_risk_class: HIGH
     required_checks:
@@ -71,6 +86,8 @@ domain_profiles:
     - CONCURRENCY_INVARIANTS_PASSED
     - LEDGER_CONSISTENCY_PASSED
     - NO_DUPLICATE_FINANCIAL_SIDE_EFFECT
+    - ROUNDING_TAX_VAT_ZERO_VALUE_PASSED
+    - FINAL_STATE_REFUND_SEMANTICS_PASSED
   ZATCA:
     minimum_risk_class: HIGH
     required_checks:
@@ -79,6 +96,8 @@ domain_profiles:
     - ZATCA_DUPLICATE_PREVENTION_PASSED
     - ZATCA_IMMUTABILITY_PASSED
     - ZATCA_SANDBOX_ONLY_TEST_PASSED
+    - ZATCA_CLEARANCE_REPORTING_RETRY_CERTIFICATE_PASSED
+    - ZATCA_SIGNED_DOCUMENT_CUTOVER_PASSED
   PROVIDER:
     minimum_risk_class: HIGH
     required_checks:
@@ -86,6 +105,7 @@ domain_profiles:
     - PROVIDER_STATE_RECONCILIATION_PASSED
     - PROVIDER_IDEMPOTENCY_PASSED
     - PROVIDER_SAFE_OUTAGE_PASSED
+    - PROVIDER_CONTRACT_FAILURE_RECONCILIATION_PASSED
   CONCURRENCY:
     minimum_risk_class: HIGH
     required_checks:
@@ -236,21 +256,50 @@ gates:
     - TARGETED_VALIDATION_PASSED
     by_domain:
       DATABASE:
+      - MIGRATION_NECESSITY_PROVEN
       - MIGRATION_LEDGER_HISTORY_GUARD_PASSED
       - FRESH_DB_REBUILD_PASSED
       - DATABASE_RECOVERY_PLAN_VERIFIED
+      - OLD_APP_NEW_SCHEMA_COMPATIBILITY
+      - NEW_APP_OLD_SCHEMA_COMPATIBILITY
+      - RLS_TENANT_DATA_SAFETY_PASSED
+      - BOUNDED_MIGRATION_BACKFILL_PASSED
       AUTH_TENANT:
       - AUTHZ_TENANT_MATRIX_PASSED
+      - SERVER_SIDE_AUTHORIZATION_PASSED
+      - TENANT_CROSSING_DENIED
+      - ID_TAMPERING_DENIED
+      - PROTECTED_DATA_LEAKAGE_CHECK_PASSED
       FINANCIAL:
       - FINANCIAL_INVARIANTS_PASSED
+      - IDEMPOTENCY_PASSED
+      - CONCURRENCY_INVARIANTS_PASSED
+      - LEDGER_CONSISTENCY_PASSED
+      - NO_DUPLICATE_FINANCIAL_SIDE_EFFECT
+      - ROUNDING_TAX_VAT_ZERO_VALUE_PASSED
+      - FINAL_STATE_REFUND_SEMANTICS_PASSED
       ZATCA:
       - ZATCA_INVARIANTS_PASSED
+      - ZATCA_LEGAL_STATE_MACHINE_PASSED
+      - ZATCA_DUPLICATE_PREVENTION_PASSED
+      - ZATCA_IMMUTABILITY_PASSED
+      - ZATCA_SANDBOX_ONLY_TEST_PASSED
+      - ZATCA_CLEARANCE_REPORTING_RETRY_CERTIFICATE_PASSED
+      - ZATCA_SIGNED_DOCUMENT_CUTOVER_PASSED
       PROVIDER:
       - PROVIDER_SEMANTICS_PASSED
+      - PROVIDER_STATE_RECONCILIATION_PASSED
+      - PROVIDER_IDEMPOTENCY_PASSED
+      - PROVIDER_SAFE_OUTAGE_PASSED
+      - PROVIDER_CONTRACT_FAILURE_RECONCILIATION_PASSED
       CONCURRENCY:
       - CONCURRENCY_INVARIANTS_PASSED
+      - PARALLEL_REPRODUCTION_PASSED
+      - NO_DUPLICATE_DURABLE_SIDE_EFFECT
       SECURITY:
       - SECURITY_VALIDATION_PASSED
+      - SECRETS_SCAN_PASSED
+      - FAIL_CLOSED_BOUNDARY_PASSED
   REGRESSION_VALIDATION_PASS:
     minimum_trust: E2
     required_evidence:
@@ -261,9 +310,13 @@ gates:
     - test_layers
     - conclusion
   DIFF_FORENSICS_PASS:
-    minimum_trust: E2
+    minimum_trust: E3
     required_evidence:
     - DIFF_FORENSICS_PASSED
+  RESOLVED_NO_CODE:
+    minimum_trust: E3
+    required_evidence:
+    - RESOLVED_NO_CODE_PROVEN
   INDEPENDENT_REVIEW_PASS:
     minimum_trust: E3
     required_evidence:
@@ -349,7 +402,11 @@ gates:
     - adjacent_health
   CLOSED:
     minimum_trust: E5
-    required_evidence: []
+    required_evidence:
+    - ORIGINAL_PROBLEM_PRODUCTION_VERIFIED
+    - PRODUCTION_HEALTH
+    - SYNTHETIC_TRANSACTION
+    - OBSERVATION_WINDOW
   ROLLBACK_REQUIRED:
     minimum_trust: E5
     required_evidence: []
@@ -358,8 +415,23 @@ gates:
     required_evidence:
     - ROLLBACK_COMPLETED
     - POST_ROLLBACK_HEALTH_VERIFIED
+    by_domain:
+      DATABASE:
+      - DATABASE_ROLLBACK_CONSISTENCY_VERIFIED
+      AUTH_TENANT:
+      - AUTHZ_ROLLBACK_MATRIX_PASSED
+      FINANCIAL:
+      - FINANCIAL_RECONCILIATION_PASSED
+      ZATCA:
+      - ZATCA_ROLLBACK_STATE_VERIFIED
+      PROVIDER:
+      - PROVIDER_RECONCILIATION_PASSED
+      CONCURRENCY:
+      - CONCURRENCY_SIDE_EFFECTS_RECONCILED
+      SECURITY:
+      - SECURITY_CONTAINMENT_VERIFIED
 hotfix:
-  may_reduce_validation_breadth: true
+  may_reduce_validation_breadth: false
   may_skip_states: false
   critical_domains_keep_full_gates:
   - DATABASE
@@ -397,16 +469,26 @@ continuation:
   retry_requires_material_change: true
 progressive_exposure:
   HIGH:
-  - FEATURE_FLAG
-  - CANARY
-  - TENANT_LIMITED
-  - ROLLBACK_TRIGGER
+    required_evidence:
+    - PROGRESSIVE_EXPOSURE_PLAN
+    strategies:
+    - FEATURE_FLAG
+    - CANARY
+    - TENANT_LIMITED
+    - BLUE_GREEN
+    - READ_ONLY
+    - ROLLBACK_TRIGGER
   CRITICAL:
-  - FEATURE_FLAG
-  - CANARY
-  - WRITE_GATE
-  - ROLLBACK_TRIGGER
-  - OWNER_STOP_CONDITION
+    required_evidence:
+    - PROGRESSIVE_EXPOSURE_PLAN
+    strategies:
+    - FEATURE_FLAG
+    - CANARY
+    - TENANT_LIMITED
+    - BLUE_GREEN
+    - WRITE_GATE
+    - ROLLBACK_TRIGGER
+    - OWNER_STOP_CONDITION
 artifact_chain:
   immutable_subject_required: true
   source_to_release_to_artifact: true
