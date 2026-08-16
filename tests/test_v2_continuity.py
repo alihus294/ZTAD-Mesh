@@ -21,6 +21,7 @@ from ztad.scheduler import ContinuousScheduler
 from ztad.util import load_data
 from ztad.approval_controller import issue_supervisor_approval_evidence
 from ztad.crypto import generate_ed25519_keypair, verify_evidence_signature
+from ztad.subject import subject_fingerprint
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,7 +59,7 @@ def test_ledger_idempotency_and_checkpoint_detect_tail_deletion(tmp_path):
 
 def _submit(store: ContinuityStore, title: str, priority: int = 0):
     task = store.submit_task(
-        repository="repo", title=title, contract={"goal": title}, risk="R2",
+        repository="repo", title=title, contract={"goal": title, "origin": "FEATURE"}, risk="R2",
         priority=priority, idempotency_key=f"key:{title}",
     )
     return task
@@ -138,6 +139,10 @@ def test_same_session_cannot_implement_and_approve_same_sha(tmp_path):
             task_id=task["task_id"], role="supervisor", session_id="session-1", head_sha="abc",
             diff_hash="sha256:d", evidence_refs=["ci-1"], decision="APPROVE",
         )
+    store.record_model_run(
+        task_id=task["task_id"], role="supervisor", model_id="frontier", prompt_version="v1",
+        context_hash="sha256:x", status="COMPLETED", session_id="session-2", head_sha="abc",
+    )
     approval = store.record_approval(
         task_id=task["task_id"], role="supervisor", session_id="session-2", head_sha="abc",
         diff_hash="sha256:d", evidence_refs=["ci-1"], decision="APPROVE",
@@ -166,6 +171,10 @@ def test_approval_rejects_invented_stale_and_weak_evidence(tmp_path):
     store.register_evidence(
         evidence_id="ci", task_id=task["task_id"], head_sha="abc",
         evidence_type="protected_ci", trust_level="E4", status="PASSED", producer="ci",
+    )
+    store.record_model_run(
+        task_id=task["task_id"], role="supervisor", model_id="frontier", prompt_version="v1",
+        context_hash="sha256:x", status="COMPLETED", session_id="review-3", head_sha="abc",
     )
     approval = store.record_approval(
         task_id=task["task_id"], role="supervisor", session_id="review-3",
@@ -205,6 +214,10 @@ def test_supervisor_takeover_requires_fresh_closure_reviewer(tmp_path):
             head_sha="abc", diff_hash="sha256:d", evidence_refs=["ci-takeover"],
             decision="APPROVE",
         )
+    store.record_model_run(
+        task_id=task["task_id"], role="closure", model_id="frontier", prompt_version="v1",
+        context_hash="sha256:x", status="COMPLETED", session_id="fresh-closure", head_sha="abc",
+    )
     approval = store.record_approval(
         task_id=task["task_id"], role="closure", session_id="fresh-closure",
         head_sha="abc", diff_hash="sha256:d", evidence_refs=["ci-takeover"],
@@ -296,6 +309,12 @@ def test_approval_controller_signs_only_after_store_validation(tmp_path):
         evidence_id="ci-controller", task_id=task["task_id"], head_sha="a" * 40,
         evidence_type="protected_ci", trust_level="E4", status="PASSED", producer="ci",
     )
+    store.record_model_run(
+        task_id=task["task_id"], role="supervisor", model_id="frontier", prompt_version="p",
+        context_hash="sha256:" + "c" * 64, status="COMPLETED", session_id="review-session",
+        reasoning_effort="high", head_sha="a" * 40, output_hash="sha256:" + "d" * 64,
+        run_id="review-run",
+    )
     private = tmp_path / "private.pem"
     public = tmp_path / "public.pem"
     generate_ed25519_keypair(private, public)
@@ -304,12 +323,18 @@ def test_approval_controller_signs_only_after_store_validation(tmp_path):
         "change_contract_hash": "sha256:" + "b" * 64,
         "base_sha": "c" * 40,
         "head_sha": "a" * 40,
+        "protected_base_sha": "c" * 40,
+        "pr_head_sha": "a" * 40,
+        "reviewed_diff_hash": "sha256:" + "f" * 64,
         "policy_bundle_hash": "sha256:" + "d" * 64,
         "toolchain_hash": "sha256:" + "e" * 64,
+        "subject_epoch": 0,
+        "subject_version": 1,
     }
+    subject["subject_fingerprint"] = subject_fingerprint(subject)
     issued = issue_supervisor_approval_evidence(
-        store=store, task_id=task["task_id"], role="supervisor",
-        session_id="review-session", head_sha="a" * 40,
+        store=store, task_id=task["task_id"], reviewer_run_id="review-run",
+        head_sha="a" * 40,
         diff_hash="sha256:" + "f" * 64, evidence_refs=["ci-controller"],
         approval_type="STRONG_SUPERVISOR_MERGE_APPROVAL", subject=subject,
         private_key_path=private, key_id="controller-key",
@@ -325,8 +350,8 @@ def test_approval_controller_signs_only_after_store_validation(tmp_path):
     assert issued["signed_evidence"]["metadata"]["underlying_evidence_refs"] == ["ci-controller"]
     with pytest.raises(ValueError, match="Unknown evidence"):
         issue_supervisor_approval_evidence(
-            store=store, task_id=task["task_id"], role="supervisor",
-            session_id="another-session", head_sha="a" * 40,
+            store=store, task_id=task["task_id"], reviewer_run_id="review-run",
+            head_sha="a" * 40,
             diff_hash="sha256:" + "f" * 64, evidence_refs=["invented"],
             approval_type="STRONG_SUPERVISOR_MERGE_APPROVAL", subject=subject,
             private_key_path=private, key_id="controller-key",

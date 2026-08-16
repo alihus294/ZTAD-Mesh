@@ -1,5 +1,6 @@
 schema_version: 1
 change_id: FEAT-100
+origin: FEATURE
 title: Replace this title with a specific outcome
 outcome:
   user_or_system_value: Describe the measurable value delivered

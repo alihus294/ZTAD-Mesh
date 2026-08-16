@@ -11,10 +11,14 @@ ALLOWED_APPROVAL_PRODUCER_PREFIXES = ("platform:approval-controller",)
 def gate_requirements(policy: dict[str, Any], requested_state: str, risk: str) -> dict[str, Any]:
     gate = ((policy.get("gates", {}) or {}).get(requested_state, {}) or {})
     risk_gate = (gate.get("by_risk", {}) or {}).get(risk, {}) or {}
+    risk_required = risk_gate.get("required_evidence", []) if isinstance(risk_gate, dict) else risk_gate
+    required = set(gate.get("required_evidence", []) or []) | set(risk_required or [])
+    if isinstance(risk_gate, list):
+        required.update(risk_gate)
     return {
-        "minimum_trust": str(risk_gate.get("minimum_trust", gate.get("minimum_trust", "E0"))),
-        "required_evidence": sorted(set(gate.get("required_evidence", []) or []) | set(risk_gate.get("required_evidence", []) or [])),
-        "required_approvals": sorted(set(gate.get("required_approvals", []) or []) | set(risk_gate.get("required_approvals", []) or [])),
+        "minimum_trust": str(risk_gate.get("minimum_trust", gate.get("minimum_trust", "E0")) if isinstance(risk_gate, dict) else gate.get("minimum_trust", "E0")),
+        "required_evidence": sorted(required),
+        "required_approvals": sorted(set(gate.get("required_approvals", []) or []) | set((risk_gate.get("required_approvals", []) if isinstance(risk_gate, dict) else []) or [])),
     }
 
 

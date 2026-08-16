@@ -2,6 +2,14 @@
   "$id": "https://example.invalid/ztad/evidence.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": ["base_sha", "head_sha"]
+    },
+    {
+      "required": ["protected_base_sha", "pr_head_sha", "reviewed_diff_hash"]
+    }
+  ],
   "properties": {
     "artifact_digest": {
       "pattern": "^sha256:[0-9a-f]{64}$",
@@ -16,6 +24,36 @@
     "base_sha": {
       "pattern": "^[0-9a-f]{40,64}$",
       "type": "string"
+    },
+    "protected_base_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "pr_head_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": "string"
+    },
+    "merged_main_sha": {
+      "pattern": "^[0-9a-f]{40,64}$",
+      "type": ["string", "null"]
+    },
+    "reviewed_diff_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "diff_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": ["string", "null"]
+    },
+    "merge_method": {
+      "enum": ["MERGE", "SQUASH", "REBASE", "FAST_FORWARD", null],
+      "type": ["string", "null"]
+    },
+    "merge_provenance": {
+      "type": ["object", "null"]
+    },
+    "post_merge_ci_run_id": {
+      "type": ["string", "null"]
     },
     "change_contract_hash": {
       "pattern": "^sha256:[0-9a-f]{64}$",
@@ -83,6 +121,10 @@
       },
       "type": "array"
     },
+    "lifecycle_case_id": {
+      "minLength": 1,
+      "type": "string"
+    },
     "metadata": {
       "type": "object"
     },
@@ -114,6 +156,14 @@
     "subject_fingerprint": {
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": ["string", "null"]
+    },
+    "subject_epoch": {
+      "minimum": 0,
+      "type": ["integer", "null"]
+    },
+    "subject_version": {
+      "minimum": 1,
+      "type": ["integer", "null"]
     },
     "status": {
       "type": [
@@ -148,8 +198,6 @@
     "producer",
     "repository",
     "change_contract_hash",
-    "base_sha",
-    "head_sha",
     "policy_bundle_hash",
     "toolchain_hash",
     "environment",

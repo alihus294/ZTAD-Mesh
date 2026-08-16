@@ -7,8 +7,10 @@ from typing import Any
 from .mesh_plan import MeshPlan, build_mesh_plan, write_mesh_plan
 from .mesh_store import MeshStore
 from .orchestrator import ContinuityStore
+from .bug_protocol import validate_work_origin
+from .lifecycle_store import LifecycleStore
 from .repository import GitRepository
-from .risk import RiskResult, classify_risk, max_risk
+from .risk import RiskResult, classify_risk, effective_risk
 from .schema_validation import validate_file
 from .util import load_data, sha256_json
 
@@ -25,6 +27,7 @@ class AutopilotPreparation:
     prompt_root: str
     mesh_database: str
     continuity_database: str
+    bug_lifecycle_store: str | None
 
     def to_dict(self, *, include_plan: bool = True) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -37,6 +40,7 @@ class AutopilotPreparation:
             "prompt_root": self.prompt_root,
             "mesh_database": self.mesh_database,
             "continuity_database": self.continuity_database,
+            "bug_lifecycle_store": self.bug_lifecycle_store,
             "claim_boundary": (
                 "Autopilot prepares and executes the local evidence-producing mesh. "
                 "It cannot prove hosted CI, merge, deployment, or production controls without platform evidence."
@@ -81,6 +85,7 @@ def prepare_autopilot(
     continuity_database: str = ".delivery/ztad/state/continuity.db",
     maximum_parallel_writers: int = 6,
     maximum_plan_candidates: int = 4,
+    bug_lifecycle_store: str | Path | None = None,
 ) -> AutopilotPreparation:
     repo = GitRepository(repository)
     resolved_contract = _repo_path(repo, contract_path)
@@ -90,6 +95,17 @@ def prepare_autopilot(
     contract = load_data(resolved_contract)
     if not isinstance(contract, dict):
         raise ValueError("Change Contract must be an object")
+    lifecycle_path = _repo_path(repo, bug_lifecycle_store) if bug_lifecycle_store else None
+    authoritative_lifecycle = None
+    if lifecycle_path is not None and contract.get("bug_lifecycle_case_id"):
+        authoritative_lifecycle = LifecycleStore(lifecycle_path).get(str(contract["bug_lifecycle_case_id"]), verify=True)
+    origin_errors = validate_work_origin(
+        contract,
+        lifecycle_handoff=bool(contract.get("bug_lifecycle_case_id") or contract.get("authoritative_lifecycle_handoff")),
+        authoritative_lifecycle=authoritative_lifecycle,
+    )
+    if origin_errors:
+        raise ValueError("Invalid work origin: " + "; ".join(origin_errors))
     contract_hash = sha256_json(contract)
     intended_paths = list((contract.get("scope") or {}).get("expected_components") or [])
     risk: RiskResult = classify_risk(
@@ -97,11 +113,16 @@ def prepare_autopilot(
         changed_paths=intended_paths,
         policy=load_data(risk_policy),
     )
-    effective_risk = max_risk(risk.risk, requested_risk or "R0")
+    governance = contract.get("governance") if isinstance(contract.get("governance"), dict) else {}
+    effective_level = effective_risk(
+        previous=str(governance.get("previous_effective_risk") or "R0"),
+        requested=str(requested_risk or "R0"),
+        contract=risk.risk,
+    )
     stable_task_id = task_id or _default_task_id(contract, contract_hash)
     plan = build_mesh_plan(
         task_id=stable_task_id,
-        risk=effective_risk,
+        risk=effective_level,
         contract=contract,
         prompt_root=prompt_root,
         output_schema=str(output_schema),
@@ -115,13 +136,14 @@ def prepare_autopilot(
         repository=str(repo.root),
         task_id=stable_task_id,
         contract_hash=contract_hash,
-        effective_risk=effective_risk,
+        effective_risk=effective_level,
         risk_result=risk.to_dict(),
         plan=plan,
         plan_output=str(_repo_path(repo, plan_output)),
         prompt_root=str(_repo_path(repo, prompt_root)),
         mesh_database=str(_repo_path(repo, mesh_database)),
         continuity_database=str(_repo_path(repo, continuity_database)),
+        bug_lifecycle_store=str(lifecycle_path) if lifecycle_path is not None else None,
     )
 
 
@@ -139,13 +161,26 @@ def submit_prepared_autopilot(
     """
     if sha256_json(contract) != preparation.contract_hash:
         raise ValueError("Change Contract changed after autopilot preparation")
+    authoritative_lifecycle = None
+    if preparation.bug_lifecycle_store and contract.get("bug_lifecycle_case_id"):
+        authoritative_lifecycle = LifecycleStore(Path(preparation.bug_lifecycle_store)).get(str(contract["bug_lifecycle_case_id"]), verify=True)
+    origin_errors = validate_work_origin(
+        contract,
+        lifecycle_handoff=bool(contract.get("bug_lifecycle_case_id") or contract.get("authoritative_lifecycle_handoff")),
+        authoritative_lifecycle=authoritative_lifecycle,
+    )
+    if origin_errors:
+        raise ValueError("Invalid work origin: " + "; ".join(origin_errors))
     repo = GitRepository(Path(preparation.repository))
     plan_written = write_mesh_plan(
         preparation.plan,
         repository=repo.root,
         output_file=Path(preparation.plan_output),
     )
-    continuity = ContinuityStore(Path(preparation.continuity_database))
+    continuity = ContinuityStore(
+        Path(preparation.continuity_database),
+        bug_lifecycle_store=Path(preparation.bug_lifecycle_store) if preparation.bug_lifecycle_store else None,
+    )
     task = continuity.submit_task(
         repository=str(repo.root),
         title=title,

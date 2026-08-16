@@ -117,7 +117,7 @@ def test_pretool_hook_denies_protected_write_when_active(tmp_path, monkeypatch):
 def test_stop_hook_does_not_create_an_infinite_stop_loop(tmp_path):
     db = tmp_path / ".delivery/ztad/continuity.db"
     store = ContinuityStore(db)
-    store.submit_task(repository="repo", title="x", contract={"goal":"x"}, risk="R1", idempotency_key="x")
+    store.submit_task(repository="repo", title="x", contract={"goal":"x", "origin":"FEATURE"}, risk="R1", idempotency_key="x")
     assert handle_hook("Stop", {"cwd": str(tmp_path), "stop_hook_active": False}) is None
     assert handle_hook("SessionEnd", {"cwd": str(tmp_path)}) is None
 

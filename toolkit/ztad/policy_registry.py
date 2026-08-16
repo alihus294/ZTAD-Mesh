@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .util import hash_directory, load_data, sha256_file
+from .bug_protocol import validate_policy_safety
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class PolicyStatus:
     errors: tuple[str, ...]
     sha256: str | None
     claim: str
+    semantic_consumers: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -38,6 +40,7 @@ class PolicyStatus:
             "errors": list(self.errors),
             "sha256": self.sha256,
             "claim": self.claim,
+            "semantic_consumers": list(self.semantic_consumers),
         }
 
 
@@ -79,6 +82,95 @@ def _module_available(name: str) -> bool:
         return False
 
 
+SEMANTIC_POLICY_CONSUMERS: dict[str, dict[str, tuple[str, ...]]] = {
+    "bug-to-production-policy.yaml": {
+        "risk_classes": ("RISK_LEVEL_TO_CLASS", "derive_risk_class", "RISK_CLASS_ORDER"),
+        "deterministic_escalation": ("derive_risk_class", "effective_risk", "operation_patterns"),
+        "domain_profiles.required_checks": ("required_checks", "_gate_requirements"),
+        "gates.by_risk": ("by_risk", "_gate_requirements"),
+        "progressive_exposure": ("validate_progressive_exposure", "PROGRESSIVE_EXPOSURE_PLAN"),
+        "hotfix": ("HOTFIX", "may_reduce_validation_breadth"),
+        "artifact_chain": ("validate_artifact_chain", "build_once_promote_by_digest"),
+        "gates.READY_FOR_OWNER_RELEASE": ("_protected_approval_errors", "PROTECTED_SUPERVISOR_APPROVAL"),
+        "gates.ROLLBACK_CLOSURE": ("validate_rollback_closure", "ROLLBACK_REQUIRED"),
+        "profiles": ("audit_host_acceptance", "HOST_CAPABILITY_UNPROVEN"),
+    },
+    "risk-policy.yaml": {
+        "hard_minimums": ("hard_minimums", "classify_risk"),
+        "operation_patterns": ("operation_patterns", "_scan_diff_for_operations"),
+    },
+    "evidence-policy.yaml": {
+        "trust_levels": ("TRUST_ORDER", "validate_evidence_record"),
+        "invalidators": ("invalidated_by", "subject_epoch"),
+    },
+}
+
+
+def _semantic_policy_errors(root: Path, name: str, value: dict[str, Any], consumers: tuple[str, ...]) -> tuple[list[str], tuple[str, ...]]:
+    expected = SEMANTIC_POLICY_CONSUMERS.get(name, {})
+    if not expected:
+        return [], ()
+    semantic_modules = set(consumers)
+    if name == "bug-to-production-policy.yaml":
+        semantic_modules.update({"ztad.risk", "ztad.host_acceptance", "ztad.release"})
+    texts: list[str] = []
+    for module in sorted(semantic_modules):
+        try:
+            spec = importlib.util.find_spec(module)
+            origin = getattr(spec, "origin", None) if spec else None
+            if origin and origin not in {"built-in", "frozen"}:
+                path = Path(origin)
+                if path.is_file():
+                    texts.append(path.read_text(encoding="utf-8", errors="ignore"))
+        except (ImportError, OSError, AttributeError):
+            continue
+    source = "\n".join(texts)
+    errors: list[str] = []
+    mandatory_fields = value.get("mandatory_fields") if isinstance(value, dict) else None
+    if name == "bug-to-production-policy.yaml" and (not isinstance(mandatory_fields, list) or not mandatory_fields):
+        errors.append("Policy must declare a non-empty mandatory_fields wiring list")
+        mandatory_fields = []
+    if not isinstance(mandatory_fields, list):
+        mandatory_fields = []
+    for field in mandatory_fields:
+        field_name = str(field)
+        if field_name not in expected:
+            errors.append(f"Policy mandatory field {field_name} has no registered consumer")
+    if name == "bug-to-production-policy.yaml":
+        errors.extend(validate_policy_safety(value))
+    active: list[str] = []
+    for field, markers in expected.items():
+        cursor: Any = value
+        for part in field.split("."):
+            cursor = cursor.get(part) if isinstance(cursor, dict) else None
+        if cursor is None:
+            continue
+        if all(marker in source for marker in markers):
+            active.append(field)
+        else:
+            errors.append(f"Policy field {field} has no complete deterministic consumer")
+    for field in mandatory_fields:
+        field_name = str(field)
+        if field_name == "domain_profiles.required_checks":
+            present = any(
+                isinstance(profile, dict) and isinstance(profile.get("required_checks"), list)
+                for profile in (value.get("domain_profiles") or {}).values()
+            )
+        elif field_name == "gates.by_risk":
+            present = any(
+                isinstance(gate, dict) and isinstance(gate.get("by_risk"), dict)
+                for gate in (value.get("gates") or {}).values()
+            )
+        else:
+            cursor: Any = value
+            for part in field_name.split("."):
+                cursor = cursor.get(part) if isinstance(cursor, dict) else None
+            present = cursor is not None
+        if not present:
+            errors.append(f"Policy mandatory field {field_name} is missing")
+    return errors, tuple(sorted(active))
+
+
 def audit_policy_wiring(root: Path) -> dict[str, Any]:
     policy_dir = root / "policies"
     statuses: list[PolicyStatus] = []
@@ -100,12 +192,15 @@ def audit_policy_wiring(root: Path) -> dict[str, Any]:
         module_state = all(_module_available(name) for name in spec.consumers)
         if spec.consumers and not module_state:
             errors.append("One or more declared consumer modules are unavailable")
+        semantic_errors, semantic_consumers = _semantic_policy_errors(root, path.name, value if isinstance(value, dict) else {}, spec.consumers)
+        errors.extend(semantic_errors)
         statuses.append(
             PolicyStatus(
                 name=path.name, path=str(path), mode=spec.mode, consumers=spec.consumers,
                 loaded=loaded, consumer_modules_available=module_state,
                 errors=tuple(errors), sha256=sha256_file(path) if path.is_file() else None,
                 claim=spec.claim,
+                semantic_consumers=semantic_consumers,
             )
         )
     required = set(POLICY_SPECS)

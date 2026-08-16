@@ -4,56 +4,64 @@
   "title": "ZTAD Bug-to-Production Evidence Bundle",
   "type": "object",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {"final_state": {"const": "CLOSED"}, "closure_class": {"const": "CODE_FIX"}},
+        "required": ["final_state", "closure_class"]
+      },
+      "then": {
+        "required": [
+          "change_contract_hash", "base_sha", "final_sha", "policy_bundle_hash", "toolchain_hash",
+          "authoritative_sources", "source_conflicts", "unresolved_ambiguities", "reproduction", "root_cause",
+          "blast_radius", "risk", "change_plan", "changed_files", "red_proof", "green_proof", "patch",
+          "targeted_validation", "full_regression", "security_tenant_checks", "independent_review", "ci",
+          "production_release", "staging", "release_fingerprint", "artifact_digest", "sbom_digest",
+          "provenance_digest", "attestation_digest", "artifact_identity", "production_release_id",
+          "deployed_revision", "post_deploy_verification", "lifecycle_events"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {"final_state": {"const": "CLOSED"}, "closure_class": {"const": "ROLLBACK_CLOSURE"}},
+        "required": ["final_state", "closure_class"]
+      },
+      "then": {"required": ["rollback_closure", "lifecycle_events"]}
+    },
+    {
+      "if": {"properties": {"final_state": {"const": "ROLLBACK_REQUIRED"}}, "required": ["final_state"]},
+      "then": {"required": ["closure_class", "rollback_closure", "lifecycle_events"]}
+    }
+  ],
   "required": [
     "schema_version",
     "issue_id",
     "original_report",
     "classification",
     "repository",
-    "change_contract_hash",
-    "base_sha",
-    "final_sha",
-    "policy_bundle_hash",
-    "toolchain_hash",
-    "authoritative_sources",
-    "source_conflicts",
-    "unresolved_ambiguities",
-    "reproduction",
-    "root_cause",
-    "blast_radius",
-    "risk",
-    "change_plan",
-    "changed_files",
-    "red_proof",
-    "green_proof",
-    "patch",
-    "targeted_validation",
-    "full_regression",
-    "security_tenant_checks",
-    "independent_review",
-    "ci",
-    "production_release",
-    "staging",
-    "migration",
-    "release_fingerprint",
-    "artifact_digest",
-    "sbom_digest",
-    "provenance_digest",
-    "attestation_digest",
-    "artifact_identity",
-    "production_release_id",
-    "deployed_revision",
-    "post_deploy_verification",
     "final_state",
+    "closure_class",
     "subject_fingerprint",
     "evidence_records"
   ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "issue_id": {"type": "string", "minLength": 1},
     "original_report": {"type": "string", "minLength": 1},
     "classification": {"type": "string", "minLength": 1},
     "repository": {"type": "string", "minLength": 1},
+    "protected_base_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+    "pr_head_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+    "reviewed_diff_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "merged_main_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+    "merge_method": {"type": ["string", "null"], "enum": [null, "MERGE", "SQUASH", "REBASE", "FAST_FORWARD"]},
+    "merge_provenance": {"type": ["object", "null"]},
+    "post_merge_ci_run_id": {"type": ["string", "null"]},
+    "subject_epoch": {"type": "integer", "minimum": 0},
+    "subject_version": {"type": "integer", "minimum": 1},
+    "domains": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "risk_class": {"type": ["string", "null"], "enum": [null, "LOW", "MEDIUM", "HIGH", "CRITICAL"]},
     "change_contract_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
     "final_sha": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
@@ -113,9 +121,12 @@
     "production_release_id": {"type": "string", "minLength": 1},
     "deployed_revision": {"type": "string", "minLength": 1},
     "post_deploy_verification": {"type": "object", "minProperties": 1},
+    "rollback_closure": {"type": "object", "minProperties": 1},
     "final_state": {"enum": ["CLOSED", "RESOLVED_NO_CODE", "ROLLBACK_REQUIRED"]},
+    "closure_class": {"enum": ["CODE_FIX", "RESOLVED_NO_CODE", "ROLLBACK_CLOSURE"]},
     "subject_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "evidence_records": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "lifecycle_events": {"type": "array", "minItems": 1, "items": {"type": "object"}},
     "claim_boundary": {"type": "string", "minLength": 1}
   }
 }

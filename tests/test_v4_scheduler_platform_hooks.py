@@ -34,7 +34,7 @@ def test_default_scheduler_preserves_full_release_sequence():
 
 def test_registered_evidence_gate_requires_validation_mark_for_authoritative_records(tmp_path):
     store = ContinuityStore(tmp_path / "continuity.db")
-    task = store.submit_task(repository="repo", title="release", contract={"goal": "x"}, risk="R2", idempotency_key="t")
+    task = store.submit_task(repository="repo", title="release", contract={"goal": "x", "origin": "FEATURE"}, risk="R2", idempotency_key="t")
     policy = load_data(ROOT / "policies/state-machine.yaml")
     gate = RegisteredEvidenceTransitionGate(store, policy)
     head = "a" * 40
@@ -48,7 +48,7 @@ def test_registered_evidence_gate_requires_validation_mark_for_authoritative_rec
     assert not denied["allowed"]
     assert denied["rejected_evidence_ids"]
     # Fresh task/IDs because evidence identifiers are immutable.
-    task2 = store.submit_task(repository="repo", title="release2", contract={"goal": "y"}, risk="R2", idempotency_key="t2")
+    task2 = store.submit_task(repository="repo", title="release2", contract={"goal": "y", "origin": "FEATURE"}, risk="R2", idempotency_key="t2")
     for evidence_type in ("SIGNED_BUILD", "SBOM", "PROVENANCE_VERIFIED"):
         store.register_evidence(
             evidence_id=f"good-{evidence_type}", task_id=task2["task_id"], head_sha=head,

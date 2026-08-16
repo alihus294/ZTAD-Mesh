@@ -170,7 +170,15 @@ def test_full_regression_production_and_progressive_exposure_are_separate_gates(
         artifact_digest=ARTIFACT,
     ) == []
     assert validate_progressive_exposure(
-        {"strategy": "CANARY", "rollback_trigger": "error rate threshold", "stop_conditions": ["health failure"], "scope_limit": "one tenant"},
+        {
+            "strategy": "CANARY",
+            "rollback_trigger": "error rate threshold",
+            "rollback_trigger_hash": "sha256:" + "1" * 64,
+            "stop_conditions": ["health failure"],
+            "scope_limit": "one tenant",
+            "write_gate": True,
+            "owner_stop_condition": "owner stops on anomaly",
+        },
         risk_class="CRITICAL",
     ) == []
     assert validate_progressive_exposure({}, risk_class="CRITICAL")
@@ -197,7 +205,7 @@ def test_authoritative_scheduler_task_cannot_transition_to_done(tmp_path: Path) 
     task = store.submit_task(
         repository="owner/repo",
         title="authoritative bug",
-        contract={"protocol": "WorkshopOS-Fail-Closed-Bug-to-Production-v1"},
+        contract={"protocol": "WorkshopOS-Fail-Closed-Bug-to-Production-v1", "origin": "FEATURE"},
         risk="R1",
     )
     with pytest.raises(PermissionError):

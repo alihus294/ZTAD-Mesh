@@ -1,6 +1,6 @@
-# ZTAD Mesh 4.3.9 Quick Start
+# ZTAD Mesh 4.3.10 Quick Start
 
-1. Download the versioned Marketplace archive from the `v4.3.9` GitHub Release.
+1. Download the versioned Marketplace archive from the `v4.3.10` GitHub Release.
 2. Download `CHECKSUMS.sha256` and verify the release files before installation.
 3. Extract the Marketplace archive to a stable local path and install `zero-trust-agentic-delivery@ztad-local` through the official Codex plugin flow.
 4. Close the installation session and start a fresh Codex session.
@@ -62,6 +62,6 @@ Normal routing intent:
 - R3/R4: full independent Mesh.
 - Every Sol invocation is hard-capped at `HIGH` reasoning.
 
-Any upward actual-diff risk invalidates the weaker path and requires the stronger risk topology before approval may continue. A model result never grants merge or production authority. A bug is not `CLOSED` until protected production release and post-deploy verification are independently proven. Since v4.3.9, the protocol is also enforced by deterministic lifecycle, evidence-bundle, host-boundary, and adversarial-evaluation controls.
+Any upward actual-diff risk invalidates the weaker path and requires the stronger risk topology before approval may continue. A model result never grants merge or production authority. A bug is not `CLOSED` until protected production release and post-deploy verification are independently proven. Since v4.3.10, the protocol is also enforced by deterministic lifecycle, evidence-bundle, host-boundary, and adversarial-evaluation controls.
 
 For a persistent local worker process, use `mesh-service` with explicit database, continuity database, worker ID, time bounds, and poll interval. An external process manager is required to restart that service after host or process failure.

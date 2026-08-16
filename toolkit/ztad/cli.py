@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -57,6 +58,7 @@ from .schema_validation import validate_file, validate_instance
 from .state_machine import evaluate_next_actions_from_records, evaluate_transition_from_records
 from .test_weakening import inspect_repository_test_integrity
 from .bug_protocol import validate_workshopos_message
+from .trust import load_host_accepted_trust_roots
 from .util import dump_json, hash_directory, load_data, sha256_file, sha256_json
 
 
@@ -71,6 +73,22 @@ def _write_result(result: Any, output: str | None) -> None:
 
 def _root_file(relative: str) -> Path:
     return installer.distribution_root() / relative
+
+
+def _host_accepted_roots(path: Path | None) -> Any:
+    if path is None:
+        return None
+    digest = os.environ.get("ZTAD_HOST_TRUST_ROOTS_DIGEST")
+    acceptance_id = os.environ.get("ZTAD_HOST_TRUST_ROOTS_ACCEPTANCE_ID")
+    if not digest or not acceptance_id:
+        raise ZTADError(
+            "Terminal bundle verification requires host-provided trust-root digest and acceptance identity"
+        )
+    return load_host_accepted_trust_roots(
+        path,
+        accepted_digest=digest,
+        acceptance_id=acceptance_id,
+    )
 
 
 def _data(path: str | Path) -> Any:
@@ -522,6 +540,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--risk", choices=["R0", "R1", "R2", "R3", "R4"], help="Optional minimum risk; cannot downgrade deterministic risk")
     p.add_argument("--database", default=".delivery/ztad/state/mesh.db")
     p.add_argument("--continuity-database", default=".delivery/ztad/state/continuity.db")
+    p.add_argument("--bug-lifecycle-store", help="Controller-owned bug lifecycle database for reported defects")
     p.add_argument("--plan-output")
     p.add_argument("--prompt-root")
     p.add_argument("--output-schema", default=str(_root_file("schemas/agent-result.schema.json")))
@@ -620,12 +639,14 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
     if command == "problem-init":
         case = initialize_problem_case(Path(args.repo), report=args.report, expected_behavior=args.expected, protected_ref=args.protected_ref)
         schema = _data(_root_file("schemas/problem-case.schema.json"))
-        errors = validate_problem_case(case, schema)
+        policy = _data(_root_file("policies/bug-to-production-policy.yaml"))
+        errors = validate_problem_case(case, schema, policy=policy)
         return {"problem_case": case, "errors": errors, "claim_boundary": "Local E2 intake only; no patch/release authority."}, 0 if not errors else 2
     if command == "problem-validate":
         case = _data(args.case)
         schema = _data(_root_file("schemas/problem-case.schema.json"))
-        errors = validate_problem_case(case, schema)
+        policy = _data(_root_file("policies/bug-to-production-policy.yaml"))
+        errors = validate_problem_case(case, schema, policy=policy)
         return {"valid": not errors, "problem_case": case, "errors": errors}, 0 if not errors else 2
     if command == "problem-isolate":
         case = _data(args.case)
@@ -634,12 +655,14 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
     if command == "problem-transition":
         case = _data(args.case)
         schema = _data(_root_file("schemas/problem-case.schema.json"))
-        updated = advance_problem_case(case, args.state, schema)
+        policy = _data(_root_file("policies/bug-to-production-policy.yaml"))
+        updated = advance_problem_case(case, args.state, schema, policy=policy)
         return {"problem_case": updated, "claim_boundary": "Local E2 progression only; protected authority is unchanged."}, 0
     if command == "problem-contract":
         case = _data(args.case)
         schema = _data(_root_file("schemas/problem-case.schema.json"))
-        contract = problem_case_to_change_contract(case, schema)
+        policy = _data(_root_file("policies/bug-to-production-policy.yaml"))
+        contract = problem_case_to_change_contract(case, schema, policy=policy)
         errors = validate_instance(contract, _data(_root_file("schemas/change-contract.schema.json")))
         return {"contract": contract, "errors": errors}, 0 if not errors else 2
     if command == "build-evidence-bundle":
@@ -651,12 +674,14 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
         bundle = _data(args.bundle)
         bundle_schema = _data(_root_file("schemas/evidence-bundle.schema.json"))
         evidence_schema = _data(_root_file("schemas/evidence.schema.json"))
-        roots = _data(args.trust_roots) if args.trust_roots else None
+        roots = _host_accepted_roots(Path(args.trust_roots) if args.trust_roots else None)
+        policy = _data(_root_file("policies/bug-to-production-policy.yaml"))
         errors = validate_evidence_bundle(
             bundle,
             bundle_schema=bundle_schema,
             evidence_schema=evidence_schema,
             trust_roots=roots,
+            policy=policy,
         )
         return {"valid": not errors, "errors": errors}, 0 if not errors else 2
     if command == "workshopos-validate-message":

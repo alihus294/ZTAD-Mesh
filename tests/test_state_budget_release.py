@@ -4,6 +4,7 @@ from ztad.budget import evaluate_budget
 from ztad.crypto import generate_ed25519_keypair, sign_evidence
 from ztad.release import evaluate_release_readiness
 from ztad.state_machine import evaluate_transition_from_records
+from ztad.subject import subject_fingerprint
 from ztad.util import load_data, sha256_file, utc_now
 
 from conftest import valid_contract
@@ -43,8 +44,11 @@ def _state_subject():
         "change_contract_hash": "sha256:" + "a" * 64,
         "base_sha": SHA0,
         "head_sha": SHA1,
+        "diff_hash": HASH_C,
         "policy_bundle_hash": HASH_B,
         "toolchain_hash": HASH_C,
+        "subject_epoch": 0,
+        "subject_version": 1,
     }
 
 
@@ -125,7 +129,10 @@ def _signed_records(tmp_path, contract_path, *, types=None):
     ]
     records=[]
     for idx, typ in enumerate(types or default_types,1):
-        record={"evidence_id":f"ev-ci-{idx:03d}","type":typ,"trust_level":"E3","producer":"platform:protected-ci","repository":"owner/repo","change_contract_hash":contract_hash,"base_sha":SHA0,"head_sha":SHA1,"policy_bundle_hash":HASH_B,"toolchain_hash":HASH_C,"environment":"ci","command_id":"ci","exit_code":0,"status":"PASSED","output_hash":HASH_C,"artifact_digest":None,"created_at":utc_now(),"expires_at":None,"invalidated_by":[],"signature_or_attestation":None,"metadata":{}}
+        subject = {"repository":"owner/repo","change_contract_hash":contract_hash,"base_sha":SHA0,"head_sha":SHA1,"policy_bundle_hash":HASH_B,"toolchain_hash":HASH_C,"subject_epoch":0,"subject_version":1}
+        fingerprint = subject_fingerprint(subject)
+        record={"evidence_id":f"ev-ci-{idx:03d}","type":typ,"trust_level":"E3","producer":"platform:protected-ci","repository":"owner/repo","change_contract_hash":contract_hash,"base_sha":SHA0,"head_sha":SHA1,"policy_bundle_hash":HASH_B,"toolchain_hash":HASH_C,"subject_epoch":0,"subject_version":1,"subject_fingerprint":fingerprint,"environment":"ci","command_id":"ci","exit_code":0,"status":"PASSED","output_hash":HASH_C,"artifact_digest":None,"created_at":utc_now(),"expires_at":None,"invalidated_by":[],"signature_or_attestation":None,"metadata":{}}
+        record["metadata"] = {"executor_id":"executor:protected-ci","command_id":"ci","argv_fingerprint":"sha256:" + "1" * 64,"working_directory":str(tmp_path),"start_at":"2026-08-15T10:00:00Z","end_at":"2026-08-15T10:00:01Z","exit_code":0,"stdout_hash":HASH_C,"stderr_hash":HASH_C,"check_configuration_hash":HASH_B,"toolchain_hash":HASH_C,"receipt_id":f"receipt-ci-{idx:03d}","producer_identity":"platform:protected-ci","result_artifact_hash":HASH_C,"subject_fingerprint":fingerprint,"subject_epoch":0}
         records.append(sign_evidence(record, private_key_path=private, key_id="ci-key"))
     return records, roots, private
 
@@ -174,7 +181,7 @@ def test_r2_merge_requires_signed_e6_supervisor_controller_approval(tmp_path):
     assert result["missing_approvals"] == ["STRONG_SUPERVISOR_MERGE_APPROVAL"]
 
     # A CI-signed E3 record carrying an approval-like name must not satisfy the supervisor approval gate.
-    fake = {"evidence_id":"ev-ci-fake-approval","type":"STRONG_SUPERVISOR_MERGE_APPROVAL","trust_level":"E3","producer":"platform:protected-ci","repository":"owner/repo","change_contract_hash":sha256_file(contract_path),"base_sha":SHA0,"head_sha":SHA1,"policy_bundle_hash":HASH_B,"toolchain_hash":HASH_C,"environment":"ci","command_id":None,"exit_code":None,"status":"APPROVED","output_hash":HASH_C,"artifact_digest":None,"created_at":utc_now(),"expires_at":None,"invalidated_by":[],"signature_or_attestation":None,"metadata":{}}
+    fake = {"evidence_id":"ev-ci-fake-approval","type":"STRONG_SUPERVISOR_MERGE_APPROVAL","trust_level":"E3","producer":"platform:protected-ci","repository":"owner/repo","change_contract_hash":sha256_file(contract_path),"base_sha":SHA0,"head_sha":SHA1,"policy_bundle_hash":HASH_B,"toolchain_hash":HASH_C,"subject_epoch":0,"subject_version":1,"environment":"ci","command_id":None,"exit_code":None,"status":"APPROVED","output_hash":HASH_C,"artifact_digest":None,"created_at":utc_now(),"expires_at":None,"invalidated_by":[],"signature_or_attestation":None,"metadata":{}}
     records_with_fake = records + [sign_evidence(fake, private_key_path=ci_private, key_id="ci-key")]
     result = _evaluate_merge(contract_path, records_with_fake, roots, risk="R2")
     assert result["decision"] == "AUTO_SUPERVISOR_APPROVAL_REQUIRED"
@@ -183,7 +190,8 @@ def test_r2_merge_requires_signed_e6_supervisor_controller_approval(tmp_path):
     controller_private = tmp_path / "controller-private.pem"; controller_public = tmp_path / "controller-public.pem"
     generate_ed25519_keypair(controller_private, controller_public)
     roots["keys"]["controller-key"] = {"algorithm":"ed25519","public_key_pem":controller_public.read_text(),"status":"ACTIVE","allowed_trust_levels":["E6"],"allowed_producers":["platform:approval-controller"],"allowed_types":["STRONG_SUPERVISOR_MERGE_APPROVAL"],"allowed_environments":["supervisor-approval-controller"]}
-    approval = {"evidence_id":"ev-supervisor-merge-approval","type":"STRONG_SUPERVISOR_MERGE_APPROVAL","trust_level":"E6","producer":"platform:approval-controller","repository":"owner/repo","change_contract_hash":sha256_file(contract_path),"base_sha":SHA0,"head_sha":SHA1,"policy_bundle_hash":HASH_B,"toolchain_hash":HASH_C,"environment":"supervisor-approval-controller","command_id":None,"exit_code":None,"status":"APPROVED","output_hash":HASH_C,"artifact_digest":None,"created_at":utc_now(),"expires_at":None,"invalidated_by":[],"signature_or_attestation":None,"metadata":{"approver_role":"merge-owner"}}
+    approval_subject = {"repository":"owner/repo","change_contract_hash":sha256_file(contract_path),"base_sha":SHA0,"head_sha":SHA1,"policy_bundle_hash":HASH_B,"toolchain_hash":HASH_C,"subject_epoch":0,"subject_version":1}
+    approval = {"evidence_id":"ev-supervisor-merge-approval","type":"STRONG_SUPERVISOR_MERGE_APPROVAL","trust_level":"E6","producer":"platform:approval-controller","repository":"owner/repo","change_contract_hash":sha256_file(contract_path),"base_sha":SHA0,"head_sha":SHA1,"policy_bundle_hash":HASH_B,"toolchain_hash":HASH_C,"subject_epoch":0,"subject_version":1,"subject_fingerprint":subject_fingerprint(approval_subject),"environment":"supervisor-approval-controller","command_id":None,"exit_code":None,"status":"APPROVED","output_hash":HASH_C,"artifact_digest":None,"created_at":utc_now(),"expires_at":None,"invalidated_by":[],"signature_or_attestation":None,"metadata":{"approver_role":"merge-owner"}}
     result = _evaluate_merge(contract_path, records + [sign_evidence(approval, private_key_path=controller_private, key_id="controller-key")], roots, risk="R2")
     assert result["decision"] == "MERGE_ELIGIBLE"
     assert result["valid_approval_evidence"]["STRONG_SUPERVISOR_MERGE_APPROVAL"] == ["ev-supervisor-merge-approval"]

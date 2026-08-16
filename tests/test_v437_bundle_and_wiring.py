@@ -35,12 +35,16 @@ def test_v437_bug_lifecycle_policy_is_declared_and_wired():
 def test_v437_release_and_security_gates_match_protocol_and_traceability():
     policy = load_data(ROOT / "policies/bug-to-production-policy.yaml")
     targeted = policy["gates"]["TARGETED_VALIDATION_PASS"]["by_domain"]
-    assert targeted["SECURITY"] == ["SECURITY_VALIDATION_PASSED"]
+    assert {"SECURITY_VALIDATION_PASSED", "SECRETS_SCAN_PASSED", "FAIL_CLOSED_BOUNDARY_PASSED"}.issubset(targeted["SECURITY"])
     assert policy["gates"]["STAGING_PASS"]["minimum_trust"] == "E5"
     assert "PROTECTED_SUPERVISOR_APPROVAL" in policy["gates"]["READY_FOR_OWNER_RELEASE"]["required_evidence"]
     assert "PROTECTED_RELEASE_AUTHORIZATION" in policy["gates"]["PRODUCTION_RELEASED"]["required_evidence"]
 
     matrix = (ROOT / "traceability/TRACEABILITY_MATRIX.md").read_text(encoding="utf-8")
-    assert "Active normative requirements: **153**." in matrix
+    assert "Active normative requirements: **174**." in matrix
     assert "28. Exact fail-closed bug-to-production lifecycle | 15" in matrix
     assert "29. Machine-enforced fail-closed protocol completion | 19" in matrix
+    assert "30. Immutable delivery subject and invalidation | 5" in matrix
+    assert "31. Controller-owned lifecycle authority | 5" in matrix
+    assert "32. Canonical risk, domain, and evidence enforcement | 6" in matrix
+    assert "33. Terminal classes and exceptional release flows | 5" in matrix

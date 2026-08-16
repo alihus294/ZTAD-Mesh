@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .util import canonical_json, sha256_bytes, utc_now
+from .bug_protocol import validate_work_origin
 
 RUNNABLE_STATES = {
     "READY", "PLANNING", "WORKER_IMPLEMENTING", "MACHINE_CHECKS", "SUPERVISOR_REVIEW",
@@ -144,8 +145,9 @@ class ContinuityStore:
     schema semantics on PostgreSQL or a durable workflow engine.
     """
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, bug_lifecycle_store: Path | None = None):
         self.path = path.resolve()
+        self.bug_lifecycle_store = bug_lifecycle_store.resolve() if bug_lifecycle_store else None
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
@@ -226,6 +228,10 @@ class ContinuityStore:
                     diff_hash TEXT NOT NULL,
                     evidence_refs_json TEXT NOT NULL,
                     decision TEXT NOT NULL,
+                    subject_epoch INTEGER NOT NULL DEFAULT 0,
+                    subject_fingerprint TEXT,
+                    policy_bundle_hash TEXT,
+                    toolchain_hash TEXT,
                     created_at TEXT NOT NULL,
                     UNIQUE(task_id,role,session_id,head_sha,diff_hash),
                     FOREIGN KEY(task_id) REFERENCES tasks(task_id)
@@ -250,6 +256,15 @@ class ContinuityStore:
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(evidence_registry)").fetchall()}
             if "payload_json" not in columns:
                 conn.execute("ALTER TABLE evidence_registry ADD COLUMN payload_json TEXT NOT NULL DEFAULT '{}'")
+            approval_columns = {row["name"] for row in conn.execute("PRAGMA table_info(approvals)").fetchall()}
+            for column, definition in (
+                ("subject_epoch", "INTEGER NOT NULL DEFAULT 0"),
+                ("subject_fingerprint", "TEXT"),
+                ("policy_bundle_hash", "TEXT"),
+                ("toolchain_hash", "TEXT"),
+            ):
+                if column not in approval_columns:
+                    conn.execute(f"ALTER TABLE approvals ADD COLUMN {column} {definition}")
         finally:
             conn.close()
 
@@ -322,6 +337,19 @@ class ContinuityStore:
     ) -> dict[str, Any]:
         if risk not in {"R0", "R1", "R2", "R3", "R4"}:
             raise ValueError("Unknown risk")
+        authoritative_lifecycle = None
+        if self.bug_lifecycle_store and contract.get("bug_lifecycle_case_id"):
+            from .lifecycle_store import LifecycleStore
+            authoritative_lifecycle = LifecycleStore(self.bug_lifecycle_store).get(
+                str(contract["bug_lifecycle_case_id"]), verify=True
+            )
+        origin_errors = validate_work_origin(
+            contract,
+            lifecycle_handoff=bool(contract.get("bug_lifecycle_case_id") or contract.get("authoritative_lifecycle_handoff")),
+            authoritative_lifecycle=authoritative_lifecycle,
+        )
+        if origin_errors:
+            raise PermissionError("Work-origin gate blocked task submission: " + "; ".join(origin_errors))
         task_id = task_id or f"task-{uuid.uuid4()}"
         idempotency_key = idempotency_key or sha256_bytes(canonical_json({"repository": repository, "title": title, "contract": contract}))
         now = _iso_now()
@@ -789,6 +817,10 @@ class ContinuityStore:
         diff_hash: str,
         evidence_refs: list[str],
         decision: str,
+        subject_epoch: int = 0,
+        subject_fingerprint: str | None = None,
+        policy_bundle_hash: str | None = None,
+        toolchain_hash: str | None = None,
     ) -> dict[str, Any]:
         if decision not in {"APPROVE", "REPAIR", "REPLAN", "TAKEOVER", "ROLLBACK", "QUARANTINE"}:
             raise ValueError("Unsupported approval decision")
@@ -839,11 +871,22 @@ class ContinuityStore:
                         "Approval evidence must be PASSED, E3+, and bound to the exact task and head SHA: "
                         + ", ".join(sorted(invalid))
                     )
+                reviewer_run = conn.execute(
+                    """SELECT 1 FROM model_runs
+                       WHERE task_id=? AND role=? AND session_id=? AND head_sha=? AND status='COMPLETED'
+                       LIMIT 1""",
+                    (task_id, role, session_id, head_sha),
+                ).fetchone()
+                if reviewer_run is None:
+                    raise PermissionError(
+                        "Approval identity must match a stored completed reviewer run; "
+                        "caller-supplied role/session text cannot authorize approval"
+                    )
             approval_id = f"approval-{uuid.uuid4()}"
             conn.execute(
-                """INSERT INTO approvals(approval_id,task_id,role,session_id,head_sha,diff_hash,evidence_refs_json,decision,created_at)
-                   VALUES(?,?,?,?,?,?,?,?,?)""",
-                (approval_id, task_id, role, session_id, head_sha, diff_hash, json.dumps(normalized_refs), decision, _iso_now()),
+                """INSERT INTO approvals(approval_id,task_id,role,session_id,head_sha,diff_hash,evidence_refs_json,decision,subject_epoch,subject_fingerprint,policy_bundle_hash,toolchain_hash,created_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (approval_id, task_id, role, session_id, head_sha, diff_hash, json.dumps(normalized_refs), decision, subject_epoch, subject_fingerprint, policy_bundle_hash, toolchain_hash, _iso_now()),
             )
             conn.execute("COMMIT")
             return dict(conn.execute("SELECT * FROM approvals WHERE approval_id=?", (approval_id,)).fetchone())
@@ -862,6 +905,10 @@ class ContinuityStore:
         diff_hash: str,
         evidence_refs: list[str],
         decision: str,
+        subject_epoch: int = 0,
+        subject_fingerprint: str | None = None,
+        policy_bundle_hash: str | None = None,
+        toolchain_hash: str | None = None,
     ) -> dict[str, Any]:
         """Record a decision using immutable reviewer-run identity from the store.
 
@@ -883,6 +930,8 @@ class ContinuityStore:
         approval = self.record_approval(
             task_id=run["task_id"], role=run["role"], session_id=run["session_id"],
             head_sha=head_sha, diff_hash=diff_hash, evidence_refs=evidence_refs, decision=decision,
+            subject_epoch=subject_epoch, subject_fingerprint=subject_fingerprint,
+            policy_bundle_hash=policy_bundle_hash, toolchain_hash=toolchain_hash,
         )
         return approval | {"reviewer_run_id": reviewer_run_id, "reviewer_model_id": run["model_id"]}
 
@@ -892,6 +941,10 @@ class ContinuityStore:
         *,
         current_head_sha: str,
         current_diff_hash: str,
+        current_subject_epoch: int | None = None,
+        current_subject_fingerprint: str | None = None,
+        current_policy_bundle_hash: str | None = None,
+        current_toolchain_hash: str | None = None,
     ) -> dict[str, Any]:
         """Revalidate an approval immediately before a governed transition."""
 
@@ -907,6 +960,14 @@ class ContinuityStore:
                 errors.append("Approval head SHA is stale")
             if approval["diff_hash"] != current_diff_hash:
                 errors.append("Approval diff hash is stale")
+            if current_subject_epoch is not None and int(approval["subject_epoch"] or 0) != current_subject_epoch:
+                errors.append("Approval subject epoch is stale")
+            if current_subject_fingerprint is not None and approval["subject_fingerprint"] != current_subject_fingerprint:
+                errors.append("Approval subject fingerprint is stale")
+            if current_policy_bundle_hash is not None and approval["policy_bundle_hash"] != current_policy_bundle_hash:
+                errors.append("Approval policy bundle is stale")
+            if current_toolchain_hash is not None and approval["toolchain_hash"] != current_toolchain_hash:
+                errors.append("Approval toolchain is stale")
             for evidence_id in refs:
                 evidence = conn.execute(
                     "SELECT * FROM evidence_registry WHERE evidence_id=?", (evidence_id,)

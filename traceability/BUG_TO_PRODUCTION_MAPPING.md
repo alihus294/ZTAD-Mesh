@@ -1,4 +1,4 @@
-# WorkshopOS Bug-to-Production Protocol Mapping — ZTAD Mesh 4.3.9
+# WorkshopOS Bug-to-Production Protocol Mapping — ZTAD Mesh 4.3.10
 
 This mapping makes the WorkshopOS Fail-Closed Bug-to-Production Protocol v1 directly traceable without relabeling historical validation evidence. The existing `requirements.csv` control catalogue remains intact; the exact lifecycle is an implementation refinement and composition of the problem-intake, evidence, test-integrity, approval, release, and production controls already catalogued there.
 
@@ -40,5 +40,14 @@ This mapping makes the WorkshopOS Fail-Closed Bug-to-Production Protocol v1 dire
 | owner does not make routine coding decisions | zero-trust-delivery/problem-investigation skills | protected authority only when irreducible | skill/eval coverage |
 | WorkshopOS canonical deploy path | `workshopos` lifecycle profile | `DEPLOYMENT.md → infra/docs/runbook.md → .github/workflows/deploy.yml` | `test_v437_bug_protocol.py` + host acceptance |
 | internal scheduler `DONE` cannot close bug | separate outer lifecycle | `DONE` absent from policy | `test_v437_bug_protocol.py` |
+| subject identity | `ztad.subject`, `ztad.bug_lifecycle`, `ztad.evidence`, `ztad.approval_controller` | protected base, PR head, reviewed diff, merged main, merge provenance, post-merge CI, artifact/release/production identity, epoch | `test_v4310_fail_closed_adversarial.py`, approval and evidence tests |
+| subject mutation invalidation | `ztad.subject`, controller lifecycle store | epoch increment, historical evidence retention, downstream reset, post-exposure rollback | `test_v4310_fail_closed_adversarial.py` |
+| lifecycle authority | `ztad.lifecycle_store`, lifecycle CLI | append-only SQLite events, optimistic version, actor and hash-chain verification; JSON is export-only | `test_v4310_fail_closed_adversarial.py` |
+| canonical risk monotonicity | `ztad.risk`, `ztad.bug_protocol`, lifecycle gates | one effective-risk join with `R4 = CRITICAL` and no automatic downgrade | `test_v4310_fail_closed_adversarial.py`, risk tests |
+| complete domain union | policy domain profiles, `ztad.bug_lifecycle`, `ztad.evidence_bundle` | every active profile check is required at the applicable gate, including hotfix | `test_v4310_fail_closed_adversarial.py`, domain tests |
+| machine evidence provenance | `ztad.evidence` | registered executor, command/configuration fingerprints, receipt, output hashes, toolchain, epoch | `test_v4310_fail_closed_adversarial.py`, evidence tests |
+| final lifecycle replay | `ztad.evidence_bundle`, `ztad.lifecycle_store` | sequence, previous/current hashes, actor, state order, terminal class, subject lineage | `test_v4310_fail_closed_adversarial.py` |
+| `RESOLVED_NO_CODE` | bundle schema, lifecycle store, evidence bundle | explicit non-code proof and replay without code-fix or production fields | `test_v4310_fail_closed_adversarial.py` |
+| domain-aware rollback closure | `ztad.bug_protocol`, `ztad.evidence_bundle` | rollback receipt, stable artifact, post-rollback health, domain reconciliation | `test_v4310_fail_closed_adversarial.py` |
 
 The protected platform still has to prove its own branch, CI, staging, signing/attestation, deployment, rollback, and runtime controls. Presence of this mapping or the local policy is not external evidence.

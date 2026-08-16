@@ -42,6 +42,26 @@ def _repo(tmp_path: Path) -> Path:
     return repo
 
 
+def _blast_coverage() -> dict:
+    return {
+        "direct_components": ["app.py"],
+        "adjacent_components": ["tests"],
+        "callers_callees": ["test oracle"],
+        "api_contracts": ["local behavior"],
+        "database_data_boundaries": ["none"],
+        "tenant_auth_boundaries": ["none"],
+        "financial_zatca_boundaries": ["none"],
+        "provider_boundaries": ["none"],
+        "concurrency_idempotency_boundaries": ["none"],
+        "deployment_infra_boundaries": ["none"],
+        "tests": ["pytest tests/test_bug.py"],
+        "observability": ["test output"],
+        "migration_rollback_impact": ["restore prior artifact"],
+        "invariants": ["unrelated behavior remains unchanged"],
+        "validation_depth": ["base and candidate oracle"],
+    }
+
+
 def _proven_case(tmp_path: Path) -> dict:
     repo = _repo(tmp_path)
     case = initialize_problem_case(repo, report="When X happens, Y is wrong.", expected_behavior="X must produce Z.")
@@ -51,6 +71,16 @@ def _proven_case(tmp_path: Path) -> dict:
         "authoritative_sources": [{"source": "app.py", "authority": "EXECUTABLE_SOURCE", "authority_reason": "Executable behavior is the highest available implementation authority for this local case.", "evidence_ref": "ev-source"}],
         "classification": "CONFIRMED_BUG",
         "classification_evidence": ["ev-classification"],
+        "classification_record": {
+            "evidence": ["ev-classification"],
+            "reproduction_status": "REPRODUCED",
+            "authoritative_expected_behavior": "X must produce Z.",
+            "competing_explanations_tested": ["cache hypothesis"],
+            "environment_findings": ["local base fixture"],
+            "unresolved_ambiguities": [],
+            "source_conflicts": [],
+            "implementation_justified": True,
+        },
         "reproduction": {
             "preconditions": ["base fixture"], "action": "run regression", "input": None,
             "expected": "Z", "actual": "Y", "environment": "local", "deterministic": True,
@@ -62,7 +92,7 @@ def _proven_case(tmp_path: Path) -> dict:
         },
         "rejected_hypotheses": [{"hypothesis": "cache", "disposition": "REJECTED", "evidence_refs": ["ev-cache"]}],
         "hypothesis_tests": [{"hypothesis": "cache", "test": "invalidate cache and rerun oracle", "result": "cache hypothesis rejected", "evidence_refs": ["ev-cache"]}],
-        "blast_radius": {"direct": ["app.py"], "adjacent": ["tests"], "security_boundaries": [], "data_boundaries": []},
+        "blast_radius": {"direct": ["app.py"], "adjacent": ["tests"], "security_boundaries": [], "data_boundaries": [], "coverage": _blast_coverage()},
         "invariants": ["Unrelated behavior remains unchanged."],
         "risk": "R1",
         "regression_baseline": {
@@ -74,6 +104,18 @@ def _proven_case(tmp_path: Path) -> dict:
             "expected_files": ["app.py", "tests/test_bug.py"], "tests": ["pytest tests/test_bug.py"],
             "forbidden_scope": ["infra/production"], "database_impact": "none",
             "external_side_effects": "none", "rollback_or_containment": "restore the prior verified artifact",
+            "file_reasons": {
+                "app.py": {
+                    "why": "The faulty branch is in the implementation file.",
+                    "root_cause_mechanism": "The branch selects Y instead of Z.",
+                    "validation": "The exact regression oracle proves the corrected result.",
+                },
+                "tests/test_bug.py": {
+                    "why": "The regression oracle must encode the reported defect.",
+                    "root_cause_mechanism": "The oracle exercises the faulty branch.",
+                    "validation": "The same oracle fails on base and passes on candidate.",
+                },
+            },
         },
     })
     return case

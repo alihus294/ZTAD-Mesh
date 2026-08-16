@@ -1,4 +1,4 @@
-# Target Host Acceptance — ZTAD Mesh 4.3.9
+# Target Host Acceptance — ZTAD Mesh 4.3.10
 
 The package is not production-authoritative merely because it installs or because repository CI is green. Run these gates on the target Codex/GitHub/deployment environment.
 
@@ -22,6 +22,8 @@ The package is not production-authoritative merely because it installs or becaus
 12. Verify every Sol request is capped at `HIGH` reasoning or lower.
 13. Kill and restart the mesh service; verify lease recovery and no duplicate execution.
 14. Verify all model/provider artifacts remain outside application worktrees and that stale artifacts are rejected.
+
+Trust-root signature verification and trust-root/key custody are separate claims. Local code can verify signatures against a supplied root snapshot, but it cannot prove that the snapshot or private signing key is protected from model authority. Until an external host acceptance boundary supplies the opaque trust-root acceptance context, the custody status is `HOST_CAPABILITY_UNPROVEN`; a model-supplied root path, digest, or acceptance identifier cannot authorize closure.
 
 ## GitHub/CI gates
 
