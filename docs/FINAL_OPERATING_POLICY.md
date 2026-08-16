@@ -1,8 +1,8 @@
-# Final Operating Policy — ZTAD Mesh 4.3.10
+# Final Operating Policy — ZTAD Mesh 4.3.11
 
 1. Models propose; deterministic tools, protected controllers, and protected platforms create evidence and authority.
 2. Every reported defect MUST begin as `UNVERIFIED_REPORT` and MUST use the authoritative bug-to-production lifecycle. Internal scheduler `DONE` MUST NOT close a bug case.
-3. A code-fix case MUST progress explicitly through source truth, classification, reproduction, root cause, blast radius, plan, patch, RED→GREEN proof, targeted validation, full regression validation, diff forensics, independent review, protected CI, staging, `READY_FOR_OWNER_RELEASE`, `PRODUCTION_RELEASED`, `POST_DEPLOY_VERIFIED`, then `CLOSED`.
+3. A hosted code-fix case MUST progress explicitly through source truth, classification, reproduction, root cause, blast radius, plan, patch, RED→GREEN proof, targeted validation, full regression validation, diff forensics, independent review, protected CI, staging, `READY_FOR_OWNER_RELEASE`, `PRODUCTION_RELEASED`, `POST_DEPLOY_VERIFIED`, then `CLOSED`. A package-only case MUST instead prove protected package release, exact published assets, clean consumer installation, and packaged regressions before `CLOSED`; a hybrid case MUST prove both paths.
 4. Missing mandatory evidence MUST route to `BLOCKED` before production exposure and `ROLLBACK_REQUIRED` after production exposure.
 5. Orchestration cost MUST be proportional to verified risk: R0/R1 use the guarded fast path, R2 uses the bounded mesh, and R3/R4 use the full mesh.
 6. Normal R0/R1 work MUST use deterministic index → Luna worker → deterministic integration/checks/actual-risk classification → exactly one independent Sol final guard.

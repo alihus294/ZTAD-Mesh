@@ -1,4 +1,4 @@
-# Validation Report — ZTAD Mesh 4.3.10
+# Validation Report — ZTAD Mesh 4.3.11
 
 ## Decision
 
@@ -10,9 +10,9 @@ CANDIDATE_REQUIRES_EXACT_COMMIT_VALIDATION_AND_TARGET_HOST_ACCEPTANCE
 
 Release identity is derived from `VERSION` and checked against every current package, runtime, release-facing, operational, and normative identity surface. Identity is not validation evidence by itself.
 
-This source document does not self-attest the 4.3.10 release. Current-release repository evidence becomes authoritative only when protected GitHub CI succeeds on the exact final commit. Artifact/release evidence becomes authoritative only when the immutable release workflow binds the exact commit and exact archive digests. Target-host/provider/deployment/runtime claims remain external evidence classes.
+This source document does not self-attest the 4.3.11 release. Current-release repository evidence becomes authoritative only when protected GitHub CI succeeds on the exact final commit. Artifact/release evidence becomes authoritative only when the immutable release workflow binds the exact commit and exact archive digests. Target-host/provider/deployment/runtime claims remain external evidence classes.
 
-Historical measurements are never silently re-attributed to 4.3.10.
+Historical measurements are never silently re-attributed to 4.3.11.
 
 | Evidence source | What it can establish |
 |---|---|
@@ -23,9 +23,9 @@ Historical measurements are never silently re-attributed to 4.3.10.
 | Immutable tag, release assets, checksums, release fingerprint, SBOM, provenance, and attestations bound to an exact SHA | Release/artifact evidence for that SHA |
 | Protected deployment/runtime controllers | Staging, release, rollback, health, synthetic, and observation evidence only |
 
-## 4.3.10 protocol acceptance targets
+## 4.3.11 protocol acceptance targets
 
-The deterministic lifecycle introduced in v4.3.7 remains unchanged for code-fix cases. The 4.3.10 candidate must prove that the packaged skill instructions and machine-enforced controllers match those deterministic gates without a softer prompt-level escape hatch:
+The deterministic lifecycle introduced in v4.3.7 remains unchanged for hosted code-fix cases. The 4.3.11 candidate must prove that package-only delivery uses the source-derived package lifecycle while hosted delivery retains the deterministic runtime gates without a softer prompt-level escape hatch:
 
 - problem investigation and finding repair cannot replace exact protected bad-base/exact-candidate same-oracle RED→GREEN with model judgment, “equivalent evidence”, feasibility wording, or controller-reviewed exception;
 - strong-model/supervisor `APPROVE` is advisory only and cannot itself satisfy `PROTECTED_SUPERVISOR_APPROVAL`, create E6, or be mechanically translated into protected merge/release/production authority;
@@ -59,9 +59,9 @@ UNVERIFIED_REPORT
 
 ## Historical evidence boundary
 
-The immutable predecessors `v4.3.9`, `v4.3.8`, and earlier releases are historical evidence for their exact source SHAs and published assets. Their numeric test, coverage, fuzz, mutation, package, and concurrency results are not copied here as 4.3.10 claims.
+The immutable predecessors `v4.3.10`, `v4.3.9`, `v4.3.8`, and earlier releases are historical evidence for their exact source SHAs and published assets. Their numeric test, coverage, fuzz, mutation, package, and concurrency results are not copied here as 4.3.11 claims.
 
-The 4.3.10 candidate must pass the repository's current source identity gate, compile gate, full unit/integration suite, ResourceWarning/unraisable protections, offline evals, bundle validation, policy wiring, traceability validation, deterministic distribution builds, exact Plugin and Marketplace archive validation, and packaged regressions. Protected PR CI must run on the final PR head; post-merge CI must run on the exact merged main SHA before release publication can be treated as current evidence.
+The 4.3.11 candidate must pass the repository's current source identity gate, compile gate, full unit/integration suite, ResourceWarning/unraisable protections, offline evals, bundle validation, policy wiring, traceability validation, deterministic distribution builds, exact Plugin and Marketplace archive validation, and packaged regressions. Protected PR CI must run on the final PR head; post-merge CI must run on the exact merged main SHA before release publication can be treated as current evidence.
 
 ## What repository validation cannot prove
 

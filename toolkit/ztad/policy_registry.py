@@ -91,6 +91,7 @@ SEMANTIC_POLICY_CONSUMERS: dict[str, dict[str, tuple[str, ...]]] = {
         "progressive_exposure": ("validate_progressive_exposure", "PROGRESSIVE_EXPOSURE_PLAN"),
         "hotfix": ("HOTFIX", "may_reduce_validation_breadth"),
         "artifact_chain": ("validate_artifact_chain", "build_once_promote_by_digest"),
+        "delivery_models": ("derive_delivery_model", "validate_delivery_model"),
         "gates.READY_FOR_OWNER_RELEASE": ("_protected_approval_errors", "PROTECTED_SUPERVISOR_APPROVAL"),
         "gates.ROLLBACK_CLOSURE": ("validate_rollback_closure", "ROLLBACK_REQUIRED"),
         "profiles": ("audit_host_acceptance", "HOST_CAPABILITY_UNPROVEN"),
@@ -112,7 +113,7 @@ def _semantic_policy_errors(root: Path, name: str, value: dict[str, Any], consum
         return [], ()
     semantic_modules = set(consumers)
     if name == "bug-to-production-policy.yaml":
-        semantic_modules.update({"ztad.risk", "ztad.host_acceptance", "ztad.release"})
+        semantic_modules.update({"ztad.risk", "ztad.host_acceptance", "ztad.release", "ztad.delivery_model"})
     texts: list[str] = []
     for module in sorted(semantic_modules):
         try:

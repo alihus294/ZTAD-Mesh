@@ -144,6 +144,7 @@ jobs:
           tests/test_v43_final_hardening.py
           tests/test_v439_fail_closed_protocol.py
           tests/test_v439_release_evidence.py
+          tests/test_v4311_delivery_model.py
 
       - name: Validate bundle and policy wiring
         if: env.ZTAD_RELEASE_ALREADY_EXISTS != '1'

@@ -12,7 +12,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-from .bug_protocol import VALID_DOMAINS
+from .bug_protocol import COMMON_LIFECYCLE, PACKAGE_LIFECYCLE_STATES, VALID_DOMAINS
+from .delivery_model import HOSTED_RUNTIME_SERVICE, HYBRID, PACKAGE_OR_PLUGIN
 from .controller_context import (
     LIFECYCLE_CONTROLLER_ID,
     LIFECYCLE_CONTROLLER_TYPE,
@@ -55,10 +56,13 @@ CODE_LIFECYCLE = (
     "POST_DEPLOY_VERIFIED",
     "CLOSED",
 )
-AUTHORITATIVE_STATES = CODE_LIFECYCLE + ("RESOLVED_NO_CODE",)
+AUTHORITATIVE_STATES = CODE_LIFECYCLE + tuple(sorted(PACKAGE_LIFECYCLE_STATES)) + ("RESOLVED_NO_CODE",)
 STATE_TRANSITIONS = {current: next_state for current, next_state in zip(CODE_LIFECYCLE, CODE_LIFECYCLE[1:])}
 TERMINAL_STATES = {"CLOSED", "RESOLVED_NO_CODE"}
 PROTECTED_TRANSITION_STATES = {
+    "PACKAGE_RELEASED",
+    "RELEASE_ARTIFACT_VERIFIED",
+    "CONSUMER_VALIDATION_PASS",
     "READY_FOR_OWNER_RELEASE",
     "PRODUCTION_RELEASED",
     "POST_DEPLOY_VERIFIED",
@@ -70,11 +74,25 @@ TRANSITION_AUTHORIZATION_TYPE = "LIFECYCLE_TRANSITION_AUTHORIZATION"
 TRANSITION_AUTHORIZATION_PRODUCER = "platform:lifecycle-controller"
 ALLOWED_TRANSITIONS = {state: {next_state} for state, next_state in STATE_TRANSITIONS.items()}
 ALLOWED_TRANSITIONS["ISSUE_CLASSIFIED"].add("RESOLVED_NO_CODE")
+ALLOWED_TRANSITIONS["CI_PASS"].add("PACKAGE_RELEASED")
+ALLOWED_TRANSITIONS["PACKAGE_RELEASED"] = {"RELEASE_ARTIFACT_VERIFIED"}
+ALLOWED_TRANSITIONS["RELEASE_ARTIFACT_VERIFIED"] = {"CONSUMER_VALIDATION_PASS"}
+ALLOWED_TRANSITIONS["CONSUMER_VALIDATION_PASS"] = {"CLOSED", "STAGING_PASS"}
 ALLOWED_TRANSITIONS["PRODUCTION_RELEASED"].add("ROLLBACK_REQUIRED")
 ALLOWED_TRANSITIONS["POST_DEPLOY_VERIFIED"].add("ROLLBACK_REQUIRED")
 ALLOWED_TRANSITIONS["ROLLBACK_REQUIRED"] = {"CHANGE_PLANNED", "CLOSED"}
 ALLOWED_TRANSITIONS["CLOSED"] = set()
 ALLOWED_TRANSITIONS["RESOLVED_NO_CODE"] = set()
+STATE_ORDER = COMMON_LIFECYCLE + (
+    "PACKAGE_RELEASED",
+    "RELEASE_ARTIFACT_VERIFIED",
+    "CONSUMER_VALIDATION_PASS",
+    "STAGING_PASS",
+    "READY_FOR_OWNER_RELEASE",
+    "PRODUCTION_RELEASED",
+    "POST_DEPLOY_VERIFIED",
+    "CLOSED",
+)
 SUBJECT_ALIAS_FIELDS = {"base_sha", "head_sha", "diff_hash"}
 SUBJECT_MUTATION_FIELDS = set(MATERIAL_SUBJECT_FIELDS) | SUBJECT_ALIAS_FIELDS | {
     "subject_epoch",
@@ -648,6 +666,15 @@ class LifecycleStore:
                 raise ValueError("Unknown authoritative lifecycle state")
             if requested_state not in AUTHORITATIVE_STATES and requested_state != "ROLLBACK_REQUIRED":
                 raise ValueError("Requested lifecycle state is not authoritative")
+            delivery_model = str(next_state.get("delivery_model") or current.get("delivery_model") or HOSTED_RUNTIME_SERVICE)
+            runtime_states = {"STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED"}
+            package_states = set(PACKAGE_LIFECYCLE_STATES)
+            if delivery_model == PACKAGE_OR_PLUGIN and ({next_state_name, requested_state} & {"ROLLBACK_REQUIRED"}):
+                raise PermissionError("Package-only delivery uses release revoke or replacement recovery, not runtime rollback")
+            if delivery_model == PACKAGE_OR_PLUGIN and ({next_state_name, requested_state} & runtime_states):
+                raise PermissionError("Package-only delivery cannot enter runtime deployment lifecycle states")
+            if delivery_model not in {PACKAGE_OR_PLUGIN, HYBRID} and ({next_state_name, requested_state} & package_states):
+                raise PermissionError("Only package or hybrid delivery may enter package lifecycle states")
             subject_binding = decision in {"SUBJECT_BOUND", "ARTIFACT_BOUND", "SUBJECT_MUTATION_INVALIDATED_DOWNSTREAM"}
             if decision not in {
                 "PROCEED",
@@ -757,11 +784,11 @@ class LifecycleStore:
             if next_state_name == "BLOCKED":
                 resume_state = str(next_state.get("resume_state") or "")
                 logical_current = str(current.get("resume_state") or "") if current_state == "BLOCKED" else current_state
-                if resume_state not in CODE_LIFECYCLE:
+                if resume_state not in STATE_ORDER:
                     raise PermissionError("Blocked lifecycle state requires a valid resume_state")
-                if logical_current not in CODE_LIFECYCLE:
+                if logical_current not in STATE_ORDER:
                     raise PermissionError("Blocked lifecycle state has an invalid current state")
-                if CODE_LIFECYCLE.index(resume_state) > CODE_LIFECYCLE.index(logical_current):
+                if STATE_ORDER.index(resume_state) > STATE_ORDER.index(logical_current):
                     raise PermissionError("Blocked lifecycle state cannot resume at a future state")
             if next_state_name == "ROLLBACK_REQUIRED" and decision not in {"ROLLBACK_REQUIRED", "SUBJECT_MUTATION_INVALIDATED_DOWNSTREAM"}:
                 raise PermissionError("Rollback lifecycle writes require a rollback controller decision")
@@ -776,6 +803,10 @@ class LifecycleStore:
                 elif next_state_name == "CLOSED":
                     if current_state == "POST_DEPLOY_VERIFIED" and next_state.get("closure_class") != "CODE_FIX":
                         raise PermissionError("Code-fix closure must declare CODE_FIX")
+                    if current_state == "CONSUMER_VALIDATION_PASS" and next_state.get("closure_class") != "PACKAGE_RELEASE":
+                        raise PermissionError("Package closure must declare PACKAGE_RELEASE")
+                    if delivery_model == HYBRID and current_state != "POST_DEPLOY_VERIFIED" and current_state != "ROLLBACK_REQUIRED":
+                        raise PermissionError("Hybrid closure must complete the runtime post-deploy path after package validation")
                     if current_state == "ROLLBACK_REQUIRED" and next_state.get("closure_class") != "ROLLBACK_CLOSURE":
                         raise PermissionError("Rollback closure must declare ROLLBACK_CLOSURE")
             elif next_state.get("final_state") not in {None, ""} or next_state.get("closure_class") not in {None, ""}:

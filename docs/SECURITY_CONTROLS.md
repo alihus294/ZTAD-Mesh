@@ -1,4 +1,4 @@
-# Security Controls — ZTAD Mesh 4.3.10
+# Security Controls — ZTAD Mesh 4.3.11
 
 ## Model distrust
 
@@ -6,7 +6,7 @@ Every model result starts as untrusted. Models cannot create authoritative test,
 
 ## Reported-defect lifecycle
 
-A reported defect begins as `UNVERIFIED_REPORT`. The authoritative bug lifecycle requires explicit source-truth, classification, reproduction, root-cause, blast-radius, plan, patch, RED→GREEN, validation, diff-forensics, independent-review, CI, staging, release, production, and post-deploy gates. Generic scheduler `DONE` is not a valid bug closure. Missing mandatory evidence fails closed; after production exposure it requires rollback/containment.
+A reported defect begins as `UNVERIFIED_REPORT`. The authoritative bug lifecycle derives the delivery model from source markers. Package-only cases require protected package release, exact published assets, clean consumer installation, and packaged regressions; hosted cases require staging, release, production, and post-deploy gates. Generic scheduler `DONE` is not a valid bug closure. Missing mandatory evidence fails closed; after production exposure it requires rollback/containment.
 
 ## Model/provider execution
 

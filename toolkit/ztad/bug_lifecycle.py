@@ -7,6 +7,10 @@ from typing import Any, Iterable
 
 from .bug_protocol import (
     AUTHORITATIVE_LIFECYCLE,
+    HOSTED_RUNTIME_SERVICE,
+    HYBRID,
+    PACKAGE_LIFECYCLE_STATES,
+    PACKAGE_OR_PLUGIN,
     RISK_CLASS_ORDER,
     derive_risk_class,
     infer_domains,
@@ -20,6 +24,9 @@ from .bug_protocol import (
     validate_diff_forensics,
     validate_full_regression_metadata,
     validate_post_deploy_metadata,
+    validate_package_release_metadata,
+    validate_published_asset_metadata,
+    validate_consumer_validation_metadata,
     validate_synthetic_transaction_metadata,
     validate_observation_window_metadata,
     validate_production_release_metadata,
@@ -33,6 +40,7 @@ from .bug_protocol import (
     validate_test_integrity,
     PROTECTED_APPROVAL_PRODUCERS,
 )
+from .delivery_model import derive_delivery_model, validate_delivery_model
 from .evidence import TRUST_ORDER, evaluate_required_evidence
 from .diff_forensics import collect_git_diff_inventory
 from .problem import NON_CODE_CLASSIFICATIONS, problem_case_fingerprint, semantic_errors
@@ -104,13 +112,36 @@ def initialize_bug_lifecycle(
     mode: str = "NORMAL",
     remote_repository: str | None = None,
     domains: Iterable[str] = ("GENERAL",),
+    repository_root: Path | str | None = None,
 ) -> dict[str, Any]:
     profiles = policy.get("profiles", {}) or {}
     if profile != "generic" and profile not in profiles:
         raise ValueError(f"Unknown bug protocol profile: {profile}")
     if mode not in {"NORMAL", "HOTFIX"}:
         raise ValueError("mode must be NORMAL or HOTFIX")
-    canonical_chain = list(((profiles.get(profile) or {}).get("canonical_deployment_chain") or []))
+    source_root = repository_root
+    if source_root is None:
+        candidate_root = problem_case.get("repository")
+        if isinstance(candidate_root, str) and Path(candidate_root).is_dir():
+            source_root = candidate_root
+    delivery_result = derive_delivery_model(source_root) if source_root is not None else None
+    if delivery_result is not None and delivery_result.model in {PACKAGE_OR_PLUGIN, HOSTED_RUNTIME_SERVICE, HYBRID}:
+        delivery_model = delivery_result.model
+        delivery_model_proof = delivery_result.proof
+        delivery_model_proof_digest = delivery_result.proof_digest
+    else:
+        # Existing remote/fixture records without a readable source tree stay
+        # on the conservative hosted path.  The package path can only be
+        # enabled by a fresh source-tree derivation.
+        delivery_model = HOSTED_RUNTIME_SERVICE
+        delivery_model_proof = {
+            "derivation": "source-tree-unavailable-conservative-hosted-default",
+            "source_tree_available": False,
+        }
+        delivery_model_proof_digest = None
+    canonical_chain = [] if delivery_model == PACKAGE_OR_PLUGIN else list(
+        ((profiles.get(profile) or {}).get("canonical_deployment_chain") or [])
+    )
     normalized_domains = infer_domains(problem_case, domains)
     risk = problem_case.get("risk")
     policy_errors = validate_policy_safety(policy)
@@ -133,6 +164,9 @@ def initialize_bug_lifecycle(
         "blocked_target": None,
         "blockers": [],
         "repository": problem_case["repository"],
+        "delivery_model": delivery_model,
+        "delivery_model_proof": delivery_model_proof,
+        "delivery_model_proof_digest": delivery_model_proof_digest,
         "remote_repository": remote_repository,
         "problem_case_fingerprint": problem_case_fingerprint(problem_case),
         "base_sha": problem_case.get("base_sha"),
@@ -191,6 +225,7 @@ def initialize_authoritative_bug_lifecycle(
     remote_repository: str | None = None,
     domains: Iterable[str] = ("GENERAL",),
     actor: str | None = None,
+    repository_root: Path | str | None = None,
 ) -> dict[str, Any]:
     """Create the controller-owned lifecycle and return its verified snapshot."""
 
@@ -201,6 +236,7 @@ def initialize_authoritative_bug_lifecycle(
         mode=mode,
         remote_repository=remote_repository,
         domains=domains,
+        repository_root=repository_root,
     )
     store.initialize(record, actor=actor)
     return store.export(str(record["case_id"]))
@@ -456,6 +492,19 @@ def _gate_requirements(policy: dict[str, Any], target_state: str, record: dict[s
     gate = ((policy.get("gates") or {}).get(target_state) or {})
     minimum = str(gate.get("minimum_trust", "E2"))
     required = set(gate.get("required_evidence", []) or [])
+    delivery_model = str(record.get("delivery_model") or HOSTED_RUNTIME_SERVICE)
+    delivery_gate = (gate.get("by_delivery_model") or {}).get(delivery_model)
+    package_gate_state = target_state in PACKAGE_LIFECYCLE_STATES or target_state == "CLOSED"
+    if delivery_model == PACKAGE_OR_PLUGIN and package_gate_state:
+        if isinstance(delivery_gate, dict):
+            minimum = str(delivery_gate.get("minimum_trust", minimum))
+            required = set(delivery_gate.get("required_evidence", []) or [])
+    elif isinstance(delivery_gate, dict):
+        minimum = max(
+            (minimum, str(delivery_gate.get("minimum_trust", minimum))),
+            key=lambda value: TRUST_ORDER.get(value, -1),
+        )
+        required.update(delivery_gate.get("required_evidence", []) or [])
     risk = str(record.get("risk") or "")
     risk_class = str(record.get("risk_class") or risk_class_for_level(risk) or "LOW")
     for risk_key in {risk, risk_class}:
@@ -491,6 +540,9 @@ def _gate_requirements(policy: dict[str, Any], target_state: str, record: dict[s
         "READY_FOR_OWNER_RELEASE",
         "PRODUCTION_RELEASED",
         "POST_DEPLOY_VERIFIED",
+        "PACKAGE_RELEASED",
+        "RELEASE_ARTIFACT_VERIFIED",
+        "CONSUMER_VALIDATION_PASS",
         "CLOSED",
     }:
         required.add("POST_MERGE_CI_PROVEN")
@@ -569,6 +621,19 @@ def _protected_approval_errors(
 def _profile_errors(record: dict[str, Any], policy: dict[str, Any], target_state: str) -> list[str]:
     if record.get("profile") == "generic":
         return []
+    delivery_model = str(record.get("delivery_model") or HOSTED_RUNTIME_SERVICE)
+    if delivery_model == PACKAGE_OR_PLUGIN:
+        if target_state in {
+            "STAGING_PASS",
+            "READY_FOR_OWNER_RELEASE",
+            "PRODUCTION_RELEASED",
+            "POST_DEPLOY_VERIFIED",
+        }:
+            return ["Package-only delivery cannot enter runtime deployment lifecycle states"]
+        if target_state in PACKAGE_LIFECYCLE_STATES or target_state == "CLOSED":
+            if record.get("canonical_deployment_chain"):
+                return ["Package-only delivery cannot carry a runtime deployment chain"]
+        return []
     profile = ((policy.get("profiles") or {}).get(record.get("profile")) or {})
     expected = list(profile.get("canonical_deployment_chain") or [])
     if target_state in {
@@ -628,6 +693,16 @@ def _protocol_gate_errors(
     actual_git_inventory: dict[str, Any] | None = None,
 ) -> list[str]:
     errors: list[str] = []
+    delivery_model = str(record.get("delivery_model") or HOSTED_RUNTIME_SERVICE)
+    if delivery_model == PACKAGE_OR_PLUGIN and target_state in {
+        "STAGING_PASS",
+        "READY_FOR_OWNER_RELEASE",
+        "PRODUCTION_RELEASED",
+        "POST_DEPLOY_VERIFIED",
+    }:
+        errors.append("Package-only delivery cannot claim runtime deployment evidence")
+    if delivery_model == PACKAGE_OR_PLUGIN and target_state == "ROLLBACK_REQUIRED":
+        errors.append("Package-only delivery uses release revoke or replacement recovery, not runtime rollback")
     if target_state == "REGRESSION_TEST_PROVEN":
         errors.extend(_red_green_errors(record, evidence_records))
         for item in _metadata_records(evidence_records, "REGRESSION_RED_GREEN_PROVEN"):
@@ -691,6 +766,8 @@ def _protocol_gate_errors(
                     )
                 )
     elif target_state == "STAGING_PASS":
+        if delivery_model == PACKAGE_OR_PLUGIN:
+            return ["Package-only delivery has no staging runtime state"]
         if record.get("merged_main_sha"):
             for item in _metadata_records(evidence_records, "POST_MERGE_CI_PROVEN"):
                 errors.extend(
@@ -732,6 +809,48 @@ def _protocol_gate_errors(
         if str(record.get("risk_class") or "") in {"HIGH", "CRITICAL"}:
             for item in _metadata_records(evidence_records, "PROGRESSIVE_EXPOSURE_PLAN"):
                 errors.extend(validate_progressive_exposure(item.get("metadata"), risk_class=record.get("risk_class")))
+    elif target_state == "PACKAGE_RELEASED":
+        for evidence_type in (
+            "PROTECTED_PACKAGE_RELEASE",
+            "RELEASE_FINGERPRINT_VERIFIED",
+            "SIGNED_RELEASE_MANIFEST",
+            "SBOM_VERIFIED",
+            "ARTIFACT_ATTESTATION_VERIFIED",
+            "BUILD_PROVENANCE_VERIFIED",
+        ):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_package_release_metadata(
+                        item.get("metadata"),
+                        head_sha=record.get("head_sha"),
+                        artifact_digest=record.get("artifact_digest"),
+                        merged_main_sha=record.get("merged_main_sha"),
+                    )
+                )
+    elif target_state == "RELEASE_ARTIFACT_VERIFIED":
+        for evidence_type in ("PUBLISHED_ASSET_DIGEST_VERIFIED", "PUBLISHED_ASSET_METADATA_VERIFIED"):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_published_asset_metadata(
+                        item.get("metadata"),
+                        head_sha=record.get("head_sha"),
+                        artifact_digest=record.get("artifact_digest"),
+                        merged_main_sha=record.get("merged_main_sha"),
+                    )
+                )
+    elif target_state == "CONSUMER_VALIDATION_PASS":
+        for evidence_type in (
+            "CONSUMER_INSTALLATION_VALIDATED",
+            "PACKAGED_REGRESSIONS_PASSED",
+            "PACKAGE_CONTENT_SECURITY_VERIFIED",
+        ):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_consumer_validation_metadata(
+                        item.get("metadata"),
+                        artifact_digest=record.get("artifact_digest"),
+                    )
+                )
     elif target_state == "PRODUCTION_RELEASED":
         for evidence_type in (
             "PROTECTED_RELEASE_AUTHORIZATION",
@@ -762,6 +881,46 @@ def _protocol_gate_errors(
             errors.extend(validate_synthetic_transaction_metadata(item.get("metadata")))
         for item in _metadata_records(evidence_records, "OBSERVATION_WINDOW"):
             errors.extend(validate_observation_window_metadata(item.get("metadata")))
+    elif target_state == "CLOSED" and delivery_model == PACKAGE_OR_PLUGIN:
+        for evidence_type in (
+            "PROTECTED_PACKAGE_RELEASE",
+            "RELEASE_FINGERPRINT_VERIFIED",
+            "SIGNED_RELEASE_MANIFEST",
+            "SBOM_VERIFIED",
+            "ARTIFACT_ATTESTATION_VERIFIED",
+            "BUILD_PROVENANCE_VERIFIED",
+        ):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_package_release_metadata(
+                        item.get("metadata"),
+                        head_sha=record.get("head_sha"),
+                        artifact_digest=record.get("artifact_digest"),
+                        merged_main_sha=record.get("merged_main_sha"),
+                    )
+                )
+        for evidence_type in ("PUBLISHED_ASSET_DIGEST_VERIFIED", "PUBLISHED_ASSET_METADATA_VERIFIED"):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_published_asset_metadata(
+                        item.get("metadata"),
+                        head_sha=record.get("head_sha"),
+                        artifact_digest=record.get("artifact_digest"),
+                        merged_main_sha=record.get("merged_main_sha"),
+                    )
+                )
+        for evidence_type in (
+            "CONSUMER_INSTALLATION_VALIDATED",
+            "PACKAGED_REGRESSIONS_PASSED",
+            "PACKAGE_CONTENT_SECURITY_VERIFIED",
+        ):
+            for item in _metadata_records(evidence_records, evidence_type):
+                errors.extend(
+                    validate_consumer_validation_metadata(
+                        item.get("metadata"),
+                        artifact_digest=record.get("artifact_digest"),
+                    )
+                )
     elif target_state == "CLOSED" and _logical_current(record) == "POST_DEPLOY_VERIFIED":
         for item in _metadata_records(evidence_records, "ORIGINAL_PROBLEM_PRODUCTION_VERIFIED"):
             errors.extend(validate_post_deploy_metadata(item.get("metadata"), artifact_digest=record.get("artifact_digest"), deployed_revision=record.get("deployed_revision")))
@@ -831,6 +990,31 @@ def evaluate_bug_transition(
         allowed_next = set(((policy.get("transitions") or {}).get(logical_current) or []))
     reasons: list[str] = []
     reasons.extend(validate_policy_safety(policy))
+    if str(record.get("delivery_model") or HOSTED_RUNTIME_SERVICE) == PACKAGE_OR_PLUGIN and (
+        target_state == "ROLLBACK_REQUIRED" or current == "ROLLBACK_REQUIRED"
+    ):
+        reasons.append("Package-only delivery cannot use runtime rollback semantics")
+    if record.get("delivery_model") is not None:
+        model_root = repository_root
+        if model_root is None:
+            candidate_root = record.get("repository")
+            if isinstance(candidate_root, str) and Path(candidate_root).is_dir():
+                model_root = candidate_root
+        recorded_proof = record.get("delivery_model_proof") if isinstance(record.get("delivery_model_proof"), dict) else {}
+        legacy_unavailable = (
+            str(record.get("delivery_model")) == HOSTED_RUNTIME_SERVICE
+            and recorded_proof.get("derivation") == "source-tree-unavailable-conservative-hosted-default"
+            and record.get("delivery_model_proof_digest") is None
+        )
+        if not legacy_unavailable:
+            reasons.extend(
+                validate_delivery_model(
+                    model_root,
+                    model=str(record.get("delivery_model")),
+                    proof=recorded_proof,
+                    proof_digest=record.get("delivery_model_proof_digest"),
+                )
+            )
     if target_state not in allowed_next:
         reasons.append(f"Transition {current} -> {target_state} is not allowed")
 
@@ -927,6 +1111,9 @@ def evaluate_bug_transition(
         "DIFF_FORENSICS_PASS",
         "INDEPENDENT_REVIEW_PASS",
         "CI_PASS",
+        "PACKAGE_RELEASED",
+        "RELEASE_ARTIFACT_VERIFIED",
+        "CONSUMER_VALIDATION_PASS",
         "STAGING_PASS",
         "READY_FOR_OWNER_RELEASE",
         "PRODUCTION_RELEASED",
@@ -935,7 +1122,16 @@ def evaluate_bug_transition(
     } and (not record.get("head_sha") or not record.get("diff_hash") or not record.get("change_contract_hash")):
         reasons.append("Exact candidate SHA, diff hash, and Change Contract hash are required")
 
-    if target_state in {"STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED"}:
+    if target_state in {
+        "PACKAGE_RELEASED",
+        "RELEASE_ARTIFACT_VERIFIED",
+        "CONSUMER_VALIDATION_PASS",
+        "STAGING_PASS",
+        "READY_FOR_OWNER_RELEASE",
+        "PRODUCTION_RELEASED",
+        "POST_DEPLOY_VERIFIED",
+        "CLOSED",
+    }:
         if not record.get("artifact_digest"):
             reasons.append("Exact tested artifact digest is required")
 
@@ -961,8 +1157,14 @@ def evaluate_bug_transition(
                 )
                 if rollback_eval["missing_types"]:
                     reasons.append("Rollback closure missing evidence: " + ", ".join(rollback_eval["missing_types"]))
+        elif str(record.get("delivery_model") or HOSTED_RUNTIME_SERVICE) == PACKAGE_OR_PLUGIN:
+            if logical_current != "CONSUMER_VALIDATION_PASS":
+                reasons.append("A package-only code-fix case cannot close before CONSUMER_VALIDATION_PASS")
+        elif str(record.get("delivery_model") or HOSTED_RUNTIME_SERVICE) == HYBRID:
+            if logical_current != "POST_DEPLOY_VERIFIED":
+                reasons.append("A hybrid code-fix case must complete package validation and the runtime post-deploy path before closing")
         elif logical_current != "POST_DEPLOY_VERIFIED":
-            reasons.append("A bug cannot close before POST_DEPLOY_VERIFIED")
+            reasons.append("A hosted code-fix case cannot close before POST_DEPLOY_VERIFIED")
 
     production_exposed = logical_current in POST_PRODUCTION_STATES
     decision = "PROCEED" if not reasons else ("ROLLBACK_REQUIRED" if production_exposed else "BLOCKED")
@@ -979,7 +1181,8 @@ def evaluate_bug_transition(
         "invalid_evidence": invalid_evidence,
         "claim_boundary": (
             "Internal scheduler DONE, model prose, local files, or deployment-command success cannot close "
-            "a bug lifecycle. Only POST_DEPLOY_VERIFIED followed by CLOSED can close a code-fix case."
+            "a bug lifecycle. Package-only closure requires RELEASE_ARTIFACT_VERIFIED and "
+            "CONSUMER_VALIDATION_PASS; hosted closure requires POST_DEPLOY_VERIFIED."
         ),
     }
 
@@ -1045,7 +1248,12 @@ def advance_bug_lifecycle(
         result["evidence_refs"] = evidence_refs
     if target_state == "CLOSED":
         result["final_state"] = "CLOSED"
-        result["closure_class"] = "ROLLBACK_CLOSURE" if current == "ROLLBACK_REQUIRED" else "CODE_FIX"
+        if current == "ROLLBACK_REQUIRED":
+            result["closure_class"] = "ROLLBACK_CLOSURE"
+        elif str(result.get("delivery_model") or HOSTED_RUNTIME_SERVICE) == PACKAGE_OR_PLUGIN:
+            result["closure_class"] = "PACKAGE_RELEASE"
+        else:
+            result["closure_class"] = "CODE_FIX"
     elif target_state == "RESOLVED_NO_CODE":
         result["final_state"] = "RESOLVED_NO_CODE"
         result["closure_class"] = "RESOLVED_NO_CODE"

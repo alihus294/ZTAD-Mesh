@@ -50,6 +50,7 @@ PACKAGED_TEST_MANIFEST = (
     "tests/test_v42_operational_hardening.py",
     "tests/test_v4310_control_plane_adversarial.py",
     "tests/test_v4310_fail_closed_adversarial.py",
+    "tests/test_v4311_delivery_model.py",
     "tests/test_v436_blocker_requests.py",
     "tests/test_v436_problem_isolation.py",
     "tests/test_v436_problem_lifecycle.py",

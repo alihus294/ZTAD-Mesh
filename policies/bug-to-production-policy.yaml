@@ -10,6 +10,7 @@ mandatory_fields:
 - progressive_exposure
 - hotfix
 - artifact_chain
+- delivery_models
 - gates.READY_FOR_OWNER_RELEASE
 - gates.ROLLBACK_CLOSURE
 - profiles
@@ -138,6 +139,9 @@ states:
 - PRODUCTION_RELEASED
 - POST_DEPLOY_VERIFIED
 - CLOSED
+- PACKAGE_RELEASED
+- RELEASE_ARTIFACT_VERIFIED
+- CONSUMER_VALIDATION_PASS
 - BLOCKED
 - ROLLBACK_REQUIRED
 - RESOLVED_NO_CODE
@@ -184,6 +188,7 @@ transitions:
   - BLOCKED
   CI_PASS:
   - STAGING_PASS
+  - PACKAGE_RELEASED
   - BLOCKED
   STAGING_PASS:
   - READY_FOR_OWNER_RELEASE
@@ -203,6 +208,16 @@ transitions:
   - CHANGE_PLANNED
   - CLOSED
   RESOLVED_NO_CODE: []
+  PACKAGE_RELEASED:
+  - RELEASE_ARTIFACT_VERIFIED
+  - BLOCKED
+  RELEASE_ARTIFACT_VERIFIED:
+  - CONSUMER_VALIDATION_PASS
+  - BLOCKED
+  CONSUMER_VALIDATION_PASS:
+  - CLOSED
+  - STAGING_PASS
+  - BLOCKED
 profiles:
   workshopos:
     canonical_deployment_chain:
@@ -231,6 +246,83 @@ profiles:
     - alternate SSH
     - ad-hoc VPS
     - direct production database
+delivery_models:
+  PACKAGE_OR_PLUGIN:
+    derivation: source-of-truth-marker-set-v1
+    lifecycle:
+    - UNVERIFIED_REPORT
+    - SOURCE_OF_TRUTH_RESOLVED
+    - ISSUE_CLASSIFIED
+    - BUG_REPRODUCED
+    - ROOT_CAUSE_PROVEN
+    - BLAST_RADIUS_MAPPED
+    - CHANGE_PLANNED
+    - PATCH_IMPLEMENTED
+    - REGRESSION_TEST_PROVEN
+    - TARGETED_VALIDATION_PASS
+    - REGRESSION_VALIDATION_PASS
+    - DIFF_FORENSICS_PASS
+    - INDEPENDENT_REVIEW_PASS
+    - CI_PASS
+    - PACKAGE_RELEASED
+    - RELEASE_ARTIFACT_VERIFIED
+    - CONSUMER_VALIDATION_PASS
+    - CLOSED
+    forbidden_states:
+    - STAGING_PASS
+    - READY_FOR_OWNER_RELEASE
+    - PRODUCTION_RELEASED
+    - POST_DEPLOY_VERIFIED
+    - ROLLBACK_REQUIRED
+  HOSTED_RUNTIME_SERVICE:
+    derivation: source-of-truth-marker-set-v1
+    lifecycle:
+    - UNVERIFIED_REPORT
+    - SOURCE_OF_TRUTH_RESOLVED
+    - ISSUE_CLASSIFIED
+    - BUG_REPRODUCED
+    - ROOT_CAUSE_PROVEN
+    - BLAST_RADIUS_MAPPED
+    - CHANGE_PLANNED
+    - PATCH_IMPLEMENTED
+    - REGRESSION_TEST_PROVEN
+    - TARGETED_VALIDATION_PASS
+    - REGRESSION_VALIDATION_PASS
+    - DIFF_FORENSICS_PASS
+    - INDEPENDENT_REVIEW_PASS
+    - CI_PASS
+    - STAGING_PASS
+    - READY_FOR_OWNER_RELEASE
+    - PRODUCTION_RELEASED
+    - POST_DEPLOY_VERIFIED
+    - CLOSED
+    forbidden_states: []
+  HYBRID:
+    derivation: source-of-truth-marker-set-v1
+    lifecycle:
+    - UNVERIFIED_REPORT
+    - SOURCE_OF_TRUTH_RESOLVED
+    - ISSUE_CLASSIFIED
+    - BUG_REPRODUCED
+    - ROOT_CAUSE_PROVEN
+    - BLAST_RADIUS_MAPPED
+    - CHANGE_PLANNED
+    - PATCH_IMPLEMENTED
+    - REGRESSION_TEST_PROVEN
+    - TARGETED_VALIDATION_PASS
+    - REGRESSION_VALIDATION_PASS
+    - DIFF_FORENSICS_PASS
+    - INDEPENDENT_REVIEW_PASS
+    - CI_PASS
+    - PACKAGE_RELEASED
+    - RELEASE_ARTIFACT_VERIFIED
+    - CONSUMER_VALIDATION_PASS
+    - STAGING_PASS
+    - READY_FOR_OWNER_RELEASE
+    - PRODUCTION_RELEASED
+    - POST_DEPLOY_VERIFIED
+    - CLOSED
+    forbidden_states: []
 gates:
   PATCH_IMPLEMENTED:
     minimum_trust: E2
@@ -331,6 +423,44 @@ gates:
     - reviewed_diff_hash
     - required_checks
     - workflow_run_id
+  PACKAGE_RELEASED:
+    minimum_trust: E4
+    required_evidence:
+    - PROTECTED_PACKAGE_RELEASE
+    - RELEASE_FINGERPRINT_VERIFIED
+    - SIGNED_RELEASE_MANIFEST
+    - SBOM_VERIFIED
+    - ARTIFACT_ATTESTATION_VERIFIED
+    - BUILD_PROVENANCE_VERIFIED
+    artifact_chain:
+    - source_sha
+    - release_fingerprint
+    - artifact_digest
+    - sbom_digest
+    - provenance_digest
+    - attestation_digest
+    - artifact_identity
+  RELEASE_ARTIFACT_VERIFIED:
+    minimum_trust: E4
+    required_evidence:
+    - PUBLISHED_ASSET_DIGEST_VERIFIED
+    - PUBLISHED_ASSET_METADATA_VERIFIED
+    metadata_requirements:
+    - artifact_digest
+    - published_asset_digests
+    - release_tag
+  CONSUMER_VALIDATION_PASS:
+    minimum_trust: E4
+    required_evidence:
+    - CONSUMER_INSTALLATION_VALIDATED
+    - PACKAGED_REGRESSIONS_PASSED
+    - PACKAGE_CONTENT_SECURITY_VERIFIED
+    metadata_requirements:
+    - artifact_digest
+    - archive_kind
+    - clean_environment
+    - source_checkout_leakage_absent
+    - version_verified
   STAGING_PASS:
     minimum_trust: E5
     required_evidence:
@@ -407,6 +537,29 @@ gates:
     - PRODUCTION_HEALTH
     - SYNTHETIC_TRANSACTION
     - OBSERVATION_WINDOW
+    by_delivery_model:
+      PACKAGE_OR_PLUGIN:
+        minimum_trust: E4
+        required_evidence:
+        - PROTECTED_PACKAGE_RELEASE
+        - RELEASE_FINGERPRINT_VERIFIED
+        - SIGNED_RELEASE_MANIFEST
+        - SBOM_VERIFIED
+        - ARTIFACT_ATTESTATION_VERIFIED
+        - BUILD_PROVENANCE_VERIFIED
+        - PUBLISHED_ASSET_DIGEST_VERIFIED
+        - PUBLISHED_ASSET_METADATA_VERIFIED
+        - CONSUMER_INSTALLATION_VALIDATED
+        - PACKAGED_REGRESSIONS_PASSED
+        - PACKAGE_CONTENT_SECURITY_VERIFIED
+      HYBRID:
+        minimum_trust: E5
+        required_evidence:
+        - PUBLISHED_ASSET_DIGEST_VERIFIED
+        - PUBLISHED_ASSET_METADATA_VERIFIED
+        - CONSUMER_INSTALLATION_VALIDATED
+        - PACKAGED_REGRESSIONS_PASSED
+        - PACKAGE_CONTENT_SECURITY_VERIFIED
   ROLLBACK_REQUIRED:
     minimum_trust: E5
     required_evidence: []

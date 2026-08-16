@@ -1441,6 +1441,18 @@ ADVERSARIAL_TRACEABILITY = {
     "reported defect cannot bypass generic autopilot": "tests/test_v4310_fail_closed_adversarial.py::test_reported_defect_cannot_bypass_lifecycle_but_feature_can",
     "feature path remains valid": "tests/test_v4310_fail_closed_adversarial.py::test_reported_defect_cannot_bypass_lifecycle_but_feature_can",
     "unconsumed mandatory policy field fails wiring": "tests/test_v437_bundle_and_wiring.py::test_v437_bug_lifecycle_policy_is_declared_and_wired",
+    "delivery model is source-derived": "tests/test_v4311_delivery_model.py::test_delivery_model_is_derived_from_source_markers",
+    "runtime delivery cannot downgrade to package": "tests/test_v4311_delivery_model.py::test_runtime_source_cannot_be_downgraded_to_package_delivery",
+    "package-only lifecycle rejects fictional staging": "tests/test_v4311_delivery_model.py::test_package_only_lifecycle_rejects_fictional_staging",
+    "package evidence rejects runtime identity": "tests/test_v4311_delivery_model.py::test_package_release_metadata_rejects_runtime_identity",
+    "package terminal rejects runtime claim": "tests/test_v4311_delivery_model.py::test_package_terminal_bundle_rejects_manually_added_runtime_claim",
+    "hybrid requires both package and runtime paths": "tests/test_v4311_delivery_model.py::test_hybrid_requires_both_relevant_paths",
+    "published asset digest must match lifecycle artifact": "tests/test_v4311_delivery_model.py::test_published_asset_digest_must_match_lifecycle_artifact",
+    "published asset rebuild substitution rejected": "tests/test_v4311_delivery_model.py::test_published_asset_rebuild_substitution_is_rejected",
+    "consumer validation binds packaged artifact": "tests/test_v4311_delivery_model.py::test_consumer_validation_must_use_the_packaged_artifact",
+    "consumer source checkout leakage rejected": "tests/test_v4311_delivery_model.py::test_consumer_validation_rejects_source_checkout_leakage",
+    "package release cannot claim runtime rollback": "tests/test_v4311_delivery_model.py::test_package_release_does_not_claim_runtime_rollback",
+    "runtime delivery requires postdeploy proof": "tests/test_v4311_delivery_model.py::test_runtime_delivery_still_requires_postdeploy_evidence",
 }
 
 

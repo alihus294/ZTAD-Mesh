@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from .delivery_model import DELIVERY_MODELS
 from .util import canonical_json, sha256_bytes, utc_now
 
 SHA_RE = re.compile(r"^[0-9a-f]{40,64}$")
@@ -21,6 +22,8 @@ DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 SUBJECT_FIELDS = (
     "repository",
+    "delivery_model",
+    "delivery_model_proof_digest",
     "protected_base_sha",
     "pr_head_sha",
     "reviewed_diff_hash",
@@ -62,7 +65,16 @@ ARTIFACT_FIELDS = {
 }
 PRODUCTION_FIELDS = {"production_release_id", "deployed_revision"}
 POST_PRODUCTION_STATES = {"PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "ROLLBACK_REQUIRED"}
+PACKAGE_RELEASE_STATES = {"PACKAGE_RELEASED", "RELEASE_ARTIFACT_VERIFIED", "CONSUMER_VALIDATION_PASS"}
 SUBJECT_TRANSITION_POLICY = {
+    "delivery_model": {
+        "fields": frozenset({"delivery_model", "delivery_model_proof_digest"}),
+        "old_epoch_to_new_epoch": "new = old + 1",
+        "evidence_survives": ("immutable_prior_ledger_history",),
+        "evidence_invalidated": ("all_current_subject_bound_evidence_refs",),
+        "earliest_lifecycle_state_retained": "CHANGE_PLANNED",
+        "earliest_revalidation_state": "CHANGE_PLANNED",
+    },
     "candidate_identity": {
         "fields": frozenset({"protected_base_sha", "pr_head_sha", "reviewed_diff_hash"}),
         "old_epoch_to_new_epoch": "new = old + 1",
@@ -128,6 +140,8 @@ def subject_from_record(record: Mapping[str, Any]) -> dict[str, Any]:
         pr_head = record.get("head_sha")
     result: dict[str, Any] = {
         "repository": _value(record, "repository"),
+        "delivery_model": record.get("delivery_model"),
+        "delivery_model_proof_digest": record.get("delivery_model_proof_digest"),
         "protected_base_sha": _value(record, "protected_base_sha", "base_sha"),
         "pr_head_sha": pr_head,
         "reviewed_diff_hash": _value(record, "reviewed_diff_hash", "diff_hash"),
@@ -149,6 +163,9 @@ def subject_from_record(record: Mapping[str, Any]) -> dict[str, Any]:
         "subject_epoch": int(record.get("subject_epoch") or 0),
         "subject_version": int(record.get("subject_version") or 1),
     }
+    if result["delivery_model"] is None and result["delivery_model_proof_digest"] is None:
+        result.pop("delivery_model")
+        result.pop("delivery_model_proof_digest")
     return result
 
 
@@ -167,6 +184,13 @@ def validate_subject(subject_or_record: Mapping[str, Any], *, require_merge_prov
     errors: list[str] = []
     if not isinstance(subject.get("repository"), str) or not subject["repository"].strip():
         errors.append("Subject repository is required")
+    if subject.get("delivery_model") is not None and subject.get("delivery_model") not in DELIVERY_MODELS:
+        errors.append("Subject delivery_model is unsupported")
+    if subject.get("delivery_model_proof_digest") is not None and (
+        not isinstance(subject.get("delivery_model_proof_digest"), str)
+        or not DIGEST_RE.fullmatch(subject["delivery_model_proof_digest"])
+    ):
+        errors.append("Subject delivery_model_proof_digest must be a sha256 digest")
     for field in ("protected_base_sha", "pr_head_sha", "merged_main_sha", "deployed_revision"):
         value = subject.get(field)
         if value is not None and (not isinstance(value, str) or not SHA_RE.fullmatch(value)):
@@ -254,6 +278,8 @@ def subject_epoch_transition_policy(changed_fields: set[str]) -> dict[str, Any]:
         category = "merge_identity"
     elif any(name == "candidate_identity" for name, _value in categories):
         category = "candidate_identity"
+    elif any(name == "delivery_model" for name, _value in categories):
+        category = "delivery_model"
     else:
         category = "contract_policy_toolchain"
     return {
@@ -385,6 +411,15 @@ def apply_subject_update(
         result["resume_state"] = "ROLLBACK_REQUIRED"
         result["blocked_target"] = current_state
         result["blockers"] = ["Subject changed after production exposure; rollback or containment is required"]
+        result["final_state"] = None
+    elif current_state in PACKAGE_RELEASE_STATES:
+        result["state"] = "BLOCKED"
+        result["resume_state"] = "CI_PASS"
+        result["blocked_target"] = current_state
+        result["blockers"] = [
+            "Package release subject changed after publication; revoke or replace the affected package before revalidation",
+            "Changed subject fields: " + ", ".join(sorted(changes)),
+        ]
         result["final_state"] = None
     elif current_state not in {"UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "BLOCKED"}:
         reset = earliest_revalidation_state(set(changes))

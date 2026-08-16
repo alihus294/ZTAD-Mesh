@@ -1,4 +1,4 @@
-# Control Coverage — ZTAD Mesh 4.3.10
+# Control Coverage — ZTAD Mesh 4.3.11
 
 ## Deterministically enforced locally
 
@@ -10,6 +10,7 @@
 - RED→GREEN exact-base/exact-candidate same-oracle semantics distinct from same-SHA flakiness;
 - skill-prompt regressions that prohibit RED→GREEN exceptions, model-to-E6 conversion, missing independent-review `PASS`, and production-verification-as-closure shortcuts;
 - targeted/full-regression/diff-forensics/independent-review/CI/staging/release/post-deploy state separation;
+- source-derived delivery-model binding, package-only release and consumer-validation states, and rejection of fictional runtime claims;
 - domain evidence requirements for database, auth/tenant, financial, ZATCA, provider, and concurrency changes;
 - strict provider-schema preflight, request fingerprints, stderr/event/receipt preservation, and boundary-only role normalization;
 - deterministic non-authoritative release fingerprints and exact blocker evidence/remediation requests;

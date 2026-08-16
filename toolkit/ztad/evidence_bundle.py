@@ -12,6 +12,9 @@ from .bug_protocol import (
     validate_production_release_metadata,
     validate_rollback_closure,
     validate_post_deploy_metadata,
+    validate_package_release_metadata,
+    validate_published_asset_metadata,
+    validate_consumer_validation_metadata,
     validate_synthetic_transaction_metadata,
     validate_observation_window_metadata,
     validate_policy_safety,
@@ -27,6 +30,7 @@ from .lifecycle_store import (
     TRANSITION_AUTHORIZATION_TYPE,
     event_commitment,
 )
+from .delivery_model import HOSTED_RUNTIME_SERVICE, HYBRID, PACKAGE_OR_PLUGIN, validate_delivery_model_proof
 from .schema_validation import validate_instance
 from .subject import (
     subject_fingerprint as canonical_subject_fingerprint,
@@ -64,6 +68,12 @@ POST_MERGE_EVIDENCE_TYPES = {
     "PRODUCTION_HEALTH",
     "SYNTHETIC_TRANSACTION",
     "OBSERVATION_WINDOW",
+    "PROTECTED_PACKAGE_RELEASE",
+    "PUBLISHED_ASSET_DIGEST_VERIFIED",
+    "PUBLISHED_ASSET_METADATA_VERIFIED",
+    "CONSUMER_INSTALLATION_VALIDATED",
+    "PACKAGED_REGRESSIONS_PASSED",
+    "PACKAGE_CONTENT_SECURITY_VERIFIED",
 }
 ROLLBACK_EVIDENCE_TYPES = {"ROLLBACK_COMPLETED", "POST_ROLLBACK_HEALTH_VERIFIED"}
 
@@ -76,6 +86,8 @@ def evidence_subject_from_lifecycle(lifecycle: dict[str, Any]) -> dict[str, Any]
 def _bundle_subject(bundle: dict[str, Any]) -> dict[str, Any]:
     return subject_from_record({
         "repository": bundle.get("repository"),
+        "delivery_model": bundle.get("delivery_model"),
+        "delivery_model_proof_digest": bundle.get("delivery_model_proof_digest"),
         "protected_base_sha": bundle.get("protected_base_sha") or bundle.get("base_sha"),
         "pr_head_sha": bundle.get("pr_head_sha") or bundle.get("final_sha"),
         "reviewed_diff_hash": bundle.get("reviewed_diff_hash"),
@@ -104,7 +116,10 @@ def _subject_lineage_errors(record: dict[str, Any], final_subject: dict[str, Any
     errors = list(validate_evidence_subject(record_subject))
     if record.get("subject_fingerprint") is not None and record.get("subject_fingerprint") != canonical_subject_fingerprint(record_subject):
         errors.append("Evidence record subject_fingerprint does not match its subject")
-    for field in ("repository", "protected_base_sha", "pr_head_sha", "reviewed_diff_hash", "change_contract_hash", "policy_bundle_hash", "toolchain_hash"):
+    for field in (
+        "repository", "delivery_model", "delivery_model_proof_digest", "protected_base_sha", "pr_head_sha",
+        "reviewed_diff_hash", "change_contract_hash", "policy_bundle_hash", "toolchain_hash",
+    ):
         if record_subject.get(field) != final_subject.get(field):
             errors.append(f"Evidence record lineage mismatch for {field}")
     if record_subject.get("subject_epoch") != final_subject.get("subject_epoch"):
@@ -352,15 +367,37 @@ def _validate_lifecycle_replay(
         errors.append("Lifecycle replay has no events for the bundle issue")
         return sorted(set(errors))
     requested = [str(event.get("requested_state")) for event in case_events]
+    delivery_model = str(final_subject.get("delivery_model") or HOSTED_RUNTIME_SERVICE)
     if terminal_state == "RESOLVED_NO_CODE":
         required_states = CODE_LIFECYCLE[:3]
     elif terminal_state == "ROLLBACK_REQUIRED":
         required_states = CODE_LIFECYCLE[: CODE_LIFECYCLE.index("PRODUCTION_RELEASED") + 1]
+    elif terminal_state == "CLOSED" and closure_class == "PACKAGE_RELEASE":
+        required_states = (
+            "UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED",
+            "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED",
+            "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS",
+            "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "PACKAGE_RELEASED",
+            "RELEASE_ARTIFACT_VERIFIED", "CONSUMER_VALIDATION_PASS", "CLOSED",
+        )
+    elif terminal_state == "CLOSED" and delivery_model == HYBRID and closure_class == "CODE_FIX":
+        required_states = (
+            "UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED",
+            "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED",
+            "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS",
+            "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "PACKAGE_RELEASED",
+            "RELEASE_ARTIFACT_VERIFIED", "CONSUMER_VALIDATION_PASS", "STAGING_PASS",
+            "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED",
+        )
     else:
         required_states = CODE_LIFECYCLE
     missing_states = [state for state in required_states if state not in requested]
     if missing_states:
         errors.append("Lifecycle replay is incomplete: " + ", ".join(missing_states))
+    if delivery_model == PACKAGE_OR_PLUGIN:
+        forbidden_runtime = {"STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED"}
+        if forbidden_runtime.intersection(requested):
+            errors.append("Package-only lifecycle replay contains runtime deployment states")
     final_event = case_events[-1]
     if terminal_state == "RESOLVED_NO_CODE":
         if final_event.get("requested_state") != "RESOLVED_NO_CODE" or (final_event.get("state") or {}).get("state") != "RESOLVED_NO_CODE":
@@ -384,6 +421,11 @@ def _validate_lifecycle_replay(
                 errors.append("ROLLBACK_CLOSURE must follow ROLLBACK_REQUIRED")
             if not any(event.get("requested_state") == "ROLLBACK_REQUIRED" for event in case_events):
                 errors.append("ROLLBACK_CLOSURE requires an authoritative ROLLBACK_REQUIRED event")
+        elif closure_class == "PACKAGE_RELEASE":
+            if delivery_model != PACKAGE_OR_PLUGIN:
+                errors.append("PACKAGE_RELEASE closure requires PACKAGE_OR_PLUGIN delivery")
+            if final_event.get("prior_state") != "CONSUMER_VALIDATION_PASS":
+                errors.append("PACKAGE_RELEASE closure must follow CONSUMER_VALIDATION_PASS")
     if int(final_event.get("subject_epoch", 0) or 0) != int(final_subject.get("subject_epoch", 0) or 0):
         errors.append("Lifecycle replay final subject_epoch does not match the bundle")
     if final_event.get("subject_fingerprint") != canonical_subject_fingerprint(final_subject):
@@ -411,8 +453,12 @@ def build_evidence_bundle(
     ci = next((item for item in records if item.get("type") == "PROTECTED_CI"), {})
     production = next((item for item in records if item.get("type") == "PRODUCTION_RELEASE_COMPLETED"), {})
     staging = next((item for item in records if item.get("type") == "STAGING_SMOKE_PASSED"), None)
+    package_release = next((item for item in records if item.get("type") == "PROTECTED_PACKAGE_RELEASE"), {})
+    artifact_verification = next((item for item in records if item.get("type") == "PUBLISHED_ASSET_DIGEST_VERIFIED"), {})
+    consumer_validation = next((item for item in records if item.get("type") == "CONSUMER_INSTALLATION_VALIDATED"), {})
     migration = next((item for item in records if item.get("type") == "MIGRATION_LEDGER_HISTORY_GUARD_PASSED"), None)
     final_state = lifecycle.get("final_state") or lifecycle.get("state")
+    delivery_model = str(lifecycle.get("delivery_model") or HOSTED_RUNTIME_SERVICE)
     change_plan = problem_case.get("change_plan") or {}
     file_reasons = change_plan.get("file_reasons") or {}
     changed_files = [
@@ -432,6 +478,9 @@ def build_evidence_bundle(
         "original_report": problem_case.get("original_report_verbatim") or problem_case.get("report"),
         "classification": problem_case.get("classification"),
         "repository": lifecycle.get("repository"),
+        "delivery_model": lifecycle.get("delivery_model"),
+        "delivery_model_proof": lifecycle.get("delivery_model_proof"),
+        "delivery_model_proof_digest": lifecycle.get("delivery_model_proof_digest"),
         "change_contract_hash": lifecycle.get("change_contract_hash"),
         "base_sha": lifecycle.get("base_sha"),
         "final_sha": lifecycle.get("head_sha"),
@@ -463,8 +512,11 @@ def build_evidence_bundle(
         "security_tenant_checks": [item.get("metadata") or {} for item in records if item.get("type") in {"SECURITY_VALIDATION_PASSED", "AUTHZ_TENANT_MATRIX_PASSED"}],
         "independent_review": review.get("metadata") or {},
         "ci": ci.get("metadata") or {},
-        "production_release": production.get("metadata") or {},
+        "production_release": production.get("metadata") or (None if delivery_model == PACKAGE_OR_PLUGIN else {}),
         "staging": staging.get("metadata") if staging else None,
+        "package_release": package_release.get("metadata") or (None if delivery_model not in {PACKAGE_OR_PLUGIN, HYBRID} else {}),
+        "artifact_verification": artifact_verification.get("metadata") or (None if delivery_model not in {PACKAGE_OR_PLUGIN, HYBRID} else {}),
+        "consumer_validation": consumer_validation.get("metadata") or (None if delivery_model not in {PACKAGE_OR_PLUGIN, HYBRID} else {}),
         "migration": migration.get("metadata") if migration else None,
         "release_fingerprint": lifecycle.get("release_fingerprint"),
         "artifact_digest": lifecycle.get("artifact_digest"),
@@ -474,11 +526,12 @@ def build_evidence_bundle(
         "production_release_id": lifecycle.get("production_release_id"),
         "deployed_revision": lifecycle.get("deployed_revision"),
         "artifact_identity": lifecycle.get("artifact_identity"),
-        "post_deploy_verification": next((item.get("metadata") or {} for item in records if item.get("type") == "ORIGINAL_PROBLEM_PRODUCTION_VERIFIED"), {}),
+        "post_deploy_verification": next((item.get("metadata") or {} for item in records if item.get("type") == "ORIGINAL_PROBLEM_PRODUCTION_VERIFIED"), None if delivery_model == PACKAGE_OR_PLUGIN else {}),
         "final_state": final_state,
         "closure_class": (
             "RESOLVED_NO_CODE" if final_state == "RESOLVED_NO_CODE"
             else "ROLLBACK_CLOSURE" if final_state == "ROLLBACK_REQUIRED" or lifecycle.get("closure_class") == "ROLLBACK_CLOSURE"
+            else "PACKAGE_RELEASE" if delivery_model == PACKAGE_OR_PLUGIN and final_state == "CLOSED"
             else "CODE_FIX"
         ),
         "rollback_closure": next((item.get("metadata") or {} for item in records if item.get("type") == "ROLLBACK_COMPLETED"), {}),
@@ -512,6 +565,9 @@ def validate_evidence_bundle(
 
     final_state = str(bundle.get("final_state") or "")
     closure_class = str(bundle.get("closure_class") or ("RESOLVED_NO_CODE" if final_state == "RESOLVED_NO_CODE" else "CODE_FIX"))
+    delivery_model = str(bundle.get("delivery_model") or "")
+    if delivery_model == PACKAGE_OR_PLUGIN and (final_state == "ROLLBACK_REQUIRED" or closure_class == "ROLLBACK_CLOSURE"):
+        errors.append("Package-only delivery cannot claim runtime rollback closure; revoke or replace the release instead")
     if final_state in {"CLOSED", "ROLLBACK_REQUIRED", "RESOLVED_NO_CODE"} and not is_host_accepted_trust_roots(trust_roots):
         errors.append(
             "Terminal evidence-bundle verification requires host-accepted trust-root custody; "
@@ -565,7 +621,7 @@ def validate_evidence_bundle(
 
     if final_state not in {"CLOSED", "ROLLBACK_REQUIRED"}:
         errors.append("Evidence bundle has no legitimate terminal class")
-    if final_state == "CLOSED" and closure_class not in {"CODE_FIX", "ROLLBACK_CLOSURE"}:
+    if final_state == "CLOSED" and closure_class not in {"CODE_FIX", "PACKAGE_RELEASE", "ROLLBACK_CLOSURE"}:
         errors.append("CLOSED bundle has an unsupported closure_class")
     if final_state == "ROLLBACK_REQUIRED" and closure_class != "ROLLBACK_CLOSURE":
         errors.append("ROLLBACK_REQUIRED bundle must declare ROLLBACK_CLOSURE")
@@ -590,6 +646,12 @@ def validate_evidence_bundle(
         "PRODUCTION_HEALTH": "E5",
         "SYNTHETIC_TRANSACTION": "E5",
         "OBSERVATION_WINDOW": "E5",
+        "PROTECTED_PACKAGE_RELEASE": "E4",
+        "PUBLISHED_ASSET_DIGEST_VERIFIED": "E4",
+        "PUBLISHED_ASSET_METADATA_VERIFIED": "E4",
+        "CONSUMER_INSTALLATION_VALIDATED": "E4",
+        "PACKAGED_REGRESSIONS_PASSED": "E4",
+        "PACKAGE_CONTENT_SECURITY_VERIFIED": "E4",
         "ROLLBACK_COMPLETED": "E5",
         "POST_ROLLBACK_HEALTH_VERIFIED": "E5",
     }
@@ -608,6 +670,9 @@ def validate_evidence_bundle(
         "DIFF_FORENSICS_PASS",
         "INDEPENDENT_REVIEW_PASS",
         "CI_PASS",
+        "PACKAGE_RELEASED",
+        "RELEASE_ARTIFACT_VERIFIED",
+        "CONSUMER_VALIDATION_PASS",
         "STAGING_PASS",
         "READY_FOR_OWNER_RELEASE",
         "PRODUCTION_RELEASED",
@@ -650,6 +715,14 @@ def validate_evidence_bundle(
                 profile_minimum = str(profile.get("minimum_trust") or "")
                 if TRUST_ORDER.get(profile_minimum, -1) > TRUST_ORDER.get(gate_minimum, -1):
                     gate_minimum = profile_minimum
+        model_gate = (gate.get("by_delivery_model") or {}).get(delivery_model) or {}
+        if isinstance(model_gate, dict):
+            model_minimum = str(model_gate.get("minimum_trust", gate_minimum))
+            gate_minimum = max(
+                (gate_minimum, model_minimum),
+                key=lambda value: TRUST_ORDER.get(value, -1),
+            )
+            gate_types.update(str(item) for item in model_gate.get("required_evidence", []) or [])
         for evidence_type in gate_types:
             previous_minimum = policy_minimum_by_type.get(evidence_type, "E2")
             policy_minimum_by_type[evidence_type] = max(
@@ -703,6 +776,33 @@ def validate_evidence_bundle(
 
     if closure_class == "ROLLBACK_CLOSURE":
         required_types = set(ROLLBACK_EVIDENCE_TYPES)
+    elif closure_class == "PACKAGE_RELEASE":
+        required_types = {
+            "CANDIDATE_PATCH_CREATED",
+            "REGRESSION_RED_GREEN_PROVEN",
+            "TARGETED_VALIDATION_PASSED",
+            "FULL_REGRESSION_VALIDATION_PASSED",
+            "DIFF_FORENSICS_PASSED",
+            "INDEPENDENT_REVIEW_COMPLETED",
+            "PROTECTED_CI",
+            "REQUIRED_CHECKS_VERIFIED",
+            "PROTECTED_PACKAGE_RELEASE",
+            "RELEASE_FINGERPRINT_VERIFIED",
+            "SIGNED_RELEASE_MANIFEST",
+            "SBOM_VERIFIED",
+            "ARTIFACT_ATTESTATION_VERIFIED",
+            "BUILD_PROVENANCE_VERIFIED",
+            "PUBLISHED_ASSET_DIGEST_VERIFIED",
+            "PUBLISHED_ASSET_METADATA_VERIFIED",
+            "CONSUMER_INSTALLATION_VALIDATED",
+            "PACKAGED_REGRESSIONS_PASSED",
+            "PACKAGE_CONTENT_SECURITY_VERIFIED",
+        }
+        if subject.get("merged_main_sha"):
+            required_types.add("POST_MERGE_CI_PROVEN")
+        package_gate = (((policy or {}).get("gates") or {}).get("CLOSED") or {}).get("by_delivery_model", {}).get(PACKAGE_OR_PLUGIN, {})
+        if isinstance(package_gate, dict):
+            required_types.update(str(item) for item in package_gate.get("required_evidence", []) or [])
     else:
         required_types = {
             "CANDIDATE_PATCH_CREATED",
@@ -749,9 +849,23 @@ def validate_evidence_bundle(
                 required_types.update(risk_requirements)
         if isinstance(progressive, dict):
             required_types.update(progressive.get("required_evidence", []) or [])
+        if delivery_model == HYBRID:
+            required_types.update({
+                "PROTECTED_PACKAGE_RELEASE",
+                "RELEASE_FINGERPRINT_VERIFIED",
+                "SIGNED_RELEASE_MANIFEST",
+                "SBOM_VERIFIED",
+                "ARTIFACT_ATTESTATION_VERIFIED",
+                "BUILD_PROVENANCE_VERIFIED",
+                "PUBLISHED_ASSET_DIGEST_VERIFIED",
+                "PUBLISHED_ASSET_METADATA_VERIFIED",
+                "CONSUMER_INSTALLATION_VALIDATED",
+                "PACKAGED_REGRESSIONS_PASSED",
+                "PACKAGE_CONTENT_SECURITY_VERIFIED",
+            })
     missing = sorted(required_types - valid_types)
     if missing:
-        errors.append("Closed code-fix bundle is missing independently validated gate evidence: " + ", ".join(missing))
+        errors.append("Terminal bundle is missing independently validated gate evidence: " + ", ".join(missing))
     for item in records:
         if not isinstance(item, dict) or item.get("type") not in required_types:
             continue
@@ -760,6 +874,59 @@ def validate_evidence_bundle(
             errors.append(
                 f"Terminal gate evidence {item.get('type')} must come from a controller or protected platform"
             )
+
+    if closure_class == "PACKAGE_RELEASE" or (delivery_model == HYBRID and closure_class == "CODE_FIX"):
+        if closure_class == "PACKAGE_RELEASE" and delivery_model != PACKAGE_OR_PLUGIN:
+            errors.append("PACKAGE_RELEASE bundle must declare PACKAGE_OR_PLUGIN delivery_model")
+        if not isinstance(bundle.get("delivery_model_proof"), dict) or not bundle.get("delivery_model_proof_digest"):
+            errors.append("PACKAGE_RELEASE bundle requires source-derived delivery model proof")
+        else:
+            errors.extend(
+                validate_delivery_model_proof(
+                    delivery_model,
+                    bundle.get("delivery_model_proof"),
+                    bundle.get("delivery_model_proof_digest"),
+                )
+            )
+        for field in (("staging", "production_release", "production_release_id", "deployed_revision", "post_deploy_verification") if closure_class == "PACKAGE_RELEASE" else ()):
+            value = bundle.get(field)
+            if value not in (None, {}, ""):
+                errors.append(f"PACKAGE_RELEASE bundle cannot contain runtime field {field}")
+        for item in records:
+            if not isinstance(item, dict):
+                continue
+            evidence_type = str(item.get("type") or "")
+            metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            if evidence_type in {
+                "PROTECTED_PACKAGE_RELEASE", "RELEASE_FINGERPRINT_VERIFIED", "SIGNED_RELEASE_MANIFEST",
+                "SBOM_VERIFIED", "ARTIFACT_ATTESTATION_VERIFIED", "BUILD_PROVENANCE_VERIFIED",
+            }:
+                errors.extend(
+                    validate_package_release_metadata(
+                        metadata,
+                        head_sha=bundle.get("final_sha"),
+                        artifact_digest=bundle.get("artifact_digest"),
+                        merged_main_sha=bundle.get("merged_main_sha"),
+                    )
+                )
+            elif evidence_type in {"PUBLISHED_ASSET_DIGEST_VERIFIED", "PUBLISHED_ASSET_METADATA_VERIFIED"}:
+                errors.extend(
+                    validate_published_asset_metadata(
+                        metadata,
+                        head_sha=bundle.get("final_sha"),
+                        artifact_digest=bundle.get("artifact_digest"),
+                        merged_main_sha=bundle.get("merged_main_sha"),
+                    )
+                )
+            elif evidence_type in {
+                "CONSUMER_INSTALLATION_VALIDATED", "PACKAGED_REGRESSIONS_PASSED", "PACKAGE_CONTENT_SECURITY_VERIFIED",
+            }:
+                errors.extend(
+                    validate_consumer_validation_metadata(
+                        metadata,
+                        artifact_digest=bundle.get("artifact_digest"),
+                    )
+                )
 
     if closure_class != "ROLLBACK_CLOSURE" and bundle.get("artifact_digest"):
         errors.extend(validate_artifact_chain({
@@ -773,7 +940,7 @@ def validate_evidence_bundle(
             "artifact_identity": bundle.get("artifact_identity"),
         }, head_sha=bundle.get("final_sha"), merged_main_sha=bundle.get("merged_main_sha"), artifact_digest=bundle.get("artifact_digest")))
     production_metadata = bundle.get("production_release") if isinstance(bundle.get("production_release"), dict) else {}
-    if closure_class != "ROLLBACK_CLOSURE" and production_metadata:
+    if closure_class not in {"ROLLBACK_CLOSURE", "PACKAGE_RELEASE"} and production_metadata:
         errors.extend(
             validate_production_release_metadata(
                 production_metadata,

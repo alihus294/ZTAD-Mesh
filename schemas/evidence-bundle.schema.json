@@ -30,6 +30,23 @@
       "then": {"required": ["rollback_closure", "lifecycle_events"]}
     },
     {
+      "if": {
+        "properties": {"final_state": {"const": "CLOSED"}, "closure_class": {"const": "PACKAGE_RELEASE"}},
+        "required": ["final_state", "closure_class"]
+      },
+      "then": {
+        "required": [
+          "change_contract_hash", "base_sha", "final_sha", "policy_bundle_hash", "toolchain_hash",
+          "authoritative_sources", "source_conflicts", "unresolved_ambiguities", "reproduction", "root_cause",
+          "blast_radius", "risk", "change_plan", "changed_files", "red_proof", "green_proof", "patch",
+          "targeted_validation", "full_regression", "security_tenant_checks", "independent_review", "ci",
+          "delivery_model", "delivery_model_proof", "delivery_model_proof_digest", "package_release",
+          "artifact_verification", "consumer_validation", "release_fingerprint", "artifact_digest", "sbom_digest",
+          "provenance_digest", "attestation_digest", "artifact_identity", "lifecycle_events"
+        ]
+      }
+    },
+    {
       "if": {"properties": {"final_state": {"const": "ROLLBACK_REQUIRED"}}, "required": ["final_state"]},
       "then": {"required": ["closure_class", "rollback_closure", "lifecycle_events"]}
     }
@@ -51,6 +68,9 @@
     "original_report": {"type": "string", "minLength": 1},
     "classification": {"type": "string", "minLength": 1},
     "repository": {"type": "string", "minLength": 1},
+    "delivery_model": {"enum": ["PACKAGE_OR_PLUGIN", "HOSTED_RUNTIME_SERVICE", "HYBRID"]},
+    "delivery_model_proof": {"type": "object", "minProperties": 1},
+    "delivery_model_proof_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "protected_base_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
     "pr_head_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
     "reviewed_diff_hash": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
@@ -109,8 +129,11 @@
     "security_tenant_checks": {"type": "array", "minItems": 1, "items": {"type": "object"}},
     "independent_review": {"type": "object", "minProperties": 1},
     "ci": {"type": "object", "minProperties": 1},
-    "production_release": {"type": "object", "minProperties": 1},
+    "production_release": {"type": ["object", "null"], "minProperties": 1},
     "staging": {"type": ["object", "null"]},
+    "package_release": {"type": ["object", "null"], "minProperties": 1},
+    "artifact_verification": {"type": ["object", "null"], "minProperties": 1},
+    "consumer_validation": {"type": ["object", "null"], "minProperties": 1},
     "migration": {"type": ["object", "null"]},
     "release_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
@@ -118,12 +141,12 @@
     "provenance_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "attestation_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "artifact_identity": {"type": "string", "minLength": 1},
-    "production_release_id": {"type": "string", "minLength": 1},
-    "deployed_revision": {"type": "string", "minLength": 1},
-    "post_deploy_verification": {"type": "object", "minProperties": 1},
+    "production_release_id": {"type": ["string", "null"], "minLength": 1},
+    "deployed_revision": {"type": ["string", "null"], "minLength": 1},
+    "post_deploy_verification": {"type": ["object", "null"], "minProperties": 1},
     "rollback_closure": {"type": "object", "minProperties": 1},
     "final_state": {"enum": ["CLOSED", "RESOLVED_NO_CODE", "ROLLBACK_REQUIRED"]},
-    "closure_class": {"enum": ["CODE_FIX", "RESOLVED_NO_CODE", "ROLLBACK_CLOSURE"]},
+    "closure_class": {"enum": ["CODE_FIX", "PACKAGE_RELEASE", "RESOLVED_NO_CODE", "ROLLBACK_CLOSURE"]},
     "subject_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "evidence_records": {"type": "array", "minItems": 1, "items": {"type": "object"}},
     "lifecycle_events": {"type": "array", "minItems": 1, "items": {"type": "object"}},
