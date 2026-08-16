@@ -1,10 +1,14 @@
-# Autonomous Fail-Closed Bug-to-Production Protocol — ZTAD Mesh 4.3.10
+# Autonomous Fail-Closed Bug-to-Production Protocol — ZTAD Mesh 4.3.11
 
 ## Purpose
 
 This document is the normative ZTAD implementation of the WorkshopOS Fail-Closed Bug-to-Production Protocol v1. It is optimized for a solo owner who may not be a programmer. Routine technical decisions belong to the agent/controller; owner involvement is limited to irreducible business intent, legal/compliance decisions, irreversible authorization, or protected production authority the agent does not possess.
 
 The governing rule is: **no state advances because a model is confident. Every transition requires the exact evidence defined by policy and bound to the correct subject.** Missing, conflicting, incomplete, stale, or invalid evidence fails closed.
+
+## Delivery model
+
+The controller derives the delivery model from the repository tree. A package or plugin case does not invent staging or production evidence: after protected CI it must prove the protected package release, exact published asset digests, and clean consumer installation and packaged regressions before `CLOSED`. A hosted runtime case must still prove the full staging, production, and post-deploy lifecycle. Hybrid repositories must prove both branches. Model input cannot replace the source-derived proof.
 
 ## Subject identity and provenance
 
@@ -44,6 +48,8 @@ E0 and E1 are context only. E2 is local deterministic evidence and cannot grant 
 
 Rollback closure is a separate terminal class. App health alone is insufficient: database, financial, ZATCA, auth/tenant, provider, concurrency, and security domains require their corresponding reconciliation or containment proof. A deployment receipt never proves correctness. `PRODUCTION_RELEASED`, `POST_DEPLOY_VERIFIED`, and `CLOSED` remain separate claims.
 
+Package-release recovery is not runtime rollback. If a package or plugin is compromised after publication, the case remains blocked until the release authority revokes or marks the exact release digest compromised, prevents further promotion, and publishes or verifies a corrected replacement with consumer upgrade guidance. A package-only case cannot enter `ROLLBACK_REQUIRED` or use production-health evidence to claim that downloaded copies were restored.
+
 Incident intake may contain the active exposure first. The controller may contain or roll back immediately, retain the original incident subject, and then require the full root-cause and remediation lifecycle. Database work may span `expand → compatible deploy → migrate/backfill → verify → contract`; each release subject retains its own compatibility and migration evidence. Performance-regression cases require baseline and candidate subjects, workload identity, environment, sample count, warmup, variance, threshold policy, regression budget, and result hashes.
 
 ## Authority hierarchy
@@ -69,7 +75,7 @@ The executable protected workflow is the final enforcement layer.
 
 `policies/bug-to-production-policy.yaml` and `schemas/bug-lifecycle.schema.json` define the authoritative case state. Internal scheduler states are implementation details and cannot close the case.
 
-Every code-fix case follows exactly:
+Hosted-runtime and hybrid runtime paths follow exactly:
 
 ```text
 UNVERIFIED_REPORT
@@ -95,7 +101,19 @@ UNVERIFIED_REPORT
 
 A mandatory-gate failure before production becomes `BLOCKED`. After production exposure it becomes `ROLLBACK_REQUIRED`. A report proven to require no code/configuration fix may end as `RESOLVED_NO_CODE`.
 
-`DONE` is intentionally not a bug-lifecycle state. Merge completion, an internal scheduler terminal state, successful deployment command, or model prose cannot substitute for `POST_DEPLOY_VERIFIED → CLOSED`.
+Package-only code fixes follow the package terminal path instead:
+
+```text
+CI_PASS
+→ PACKAGE_RELEASED
+→ RELEASE_ARTIFACT_VERIFIED
+→ CONSUMER_VALIDATION_PASS
+→ CLOSED
+```
+
+Package publication is a release-artifact claim, not a production-runtime claim. A package gate failure becomes `BLOCKED`; package recovery uses revoke, compromise marking, replacement, and consumer validation rather than runtime rollback.
+
+`DONE` is intentionally not a bug-lifecycle state. Merge completion, an internal scheduler terminal state, successful deployment command, or model prose cannot substitute for the delivery-model-specific terminal proof.
 
 ## Intake and read-only investigation
 

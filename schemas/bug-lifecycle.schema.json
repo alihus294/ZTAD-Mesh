@@ -22,6 +22,49 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "enum": ["PACKAGE_RELEASED", "RELEASE_ARTIFACT_VERIFIED", "CONSUMER_VALIDATION_PASS"]
+          }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "required": ["delivery_model", "delivery_model_proof", "delivery_model_proof_digest"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "closure_class": {"const": "PACKAGE_RELEASE"}
+        },
+        "required": ["closure_class"]
+      },
+      "then": {
+        "required": ["delivery_model", "delivery_model_proof", "delivery_model_proof_digest"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "delivery_model": {"const": "PACKAGE_OR_PLUGIN"}
+        },
+        "required": ["delivery_model"]
+      },
+      "then": {
+        "required": ["delivery_model_proof", "delivery_model_proof_digest"],
+        "properties": {
+          "state": {
+            "not": {
+              "enum": ["STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "ROLLBACK_REQUIRED"]
+            }
+          },
+          "canonical_deployment_chain": {"maxItems": 0}
+        }
+      }
     }
   ],
   "properties": {
@@ -74,7 +117,16 @@
       "uniqueItems": true
     },
     "closure_class": {
-      "enum": [null, "CODE_FIX", "ROLLBACK_CLOSURE", "RESOLVED_NO_CODE"],
+      "enum": [null, "CODE_FIX", "PACKAGE_RELEASE", "ROLLBACK_CLOSURE", "RESOLVED_NO_CODE"],
+      "type": ["string", "null"]
+    },
+    "delivery_model": {
+      "enum": ["PACKAGE_OR_PLUGIN", "HOSTED_RUNTIME_SERVICE", "HYBRID"],
+      "type": "string"
+    },
+    "delivery_model_proof": {"type": "object"},
+    "delivery_model_proof_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
       "type": ["string", "null"]
     },
     "attestation_digest": {
@@ -131,7 +183,7 @@
     "lifecycle_export": {"type": "boolean"},
     "claim_boundary": {"type": "string"},
     "last_completed_state": {
-      "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "RESOLVED_NO_CODE"]
+      "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "PACKAGE_RELEASED", "RELEASE_ARTIFACT_VERIFIED", "CONSUMER_VALIDATION_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "RESOLVED_NO_CODE"]
     },
     "mode": {"enum": ["NORMAL", "HOTFIX"]},
     "internal_execution_complete": {"type": "boolean"},
@@ -155,7 +207,7 @@
     "remote_repository": {"type": ["string", "null"]},
     "repository": {"minLength": 1, "type": "string"},
     "resume_state": {
-      "enum": [null, "UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED"],
+      "enum": [null, "UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "PACKAGE_RELEASED", "RELEASE_ARTIFACT_VERIFIED", "CONSUMER_VALIDATION_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED"],
       "type": ["string", "null"]
     },
     "risk": {"enum": [null, "R0", "R1", "R2", "R3", "R4"], "type": ["string", "null"]},
@@ -166,7 +218,7 @@
     },
     "schema_version": {"enum": [1, 2]},
     "state": {
-      "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "BLOCKED", "ROLLBACK_REQUIRED", "RESOLVED_NO_CODE"]
+      "enum": ["UNVERIFIED_REPORT", "SOURCE_OF_TRUTH_RESOLVED", "ISSUE_CLASSIFIED", "BUG_REPRODUCED", "ROOT_CAUSE_PROVEN", "BLAST_RADIUS_MAPPED", "CHANGE_PLANNED", "PATCH_IMPLEMENTED", "REGRESSION_TEST_PROVEN", "TARGETED_VALIDATION_PASS", "REGRESSION_VALIDATION_PASS", "DIFF_FORENSICS_PASS", "INDEPENDENT_REVIEW_PASS", "CI_PASS", "PACKAGE_RELEASED", "RELEASE_ARTIFACT_VERIFIED", "CONSUMER_VALIDATION_PASS", "STAGING_PASS", "READY_FOR_OWNER_RELEASE", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "CLOSED", "BLOCKED", "ROLLBACK_REQUIRED", "RESOLVED_NO_CODE"]
     },
     "scheduler_state": {"type": ["string", "null"]},
     "store_record_hash": {

@@ -28,6 +28,8 @@ SUBJECT_REQUIRED_FIELDS = (
     "toolchain_hash",
 )
 SUBJECT_OPTIONAL_FIELDS = (
+    "delivery_model",
+    "delivery_model_proof_digest",
     "artifact_digest",
     "release_fingerprint",
     "sbom_digest",
@@ -141,6 +143,9 @@ MACHINE_EXECUTOR_EVIDENCE_TYPES = {
     "PROVIDER_CONTRACT_FAILURE_RECONCILIATION_PASSED",
     "PARALLEL_REPRODUCTION_PASSED",
     "NO_DUPLICATE_DURABLE_SIDE_EFFECT",
+    "CONSUMER_INSTALLATION_VALIDATED",
+    "PACKAGED_REGRESSIONS_PASSED",
+    "PACKAGE_CONTENT_SECURITY_VERIFIED",
 }
 REGISTERED_EXECUTOR_PRODUCERS = frozenset({
     "controller:test-executor",
@@ -273,6 +278,13 @@ def validate_evidence_record(
             if expected is None:
                 continue
             raw_actual = evidence.get(key)
+            if key in {"delivery_model", "delivery_model_proof_digest"} and raw_actual is None:
+                # Historical fixtures created before delivery-model binding did
+                # not carry this optional subject extension.  Keep that
+                # compatibility only for the conservative hosted fallback;
+                # package and hybrid evidence must bind the model explicitly.
+                if expected_subject.get("delivery_model") == "HOSTED_RUNTIME_SERVICE":
+                    continue
             if key in {"subject_epoch", "subject_version"} and raw_actual is None:
                 if TRUST_ORDER.get(trust, 0) < TRUST_ORDER["E3"]:
                     continue

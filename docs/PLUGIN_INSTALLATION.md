@@ -1,9 +1,9 @@
-# Codex Plugin Installation — 4.3.10
+# Codex Plugin Installation — 4.3.11
 
 Published release artifacts:
 
-- `zero-trust-agentic-delivery-marketplace-4.3.10.zip` — recommended local Codex Marketplace archive;
-- `zero-trust-agentic-delivery-plugin-4.3.10.zip` — standalone plugin archive;
+- `zero-trust-agentic-delivery-marketplace-4.3.11.zip` — recommended local Codex Marketplace archive;
+- `zero-trust-agentic-delivery-plugin-4.3.11.zip` — standalone plugin archive;
 - `CHECKSUMS.sha256` — SHA-256 list covering both archives.
 
 Verify the downloaded release directory before installation:
@@ -27,7 +27,7 @@ The release pipeline runs packaged regressions from the exact Plugin and Marketp
 
 After installation:
 
-1. confirm plugin version `4.3.10` is enabled;
+1. confirm plugin version `4.3.11` is enabled;
 2. confirm fourteen explicit-only skills are present, including `$problem-investigation`;
 3. confirm hook discovery/trust;
 4. invoke `$zero-trust-delivery` explicitly;

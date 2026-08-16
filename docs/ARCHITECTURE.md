@@ -1,4 +1,4 @@
-# Architecture — ZTAD Mesh 4.3.10
+# Architecture — ZTAD Mesh 4.3.11
 
 ## Design rule
 
@@ -9,14 +9,30 @@ Models are untrusted compute resources. They may analyze or write bounded patche
 1. **Skill plane** — explicit-only Codex skills containing narrow operating procedures.
 2. **Hook plane** — lifecycle interception for session, tool, permission, subagent, and stop events. Hooks are defense in depth, not the sole security boundary.
 3. **Repository/context plane** — deterministic index, dependency/context artifacts, context-sufficiency checks, and targeted expansion.
-4. **Problem lifecycle plane** — authoritative reported-defect state from `UNVERIFIED_REPORT` through `CLOSED`, exact evidence transitions, domain gates, and `BLOCKED`/`ROLLBACK_REQUIRED` containment. Generic scheduler states are subordinate implementation detail for bug cases.
+4. **Problem lifecycle plane** — authoritative reported-defect state from `UNVERIFIED_REPORT` through a delivery-model-specific terminal state, exact evidence transitions, domain gates, and `BLOCKED`/runtime `ROLLBACK_REQUIRED` containment. Generic scheduler states are subordinate implementation detail for bug cases.
+
+## Delivery-model authority
+
+The controller derives `PACKAGE_OR_PLUGIN`, `HOSTED_RUNTIME_SERVICE`, or `HYBRID` from regular repository source markers and records a digest of that proof. Package-only delivery follows `CI_PASS → PACKAGE_RELEASED → RELEASE_ARTIFACT_VERIFIED → CONSUMER_VALIDATION_PASS → CLOSED`; it cannot claim staging or production. Hosted delivery retains the runtime lifecycle, and hybrid delivery must satisfy both relevant paths. The recorded model is not a caller-selected downgrade.
 5. **Model plane** — provider adapters, host probes, bounded task-family benchmarks, adaptive routing, provider fallback, model preference, reasoning ceilings, and run identity.
 6. **Mesh plane** — risk-proportional dependency-aware DAG, leases, idempotency, scope locks, bounded parallelism, durable artifacts, retry, quarantine, replan, and reactivation.
 7. **Code plane** — dedicated Git worktrees, patch artifacts, deterministic integration, one candidate commit, and scope validation.
 8. **Quality/evidence plane** — machine checks, RED→GREEN proof, targeted/full validation, diff forensics, actual-diff risk reclassification, test-integrity checks, evidence binding, exact-subject validation, independent review, and approval controller.
 9. **Platform plane** — Git host audit, PR/CI, immutable artifact promotion, staging, protected production release, progressive exposure, post-deploy proof, and rollback. These become authoritative only after target-host acceptance.
 
-## Authoritative bug-to-production path
+## Authoritative delivery paths
+
+Package-only repositories use the release path below. A bad package release is recovered by release revoke, compromise marking, exact-digest replacement, and consumer validation; it is never represented as runtime rollback.
+
+```text
+CI_PASS
+→ PACKAGE_RELEASED
+→ RELEASE_ARTIFACT_VERIFIED
+→ CONSUMER_VALIDATION_PASS
+→ CLOSED
+```
+
+Hosted runtime repositories use the runtime path below. Hybrid repositories must satisfy the package path and then the runtime path.
 
 For reported code defects the outer lifecycle is fixed:
 

@@ -1,4 +1,4 @@
-# ZTAD Mesh 4.3.10 Traceability Matrix
+# ZTAD Mesh 4.3.11 Traceability Matrix
 
 Active normative requirements: **174**.
 
@@ -47,7 +47,7 @@ This matrix maps the retained normative control catalogue to implementation and 
 
 The row-level source of truth is `requirements.csv`.
 
-## v4.3.10 adversarial traceability
+## v4.3.11 adversarial traceability
 
 The following matrix records the hardening-specific adversarial requirements. A shared test is intentional when one test exercises the same invariant across several domains or mutation forms.
 
@@ -103,3 +103,14 @@ The following matrix records the hardening-specific adversarial requirements. A 
 | Unauthorized E6 controller class rejected | `tests/test_v4310_fail_closed_adversarial.py::test_resolved_no_code_bundle_replays_authoritative_lifecycle` | Controller type and signed event identity are checked together. |
 | Replaced subject epoch rejected | `tests/test_v4310_fail_closed_adversarial.py::test_resolved_no_code_bundle_replays_authoritative_lifecycle` | Bundle and ledger epochs must agree. |
 | Event ledger changed after evidence creation rejected | `tests/test_v4310_fail_closed_adversarial.py::test_resolved_no_code_bundle_replays_authoritative_lifecycle` | Event hash and subject replay checks fail. |
+| Source-derived delivery model cannot be downgraded | `tests/test_v4311_delivery_model.py::test_runtime_source_cannot_be_downgraded_to_package_delivery` | A runtime marker set cannot be relabeled as package-only by model input. |
+| Package-only delivery rejects fictional staging | `tests/test_v4311_delivery_model.py::test_package_only_lifecycle_rejects_fictional_staging` | Package delivery fails closed before runtime deployment states. |
+| Package evidence rejects runtime identity | `tests/test_v4311_delivery_model.py::test_package_release_metadata_rejects_runtime_identity` | Package evidence cannot carry deployed revision or runtime claims. |
+| Package terminal bundle rejects runtime claim | `tests/test_v4311_delivery_model.py::test_package_terminal_bundle_rejects_manually_added_runtime_claim` | Independent bundle validation rejects a forged production field. |
+| Hybrid delivery requires package and runtime paths | `tests/test_v4311_delivery_model.py::test_hybrid_requires_both_relevant_paths` | Hybrid closure cannot stop after consumer validation; the runtime post-deploy path is mandatory. |
+| Published asset digest must match lifecycle artifact | `tests/test_v4311_delivery_model.py::test_published_asset_digest_must_match_lifecycle_artifact` | A published digest map that omits the protected artifact digest is rejected. |
+| Published asset rebuild substitution rejected | `tests/test_v4311_delivery_model.py::test_published_asset_rebuild_substitution_is_rejected` | Rebuilding after validation cannot satisfy published-asset verification. |
+| Consumer validation binds packaged artifact | `tests/test_v4311_delivery_model.py::test_consumer_validation_must_use_the_packaged_artifact` | Consumer evidence must use the exact protected artifact digest. |
+| Consumer source checkout leakage rejected | `tests/test_v4311_delivery_model.py::test_consumer_validation_rejects_source_checkout_leakage` | A source checkout cannot masquerade as a clean consumer installation. |
+| Package release cannot claim runtime rollback | `tests/test_v4311_delivery_model.py::test_package_release_does_not_claim_runtime_rollback` | Package recovery uses revoke or replacement semantics instead of runtime rollback. |
+| Runtime delivery requires post-deploy proof | `tests/test_v4311_delivery_model.py::test_runtime_delivery_still_requires_postdeploy_evidence` | Hosted runtime closure remains blocked without post-deploy validation. |

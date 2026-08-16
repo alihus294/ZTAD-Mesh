@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.3.11 — 2026-08-16
+
+- Added source-derived delivery-model authority so package/plugin releases do not claim fictional staging or production runtime states.
+- Added package release, published-asset verification, consumer-installation validation, and package terminal closure with explicit runtime-claim rejection.
+- Added adversarial coverage for delivery-model substitution and packaged runtime-claim fraud while preserving the hosted-service lifecycle.
+
 ## 4.3.10 — 2026-08-16
 
 - Added an explicit PR-head to merged-main subject model with merge provenance, post-merge CI identity, artifact identity, release identity, production revision, and subject epochs.

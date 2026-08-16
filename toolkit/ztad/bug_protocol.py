@@ -3,6 +3,12 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from .delivery_model import (
+    DELIVERY_MODELS,
+    HOSTED_RUNTIME_SERVICE,
+    HYBRID,
+    PACKAGE_OR_PLUGIN,
+)
 from .risk import RISK_TO_CLASS, effective_risk as canonical_effective_risk
 from .diff_forensics import validate_git_inventory
 
@@ -28,6 +34,29 @@ AUTHORITATIVE_LIFECYCLE = (
     "POST_DEPLOY_VERIFIED",
     "CLOSED",
 )
+COMMON_LIFECYCLE = AUTHORITATIVE_LIFECYCLE[: AUTHORITATIVE_LIFECYCLE.index("CI_PASS") + 1]
+PACKAGE_LIFECYCLE = COMMON_LIFECYCLE + (
+    "PACKAGE_RELEASED",
+    "RELEASE_ARTIFACT_VERIFIED",
+    "CONSUMER_VALIDATION_PASS",
+    "CLOSED",
+)
+HYBRID_LIFECYCLE = COMMON_LIFECYCLE + (
+    "PACKAGE_RELEASED",
+    "RELEASE_ARTIFACT_VERIFIED",
+    "CONSUMER_VALIDATION_PASS",
+    "STAGING_PASS",
+    "READY_FOR_OWNER_RELEASE",
+    "PRODUCTION_RELEASED",
+    "POST_DEPLOY_VERIFIED",
+    "CLOSED",
+)
+DELIVERY_LIFECYCLES = {
+    PACKAGE_OR_PLUGIN: PACKAGE_LIFECYCLE,
+    HOSTED_RUNTIME_SERVICE: AUTHORITATIVE_LIFECYCLE,
+    HYBRID: HYBRID_LIFECYCLE,
+}
+PACKAGE_LIFECYCLE_STATES = frozenset(PACKAGE_LIFECYCLE[len(COMMON_LIFECYCLE) : -1])
 
 CLASSIFICATIONS = {
     "CONFIRMED_BUG",
@@ -116,6 +145,21 @@ def validate_authoritative_lifecycle_policy(policy: dict[str, Any]) -> list[str]
             errors.append(f"Authoritative lifecycle transition {state} -> {expected} is missing")
     if set(transitions.get("CLOSED") or []):
         errors.append("CLOSED must have no outgoing authoritative lifecycle transition")
+    package_states = set(PACKAGE_LIFECYCLE_STATES)
+    declared_states = {str(item) for item in states}
+    missing_package_states = sorted(package_states - declared_states)
+    if missing_package_states:
+        errors.append("Package lifecycle is missing states: " + ", ".join(missing_package_states))
+    package_edges = {
+        "CI_PASS": "PACKAGE_RELEASED",
+        "PACKAGE_RELEASED": "RELEASE_ARTIFACT_VERIFIED",
+        "RELEASE_ARTIFACT_VERIFIED": "CONSUMER_VALIDATION_PASS",
+    }
+    for state, expected in package_edges.items():
+        if expected not in set(transitions.get(state) or []):
+            errors.append(f"Package lifecycle transition {state} -> {expected} is missing")
+    if "CLOSED" not in set(transitions.get("CONSUMER_VALIDATION_PASS") or []):
+        errors.append("Package lifecycle must retain CONSUMER_VALIDATION_PASS -> CLOSED")
     return sorted(set(errors))
 
 
@@ -137,6 +181,9 @@ def validate_policy_safety(policy: dict[str, Any] | None) -> list[str]:
     for required_state in (*AUTHORITATIVE_LIFECYCLE, "BLOCKED", "ROLLBACK_REQUIRED", "RESOLVED_NO_CODE"):
         if required_state not in declared_states:
             errors.append(f"Policy is missing mandatory lifecycle state: {required_state}")
+    for required_state in PACKAGE_LIFECYCLE_STATES:
+        if required_state not in declared_states:
+            errors.append(f"Policy is missing mandatory package lifecycle state: {required_state}")
     risk_classes = policy.get("risk_classes") if isinstance(policy.get("risk_classes"), dict) else {}
     if set(risk_classes.get("CRITICAL") or []) != {"R4"}:
         errors.append("Policy must map R4 exactly to CRITICAL")
@@ -176,6 +223,8 @@ def validate_policy_safety(policy: dict[str, Any] | None) -> list[str]:
             expected.add("RESOLVED_NO_CODE")
         if state in {"PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED"}:
             expected.add("ROLLBACK_REQUIRED")
+        if state == "CI_PASS":
+            expected.add("PACKAGE_RELEASED")
         actual = set(transitions.get(state) or [])
         if not actual.issubset(expected):
             errors.append(f"Policy permits a lifecycle skip from {state}")
@@ -183,6 +232,32 @@ def validate_policy_safety(policy: dict[str, Any] | None) -> list[str]:
         errors.append("Policy must retain ISSUE_CLASSIFIED -> RESOLVED_NO_CODE")
     if "CLOSED" not in set(transitions.get("ROLLBACK_REQUIRED") or []):
         errors.append("Policy must retain ROLLBACK_REQUIRED -> CLOSED")
+    package_expected = {
+        "PACKAGE_RELEASED": {"RELEASE_ARTIFACT_VERIFIED", "BLOCKED"},
+        "RELEASE_ARTIFACT_VERIFIED": {"CONSUMER_VALIDATION_PASS", "BLOCKED"},
+        "CONSUMER_VALIDATION_PASS": {"CLOSED", "STAGING_PASS", "BLOCKED"},
+    }
+    for state, expected in package_expected.items():
+        actual = set(transitions.get(state) or [])
+        if not actual.issubset(expected) or not actual.intersection(expected - {"BLOCKED"}):
+            errors.append(f"Policy permits an invalid package lifecycle transition from {state}")
+    delivery_models = policy.get("delivery_models") if isinstance(policy.get("delivery_models"), dict) else {}
+    missing_models = sorted(DELIVERY_MODELS - {str(item).upper() for item in delivery_models})
+    if missing_models:
+        errors.append("Policy is missing delivery model definitions: " + ", ".join(missing_models))
+    for model in sorted(DELIVERY_MODELS):
+        configured = delivery_models.get(model) or delivery_models.get(model.upper()) or {}
+        lifecycle = tuple(str(item) for item in configured.get("lifecycle") or [])
+        expected_lifecycle = tuple(DELIVERY_LIFECYCLES[model])
+        if lifecycle != expected_lifecycle:
+            errors.append(f"Policy delivery lifecycle for {model} is not the canonical lifecycle")
+    package_config = delivery_models.get(PACKAGE_OR_PLUGIN) or {}
+    if set(package_config.get("forbidden_states") or []) & set(PACKAGE_LIFECYCLE):
+        errors.append("Package delivery policy cannot forbid its own lifecycle states")
+    if not {"STAGING_PASS", "PRODUCTION_RELEASED", "POST_DEPLOY_VERIFIED", "ROLLBACK_REQUIRED"}.issubset(
+        set(package_config.get("forbidden_states") or [])
+    ):
+        errors.append("Package delivery policy must forbid runtime deployment and rollback states")
     progressive = policy.get("progressive_exposure") if isinstance(policy.get("progressive_exposure"), dict) else {}
     for level in ("HIGH", "CRITICAL"):
         configured = progressive.get(level) or {}
@@ -1067,6 +1142,127 @@ def validate_artifact_chain(
         errors.append("Validated subject cannot be rebuilt into different bytes")
     if metadata.get("mutable_tag_only") is True:
         errors.append("Mutable tag cannot be the sole artifact identity")
+    return sorted(set(errors))
+
+
+def _validate_package_subject_metadata(
+    metadata: dict[str, Any] | None,
+    *,
+    head_sha: str | None,
+    artifact_digest: str | None,
+    merged_main_sha: str | None,
+) -> list[str]:
+    metadata = metadata if isinstance(metadata, dict) else {}
+    errors = validate_artifact_chain(
+        metadata,
+        head_sha=head_sha,
+        artifact_digest=artifact_digest,
+        merged_main_sha=merged_main_sha,
+    )
+    if not DIGEST_RE.fullmatch(str(artifact_digest or "")):
+        errors.append("Package evidence requires an exact lifecycle artifact digest")
+    if not DIGEST_RE.fullmatch(str(metadata.get("artifact_digest") or "")):
+        errors.append("Package evidence requires an exact artifact digest")
+    if metadata.get("delivery_model") not in {PACKAGE_OR_PLUGIN, HYBRID}:
+        errors.append("Package evidence must declare PACKAGE_OR_PLUGIN or HYBRID delivery")
+    for field in ("release_tag", "source_sha", "artifact_identity"):
+        if not str(metadata.get(field) or "").strip():
+            errors.append(f"Package evidence requires {field}")
+    if metadata.get("runtime_deployment") is True:
+        errors.append("Package evidence cannot claim runtime deployment")
+    if metadata.get("production_release_id") or metadata.get("deployed_revision"):
+        errors.append("Package evidence cannot carry production identity fields")
+    return sorted(set(errors))
+
+
+def validate_package_release_metadata(
+    metadata: dict[str, Any] | None,
+    *,
+    head_sha: str | None,
+    artifact_digest: str | None,
+    merged_main_sha: str | None,
+) -> list[str]:
+    """Validate protected build/release evidence for package delivery."""
+
+    return _validate_package_subject_metadata(
+        metadata,
+        head_sha=head_sha,
+        artifact_digest=artifact_digest,
+        merged_main_sha=merged_main_sha,
+    )
+
+
+def validate_published_asset_metadata(
+    metadata: dict[str, Any] | None,
+    *,
+    head_sha: str | None,
+    artifact_digest: str | None,
+    merged_main_sha: str | None,
+) -> list[str]:
+    """Validate that public assets are the exact protected package subjects."""
+
+    metadata = metadata if isinstance(metadata, dict) else {}
+    errors = _validate_package_subject_metadata(
+        metadata,
+        head_sha=head_sha,
+        artifact_digest=artifact_digest,
+        merged_main_sha=merged_main_sha,
+    )
+    published = metadata.get("published_asset_digests")
+    if not isinstance(published, dict) or not published:
+        errors.append("Published asset verification requires a non-empty digest map")
+    else:
+        for name, digest in published.items():
+            if not str(name).strip() or not DIGEST_RE.fullmatch(str(digest)):
+                errors.append("Every published asset must have an exact SHA256 digest")
+        if not DIGEST_RE.fullmatch(str(artifact_digest or "")) or artifact_digest not in set(published.values()):
+            errors.append("Published assets must include the exact lifecycle artifact digest")
+    if metadata.get("published_from_protected_build") is not True:
+        errors.append("Published assets must come from the protected build without a rebuild")
+    if metadata.get("rebuild_after_validation") is True:
+        errors.append("Published asset verification rejects a rebuild after validation")
+    return sorted(set(errors))
+
+
+def validate_consumer_validation_metadata(
+    metadata: dict[str, Any] | None,
+    *,
+    artifact_digest: str | None,
+) -> list[str]:
+    """Validate clean consumer installation and packaged regression evidence."""
+
+    metadata = metadata if isinstance(metadata, dict) else {}
+    errors: list[str] = []
+    if not DIGEST_RE.fullmatch(str(artifact_digest or "")):
+        errors.append("Consumer validation requires an exact lifecycle artifact digest")
+    if not DIGEST_RE.fullmatch(str(metadata.get("artifact_digest") or "")) or metadata.get("artifact_digest") != artifact_digest:
+        errors.append("Consumer validation must bind the exact released artifact digest")
+    archive_kind = metadata.get("archive_kind")
+    if isinstance(archive_kind, str):
+        archive_kind = [archive_kind]
+    if not isinstance(archive_kind, list) or not archive_kind or not all(str(item).strip() for item in archive_kind):
+        errors.append("Consumer validation requires the exact archive kind")
+    required_true = (
+        "clean_environment",
+        "source_checkout_leakage_absent",
+        "version_verified",
+        "install_success",
+        "packaged_regressions_passed",
+        "security_modules_present",
+        "schemas_policies_included",
+    )
+    for field in required_true:
+        if metadata.get(field) is not True:
+            errors.append(f"Consumer validation requires {field}=true")
+    digests = metadata.get("consumer_artifact_digests")
+    if not isinstance(digests, dict) or not digests:
+        errors.append("Consumer validation requires exact consumer artifact digests")
+    else:
+        for name, digest in digests.items():
+            if not str(name).strip() or not DIGEST_RE.fullmatch(str(digest)):
+                errors.append("Consumer artifact digests must be exact SHA256 values")
+    if metadata.get("runtime_deployment") is True or metadata.get("production_health") is True:
+        errors.append("Consumer package validation cannot claim runtime production evidence")
     return sorted(set(errors))
 
 

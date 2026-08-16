@@ -19,6 +19,7 @@ from .context import build_context_manifest
 from .control_plane import detect_control_plane_changes
 from .crypto import generate_ed25519_keypair, load_trust_roots, sign_evidence
 from .diff_limits import evaluate_diff_limits
+from .delivery_model import UNDETERMINED, derive_delivery_model
 from .distribution import build_distributions, validate_distribution_archive, verify_checksum_file
 from .errors import ZTADError
 from .evidence import evaluate_required_evidence, load_evidence_records, validate_evidence_record
@@ -462,6 +463,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("policy-wiring", help="Prove which policy files have deterministic consumers")
     p.add_argument("--root", default=str(installer.distribution_root()))
+
+    p = sub.add_parser("delivery-model", help="Derive the repository delivery model from source markers")
+    p.add_argument("--repo", default=".")
 
     p = sub.add_parser("ledger-checkpoint", help="Write a separately protected ledger head checkpoint")
     p.add_argument("--ledger", required=True)
@@ -939,6 +943,9 @@ def execute(args: argparse.Namespace) -> tuple[Any, int]:
     if command == "policy-wiring":
         result = audit_policy_wiring(Path(args.root).resolve())
         return result, 0 if result["valid"] else 27
+    if command == "delivery-model":
+        result = derive_delivery_model(Path(args.repo).resolve()).to_dict()
+        return result, 0 if result["delivery_model"] != UNDETERMINED else 26
     if command == "repository-index":
         index = build_repository_index(
             GitRepository(args.repo), args.revision,
