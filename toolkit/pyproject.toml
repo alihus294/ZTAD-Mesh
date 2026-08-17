@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest==9.1.1", "coverage==7.15.4", "pytest-cov==7.1.0", "hypothesis==6.165.2"]
+test = ["pytest==9.1.1", "coverage==7.15.4", "pytest-cov==7.1.0", "hypothesis==6.165.7"]
 
 [project.scripts]
 ztad = "ztad.cli:main"
